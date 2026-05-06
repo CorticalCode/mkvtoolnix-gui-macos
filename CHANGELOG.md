@@ -1,5 +1,88 @@
 # Changelog
 
+## Build wrapper architecture overhaul (2026-05-06)
+
+**Major reworking of the experimental build wrapper, plus portability
+hardening for both production and experimental wrappers.** Closes
+several silent-failure modes and gives every fork build a verifiable
+provenance trail.
+
+`tools/build-fork.sh` (experimental builder) gained an architecture for
+cache integrity and build provenance:
+
+- **Cache provenance manifests.** Each promoted dep tarball in
+  `~/opt/proven-experimental/<arch>/` now ships with a
+  `<package>.tar.gz.manifest.json` sidecar capturing `spec_name`,
+  `source_sha256`, `configure_args_hash`, `patch_state_hash`, build
+  date, dylib count, and non-identifying host info (CPU brand, RAM,
+  macOS version, clang version, SDK version). Read at restore time;
+  cache entries without manifests trigger a `WARN` since their
+  provenance is unknown.
+- **Cache manifest validation.** Restore now refuses on critical
+  mismatch (`schema_version`, `spec_name`, `package`, `source_sha256`)
+  rather than restoring blindly. Drift on advisory fields
+  (`configure_args_hash`, `patch_state_hash`) is reported but doesn't
+  refuse — those are approximations.
+- **Stable `_qt_args_hash`.** Awk-state-machine extraction scoped to
+  the `args=()` block of `build_qt`, with whitespace normalization
+  before sort+sha. Stable across reformatting; no longer folds in
+  cmake build/install command lines.
+- **`patch_state_hash`.** Separate field from `args_hash`; hashes the
+  concatenated content of `patches/qt-patches/*.patch`. Catches
+  patch-edit drift that `args_hash` alone misses.
+- **`_json_str` escape correctness.** Fixes a subtle escape bug that
+  produced syntactically valid JSON which round-tripped to wrong
+  values. Documented test (xxd byte dumps + `json.loads` round-trip)
+  in the function comment.
+- **DMG sidecar manifests.** Every successful fork build writes
+  `<dmg>.manifest.json` next to the DMG capturing wrapper + fork
+  source refs, patches applied (with SHAs), deps used and their cache
+  origins, configure args hash, host specs, build timing, and
+  verification results. Diffing two manifests immediately surfaces
+  what changed between builds.
+- **Opt-in `--rebuild-deps` flag.** Without it, missing cache entries
+  hard-fail with explicit instructions (preserves cache-only
+  smart-restore semantics for fast iteration). With it, missing deps
+  are added to upstream's `build.sh` target dispatcher and built
+  fresh, then promoted with provenance manifests.
+- **`config/config.fork.local.sh` (NEW).** Fork-build config separate
+  from production's `config.local.sh`. Mirrors signing, threads, and
+  optimization flags but omits the QTVER pin so fork builds defer to
+  the source's `specs.sh`. Production build path is unchanged.
+
+**Portability hardening (both `build-local.sh` and `tools/build-fork.sh`):**
+
+- All standard-tool invocations switched from absolute paths
+  (`/usr/bin/awk`, etc.) to `command <tool>`. Apple has historically
+  moved tools between macOS releases (`cat` lives at `/bin`, not
+  `/usr/bin`); fixed-path invocations break silently when a tool
+  moves. `command` bypasses shell aliases AND functions and uses PATH
+  lookup.
+- **Startup tool probe.** Each script now enumerates its required
+  external tools and fails fast at startup with the missing tool's
+  name if any are absent from PATH. Self-documenting, prevents
+  surprise mid-build failures.
+- **BSD-find probe.** Verifies `find -perm +111` works at startup.
+  Catches homebrew `gfind` shadowing BSD find.
+
+**Other fixes:**
+
+- `_patch_state_hash` now uses the correct `/bin/cat` path (was
+  silently hashing empty input due to a wrong absolute path). The
+  `2>/dev/null` suppression that hid the bug is dropped so future
+  failures of this kind are loud rather than silent.
+- `TARGET` / `SRCDIR` env overrides preserved across upstream's
+  `config.sh` source — fixes the silent dep-tree mix-up when a user
+  points `TARGET=/Volumes/Fast/opt`.
+- `_validate_dep_manifest` exit captured via `if/else` rather than raw
+  `$()` substitution under `set -e` — the function's deliberate
+  non-zero return values (1=REFUSE, 2=DRIFT) no longer fatal-exit.
+- `tools/build-fork.sh` workspace wipe now preserves `staging/` for
+  ad-hoc dep archives alongside `proven/`, `proven-experimental/`,
+  `source/`.
+
+---
+
 ## Trust model hardening + README restructure (2026-04-29)
 
 **Supply-chain hardening — second layer.** Builds on the 2026-04-25
