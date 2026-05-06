@@ -280,6 +280,40 @@ _qt_args_hash() {
     | /usr/bin/awk '{print substr($1, 1, 12)}'
 }
 
+# 12-char hash of patches relevant to this dep. For Qt, hashes the contents
+# of patches/qt-patches/*.patch (concatenated in sorted order so filename
+# order is deterministic). For other deps, returns "none" — Phase 1 has no
+# per-dep patches outside Qt. Returns "none" if no patches apply.
+#
+# This complements _qt_args_hash to give a more complete cache identity:
+# args_hash captures the configure-args structure; patch_state_hash
+# captures the source-modification state. Restore-time validation can
+# refuse caches whose patch_state_hash doesn't match current state.
+_patch_state_hash() {
+  local spec_name="$1"
+  case "$spec_name" in
+    qt)
+      local patches_dir="${SCRIPT_DIR}/patches/qt-patches"
+      if [[ -d "$patches_dir" ]]; then
+        local files
+        files=$(/usr/bin/find "$patches_dir" -name '*.patch' -type f 2>/dev/null | /usr/bin/sort)
+        if [[ -n "$files" ]]; then
+          print "$files" | /usr/bin/xargs /usr/bin/cat 2>/dev/null \
+            | /usr/bin/shasum -a 256 \
+            | /usr/bin/awk '{print substr($1, 1, 12)}'
+          return
+        fi
+      fi
+      print "none"
+      ;;
+    *)
+      # Phase 1: no per-dep patches outside Qt. If you add patch directories
+      # for other deps, extend this case statement.
+      print "none"
+      ;;
+  esac
+}
+
 # Reads a dep cache manifest sidecar; prints a short one-line summary
 # suitable for the restore log, or "absent" / "malformed" sentinel.
 _dep_manifest_summary() {
@@ -305,7 +339,7 @@ _dep_manifest_summary() {
 #       $4=source_sha256, $5=output_path
 _write_dep_manifest() {
   local spec_name="$1" package="$2" tarball="$3" source_sha="$4" out="$5"
-  local args_hash="" dylib_count target_lib_dir
+  local args_hash="" dylib_count target_lib_dir patch_hash
   # configure_args_hash is Qt-specific (it reads build_qt's args=(...)).
   # Other deps don't have a comparable structured-args list in build.sh, so
   # leave the field empty rather than recording a misleading Qt hash for
@@ -313,6 +347,7 @@ _write_dep_manifest() {
   if [[ "$spec_name" == "qt" ]]; then
     args_hash=$(_qt_args_hash "${FORK_BUILD_DIR}/packaging/macos/build.sh")
   fi
+  patch_hash=$(_patch_state_hash "$spec_name")
   target_lib_dir="${TARGET}/lib"
   dylib_count=0
   if [[ "$spec_name" == "qt" && -d "$target_lib_dir" ]]; then
@@ -330,6 +365,7 @@ _write_dep_manifest() {
   "spec_tarball": $(_json_str "$tarball"),
   "source_sha256": $(_json_str "$source_sha"),
   "configure_args_hash": $(_json_str "$args_hash"),
+  "patch_state_hash": $(_json_str "$patch_hash"),
   "built_at": $(_json_str "$(_iso_utc)"),
   "built_by": {
     "tool": "tools/build-fork.sh",
