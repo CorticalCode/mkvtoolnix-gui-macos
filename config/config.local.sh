@@ -1,3 +1,9 @@
+# Wrapper config for production (release-track) builds. Sourced by
+# build-local.sh and copied verbatim to packaging/macos/config.local.sh in
+# the upstream tree — the filename matches upstream's expected name so the
+# copy is one-to-one. Experimental sibling: config.exp.local.sh, which
+# build-exp.sh stages AS config.local.sh at build time.
+
 # Ad-hoc code signing — required for macOS Sequoia 15.1+ which blocks
 # completely unsigned apps. The "-" identity signs without a certificate.
 # This doesn't notarize but allows Gatekeeper's "Open Anyway" flow to work.
