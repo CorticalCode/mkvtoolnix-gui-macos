@@ -23,7 +23,7 @@ Current release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build process
 
 ---
 
-## Active patches (6 build patches + 1 Qt source patch)
+## Active patches (7 build patches + 1 Qt source patch)
 
 ### 1. Qt6 cmake install (`patches/qt6-cmake-install.patch`)
 
@@ -146,6 +146,22 @@ This patch combines two changes to the same file to avoid context conflicts when
 **Reported by:** Adam, Ryu67, and Vek239 on the MKVToolNix forum, 2026-04-15.
 
 **Upstream:** [Codeberg #6208](https://codeberg.org/mbunkus/mkvtoolnix/issues/6208) — filed 2026-04-15, closed `res:fixed/implemented`, `fixed-in-version/99.0`.
+
+---
+
+### 8. mkvtoolnix size optimization (`patches/mkvtoolnix-size-opt.patch`)
+
+**File patched:** `packaging/macos/build.sh` — the `build_mkvtoolnix` function (around line 422).
+
+**Problem:** mkvtoolnix's binaries inherit only the global `-O2` from `config.local.sh`. Adding `-flto=thin` (ThinLTO) and `-Os` (optimize for size) shrinks the compiled binaries materially without affecting deps. Deps (Qt, Boost, FLAC, libogg, etc.) continue building at `-O2` as before — the flags are scoped to mkvtoolnix only.
+
+**Fix:** Save `CXXFLAGS` / `LDFLAGS` before `build_configured_mkvtoolnix`, append `-flto=thin -Os` to `CXXFLAGS` and `-flto=thin` to `LDFLAGS`, restore after. The flags must be set BEFORE `build_configured_mkvtoolnix` runs because autoconf bakes `USER_CXXFLAGS` / `USER_LDFLAGS` into `build-config` at configure time.
+
+**Size impact** (verified on ARM64 against an unpatched Qt 6.11.0 baseline): −0.90 MB DMG / −2.63 MB app. Stacks additively with `remove-printsupport.patch`: combined effect was −1.05 MB DMG / −3.11 MB app.
+
+**Speed impact:** at the noise floor for this codebase. ThinLTO is fast incremental LTO; `-Os` slightly de-prioritizes speed in favor of size. No perceptible regression in app launch or operation.
+
+**Upstream:** Not filed. Speculative wrapper-side optimization; reversible if a future regression appears.
 
 ---
 

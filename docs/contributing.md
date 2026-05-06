@@ -39,14 +39,6 @@ of us invests in formal review.
 If you've cloned this repo to build for yourself (rather than to
 contribute), the things you need to know:
 
-### Local hook setup (one-time)
-
-After cloning, activate the repo's git hooks:
-
-```sh
-git config core.hooksPath .githooks
-```
-
 ### Patches
 
 - Patches live in `patches/` and apply against the upstream source

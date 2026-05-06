@@ -1,5 +1,37 @@
 # Changelog
 
+## Rename build-fork.sh → build-exp.sh + counter split (2026-05-06)
+
+Disambiguates "fork" (which collided with the upstream-fork repo concept) and
+separates production from experimental build numbering.
+
+**Renames:**
+- `tools/build-fork.sh` → `tools/build-exp.sh`
+- `config/config.fork.local.sh` → `config/config.exp.local.sh`
+- `.build-counter-{arm,intel}` → `.build-counter-{arm,intel}-rel` (release counter)
+
+**New:**
+- `.build-counter-{arm,intel}-exp` (experimental counter)
+
+**DMG filename label changes (going forward):**
+- Production builds: `b{NNN}-{branch}` → `rel{NNN}-{branch}`
+- Experimental builds: `b{NNN}-fork-{slug}-{hash}` → `exp{NNN}-{slug}-{hash}`
+
+**Counter values:**
+- Both release counters reset to `0` (next production build = `rel001`)
+- Both experimental counters start at `0` (next experimental build = `exp001`)
+- Builds before this date used a combined `b{NNN}` counter; pre-rename DMG
+  filenames in `build/` are unchanged (historical record)
+
+**DMG manifest schema** (build-exp.sh sidecars): `"kind": "fork_build"` →
+`"kind": "experimental_build"`; `build_meta.kind: "fork"` → `"experimental"`;
+`source.fork` → `source.experimental`. Schema version unchanged. Old sidecars
+read fine; nothing programmatic crosses the boundary.
+
+**No production-build behavioral change**, just naming.
+
+---
+
 ## Size optimization: LTO + -Os for mkvtoolnix (2026-05-06)
 
 **Production builds now ship smaller binaries.** Adds

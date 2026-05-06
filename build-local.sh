@@ -17,7 +17,7 @@ unalias -a 2>/dev/null || true  # Prevent .zshenv aliases from leaking into scri
 # Verify required external tools are reachable in PATH before doing real work.
 # Without this, a missing tool surfaces mid-build with a cryptic pipe error;
 # here it surfaces immediately with the tool's name. Same probe as
-# tools/build-fork.sh — duplicated inline rather than sourced from a shared
+# tools/build-exp.sh — duplicated inline rather than sourced from a shared
 # helper to keep each script self-contained.
 #
 # Note on `unalias -a` (line above): only affects THIS script's subshell.
@@ -986,7 +986,7 @@ fi
 
 # --- Name and copy DMG ---
 
-BUILD_COUNTER_FILE="${SCRIPT_DIR}/.build-counter-${ARCH_LABEL}"
+BUILD_COUNTER_FILE="${SCRIPT_DIR}/.build-counter-${ARCH_LABEL}-rel"
 LOG_DIR="${SCRIPT_DIR}/logs"
 mkdir -p "${BUILD_DIR}" "${RELEASE_DIR}" "${LOG_DIR}"
 
@@ -1006,7 +1006,7 @@ if [[ -f "${DMG_PATH}" ]]; then
   [[ "${BRANCH}" == "HEAD" ]] && BRANCH=$(cd "${SCRIPT_DIR}" && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
   BRANCH="${BRANCH//\//-}"
 
-  BUILD_LABEL="b$(printf '%03d' ${BUILD_NUM})"
+  BUILD_LABEL="rel$(printf '%03d' ${BUILD_NUM})"
   DMG_NAME="MKVToolNix-${VERSION}-${ARCH_LABEL}-${BUILD_LABEL}-${BRANCH}.dmg"
   DMG_RELEASE_NAME="MKVToolNix-${VERSION}-macos-${ARCH_LABEL}.dmg"
   LOG_NAME="MKVToolNix-${VERSION}-${ARCH_LABEL}-${BUILD_LABEL}-${BRANCH}.log"

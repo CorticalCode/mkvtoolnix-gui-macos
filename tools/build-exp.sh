@@ -1,16 +1,15 @@
 #!/bin/zsh
-# tools/build-fork.sh — Build MKVToolNix from a fork/worktree source tree.
+# tools/build-exp.sh — Build MKVToolNix from an experimental/worktree source tree.
 #
-# For experimental/forked-branch builds only. Does NOT produce release
-# artifacts. Compiles the given source with the proven + experimental dep
-# caches (experimental overlays proven, e.g. Qt 6.11.0 wins over 6.10.2),
-# produces a DMG in build/ with a fork-specific filename, and never copies
-# to release/.
+# For experimental builds only. Does NOT produce release artifacts. Compiles
+# the given source with the proven + experimental dep caches (experimental
+# overlays proven, e.g. Qt 6.11.0 wins over 6.10.2), produces a DMG in build/
+# with an experimental-specific filename, and never copies to release/.
 #
-# Usage: ./tools/build-fork.sh <path-to-source> [--slug NAME] [--verify-symbol SYM] [--rebuild-deps]
+# Usage: ./tools/build-exp.sh <path-to-source> [--slug NAME] [--verify-symbol SYM] [--rebuild-deps]
 
 if [[ -z "${ZSH_VERSION}" ]]; then
-  echo "ERROR: This script requires zsh. Run it with: ./tools/build-fork.sh" >&2
+  echo "ERROR: This script requires zsh. Run it with: ./tools/build-exp.sh" >&2
   exit 1
 fi
 if [[ "${ZSH_EVAL_CONTEXT}" == *:file ]]; then
@@ -60,7 +59,7 @@ if ! command find /tmp -maxdepth 0 -perm +111 >/dev/null 2>&1; then
 fi
 
 TRAPZERR() {
-  echo "ERROR: build-fork.sh failed at ${funcfiletrace[1]:-line ${LINENO}} (exit code $?)" >&2
+  echo "ERROR: build-exp.sh failed at ${funcfiletrace[1]:-line ${LINENO}} (exit code $?)" >&2
 }
 
 # SCRIPT_DIR = wrapper repo root (tools/ → parent)
@@ -68,13 +67,13 @@ SCRIPT_DIR=${0:a:h:h}
 
 usage() {
   cat <<'USAGE'
-Usage: ./tools/build-fork.sh <path-to-source> [--slug NAME] [--verify-symbol SYM] [--rebuild-deps]
+Usage: ./tools/build-exp.sh <path-to-source> [--slug NAME] [--verify-symbol SYM] [--rebuild-deps]
 
-Build MKVToolNix from a fork/worktree source tree. Produces a DMG in
-build/ with a fork-specific filename. Uses proven + experimental dep
-caches (experimental wins on conflicts, e.g. Qt 6.11.0 > 6.10.2).
+Build MKVToolNix from an experimental/worktree source tree. Produces a DMG
+in build/ with an experimental-specific filename. Uses proven + experimental
+dep caches (experimental wins on conflicts, e.g. Qt 6.11.0 > 6.10.2).
 
-For experimental and forked-branch builds only. Never copies to release/.
+For experimental builds only. Never copies to release/.
 
 Arguments:
   <path-to-source>         Absolute path to a mkvtoolnix source tree
@@ -207,17 +206,17 @@ TARGET="${TARGET:-${HOME}/opt}"
 # --- Predict build number and derive hash (deterministic from slug+num+ver) ---
 # Counter only increments on success, so a failed build's retry gets the same
 # number and therefore the same hash — each "slot" has a stable identifier.
-BUILD_COUNTER_FILE="${SCRIPT_DIR}/.build-counter-${ARCH_LABEL}"
+BUILD_COUNTER_FILE="${SCRIPT_DIR}/.build-counter-${ARCH_LABEL}-exp"
 if [[ -f "${BUILD_COUNTER_FILE}" ]]; then
   BUILD_NUM=$(( $(cat "${BUILD_COUNTER_FILE}") + 1 ))
 else
   BUILD_NUM=1
 fi
-BUILD_LABEL="b$(printf '%03d' ${BUILD_NUM})"
+BUILD_LABEL="exp$(printf '%03d' ${BUILD_NUM})"
 BUILD_HASH=$(print -n "${SLUG}|${BUILD_NUM}|${MTX_VER}" | shasum -a 256 | head -c 6)
 VERSIONNAME="99pre-exp-${SLUG}-${BUILD_LABEL}-${BUILD_HASH}"
 
-echo "==> build-fork.sh"
+echo "==> build-exp.sh"
 echo "    Source:      ${SRC}"
 echo "    Slug:        ${SLUG}"
 echo "    MTX_VER:     ${MTX_VER}"
@@ -233,7 +232,7 @@ fi
 
 # --- Log setup ---
 mkdir -p "${WORK_DIR}"
-LOG_FILE="${WORK_DIR}/build-fork-${SLUG}-${BUILD_LABEL}-${BUILD_HASH}.log"
+LOG_FILE="${WORK_DIR}/build-exp-${SLUG}-${BUILD_LABEL}-${BUILD_HASH}.log"
 exec > >(tee "${LOG_FILE}") 2>&1
 BUILD_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')          # local time, for human log
 BUILD_START_ISO=$(command date -u +"%Y-%m-%dT%H:%M:%SZ")  # UTC ISO, for manifests
@@ -291,7 +290,7 @@ _host_json() {
 # Source-level (not closure-level): variable references like ${TARGET} are
 # hashed literally; their RUNTIME values aren't part of this fingerprint.
 # That means MACOSX_DEPLOYMENT_TARGET, compiler version, SDK version are
-# NOT captured here. Phase 1 acceptable; Phase 2 needs a richer identity.
+# NOT captured here.
 #
 # Earlier versions captured everything in build_qt that started with `-`,
 # which included `time $DEBUG cmake --build .` and `--parallel
@@ -314,8 +313,8 @@ _qt_args_hash() {
 
 # 12-char hash of patches relevant to this dep. For Qt, hashes the contents
 # of patches/qt-patches/*.patch (concatenated in sorted order so filename
-# order is deterministic). For other deps, returns "none" — Phase 1 has no
-# per-dep patches outside Qt. Returns "none" if no patches apply.
+# order is deterministic). For other deps, returns "none" — there are no
+# per-dep patches outside Qt currently. Returns "none" if no patches apply.
 #
 # This complements _qt_args_hash to give a more complete cache identity:
 # args_hash captures the configure-args structure; patch_state_hash
@@ -346,7 +345,7 @@ _patch_state_hash() {
       print "none"
       ;;
     *)
-      # Phase 1: no per-dep patches outside Qt. If you add patch directories
+      # No per-dep patches outside Qt currently. If you add patch directories
       # for other deps, extend this case statement.
       print "none"
       ;;
@@ -389,7 +388,7 @@ _dep_manifest_summary() {
 # Validates a dep cache manifest against expected spec values. Refuses on
 # critical mismatches (schema_version, spec_name, package, source_sha256).
 # Drift on optional fields (configure_args_hash, patch_state_hash) is a
-# warning, not a refusal — those are advisory in Phase 1.
+# warning, not a refusal — those are advisory.
 #
 # Args: $1=manifest_path, $2=expected_spec_name, $3=expected_package,
 #       $4=expected_source_sha256 (may be empty)
@@ -413,7 +412,7 @@ _validate_dep_manifest() {
     return 1
   fi
   if [[ "$schema" != "1" ]]; then
-    print "REFUSE: schema_version=${schema} (this build-fork.sh handles only v1)"
+    print "REFUSE: schema_version=${schema} (this build-exp.sh handles only v1)"
     return 1
   fi
   if [[ "$spec" != "$exp_spec" ]]; then
@@ -490,7 +489,7 @@ _write_dep_manifest() {
   "patch_state_hash": $(_json_str "$patch_hash"),
   "built_at": $(_json_str "$(_iso_utc)"),
   "built_by": {
-    "tool": "tools/build-fork.sh",
+    "tool": "tools/build-exp.sh",
     "wrapper_branch": $(_json_str "$wrapper_branch"),
     "wrapper_sha": $(_json_str "$wrapper_sha")
   },
@@ -510,10 +509,10 @@ for item in "${TARGET}"/*; do
 done
 mkdir -p "${TARGET}/include" "${TARGET}/lib" "${TARGET}/bin" "${TARGET}/packages"
 
-# Clean out prior fork-build scratch dir for this MTX_VER
+# Clean out prior experimental-build scratch dir for this MTX_VER
 FORK_BUILD_DIR="${WORK_DIR}/mkvtoolnix-${MTX_VER}"
 if [[ -d "${FORK_BUILD_DIR}" ]]; then
-  echo "    rm -rf ${FORK_BUILD_DIR:t} (prior fork-build scratch)"
+  echo "    rm -rf ${FORK_BUILD_DIR:t} (prior experimental-build scratch)"
   command rm -rf "${FORK_BUILD_DIR}"
 fi
 
@@ -658,7 +657,7 @@ if [[ ${#unsentineled_experimental[@]} -gt 0 ]]; then
   echo "" >&2
   echo "WARN: ${#unsentineled_experimental[@]} experimental cache entry(ies) lack provenance manifests:" >&2
   for u in "${unsentineled_experimental[@]}"; do echo "      - ${u}" >&2; done
-  echo "      These tarballs may have been built outside tools/build-fork.sh and" >&2
+  echo "      These tarballs may have been built outside tools/build-exp.sh and" >&2
   echo "      could carry unintended configure-time decisions. To refresh them," >&2
   echo "      first remove them from ${EXPERIMENTAL_DIR}/, then re-run with" >&2
   echo "      --rebuild-deps. (--rebuild-deps only rebuilds MISSING entries;" >&2
@@ -670,8 +669,8 @@ if [[ ${#drifting_caches[@]} -gt 0 ]]; then
   echo "WARN: ${#drifting_caches[@]} experimental cache entry(ies) show drift from current state:" >&2
   for d in "${drifting_caches[@]}"; do echo "      - ${d}" >&2; done
   echo "      The cache was built with different configure args or patch state" >&2
-  echo "      than the current source. The build will proceed (drift is advisory" >&2
-  echo "      in Phase 1), but consider --rebuild-deps to refresh if accuracy" >&2
+  echo "      than the current source. The build will proceed (drift is" >&2
+  echo "      advisory), but consider --rebuild-deps to refresh if accuracy" >&2
   echo "      matters for this measurement." >&2
   echo "" >&2
 fi
@@ -718,17 +717,18 @@ rsync -a \
 
 # --- Stage wrapper's config into the staged packaging dir ---
 # Upstream build.sh sources packaging/macos/config.local.sh if present. We
-# prefer config.fork.local.sh (fork-only: no QTVER pin, defers to upstream
-# specs.sh) and fall back to config.local.sh if the fork-specific file is
-# absent. Production build-local.sh continues to consume config.local.sh
-# unchanged; only fork builds get the fork.local.sh substitution.
+# prefer config.exp.local.sh (experimental-only: no QTVER pin, defers to
+# upstream specs.sh) and fall back to config.local.sh if the experimental
+# file is absent. Production build-local.sh continues to consume
+# config.local.sh unchanged; only experimental builds get the
+# exp.local.sh substitution.
 WRAPPER_CONFIG=""
-if [[ -f "${SCRIPT_DIR}/config/config.fork.local.sh" ]]; then
-  WRAPPER_CONFIG="${SCRIPT_DIR}/config/config.fork.local.sh"
-  echo "==> Staging config.fork.local.sh as packaging/macos/config.local.sh..."
+if [[ -f "${SCRIPT_DIR}/config/config.exp.local.sh" ]]; then
+  WRAPPER_CONFIG="${SCRIPT_DIR}/config/config.exp.local.sh"
+  echo "==> Staging config.exp.local.sh as packaging/macos/config.local.sh..."
 elif [[ -f "${SCRIPT_DIR}/config/config.local.sh" ]]; then
   WRAPPER_CONFIG="${SCRIPT_DIR}/config/config.local.sh"
-  echo "==> Staging config.local.sh as packaging/macos/config.local.sh (no fork-specific config found)..."
+  echo "==> Staging config.local.sh as packaging/macos/config.local.sh (no experimental config found)..."
 fi
 if [[ -n "${WRAPPER_CONFIG}" ]]; then
   STAGED_CONFIG="${FORK_BUILD_DIR}/packaging/macos/config.local.sh"
@@ -755,12 +755,12 @@ fi
 # --- Environment for upstream build.sh ---
 # Source upstream's config.sh (provides CMPL, RAKE, MACOSX_DEPLOYMENT_TARGET, etc.)
 # then the wrapper config (already resolved to WRAPPER_CONFIG above —
-# config.fork.local.sh preferred, falls back to config.local.sh).
+# config.exp.local.sh preferred, falls back to config.local.sh).
 #
 # Preserve any user-provided TARGET/SRCDIR env overrides. Upstream's config.sh
 # unconditionally writes `export TARGET=$HOME/opt`, `export SRCDIR=$HOME/opt/source`,
 # `export PACKAGE_DIR=$HOME/opt/packages`. Without this guard,
-# `TARGET=/Volumes/Fast/opt ./tools/build-fork.sh ...` silently mixes dep
+# `TARGET=/Volumes/Fast/opt ./tools/build-exp.sh ...` silently mixes dep
 # trees: cache restore (which ran BEFORE this block, with the override
 # honored) extracts into /Volumes/Fast/opt while build links against
 # $HOME/opt. The restoration below re-asserts the user's choice and
@@ -980,7 +980,7 @@ mkdir -p "${BUILD_DIR}"
 
 echo "${BUILD_NUM}" > "${BUILD_COUNTER_FILE}.tmp" && command mv "${BUILD_COUNTER_FILE}.tmp" "${BUILD_COUNTER_FILE}"
 
-DMG_FINAL_NAME="MKVToolNix-${MTX_VER}-${ARCH_LABEL}-${BUILD_LABEL}-fork-${SLUG}-${BUILD_HASH}.dmg"
+DMG_FINAL_NAME="MKVToolNix-${MTX_VER}-${ARCH_LABEL}-${BUILD_LABEL}-${SLUG}-${BUILD_HASH}.dmg"
 command cp "${DMG_PATH}" "${BUILD_DIR}/${DMG_FINAL_NAME}"
 (cd "${BUILD_DIR}" && shasum -a 256 "${DMG_FINAL_NAME}" > "${DMG_FINAL_NAME}.sha256")
 DMG_FINAL_PATH="${BUILD_DIR}/${DMG_FINAL_NAME}"
@@ -1088,7 +1088,7 @@ DMG_MANIFEST_PATH="${BUILD_DIR}/${DMG_FINAL_NAME}.manifest.json"
 cat > "${DMG_MANIFEST_PATH}" <<EOF
 {
   "schema_version": 1,
-  "kind": "fork_build",
+  "kind": "experimental_build",
   "dmg": {
     "filename": $(_json_str "${DMG_FINAL_NAME}"),
     "size_bytes": ${_dmg_size_bytes},
@@ -1102,7 +1102,7 @@ cat > "${DMG_MANIFEST_PATH}" <<EOF
     "qt_version_in_binary": $(_json_str "${BUILT_QT:-unknown}")
   },
   "build_meta": {
-    "kind": "fork",
+    "kind": "experimental",
     "slug": $(_json_str "${SLUG}"),
     "build_label": $(_json_str "${BUILD_LABEL}"),
     "build_hash": $(_json_str "${BUILD_HASH}"),
@@ -1116,7 +1116,7 @@ cat > "${DMG_MANIFEST_PATH}" <<EOF
       "sha": $(_json_str "${_wrapper_sha}"),
       "subject": $(_json_str "${_wrapper_subj}")
     },
-    "fork": {
+    "experimental": {
       "path_basename": $(_json_str "${_fork_basename}"),
       "ref": $(_json_str "${_fork_ref}"),
       "sha": $(_json_str "${_fork_sha}"),
@@ -1161,7 +1161,7 @@ echo "  Log:          ${LOG_FILE}"
 if [[ ${#PROMOTED_DEPS[@]} -gt 0 ]]; then
   echo "  Promoted deps: ${PROMOTED_DEPS[*]} → ${EXPERIMENTAL_DIR}"
 fi
-echo "  Build number: ${BUILD_NUM} (${ARCH_LABEL}/fork)"
+echo "  Build number: ${BUILD_NUM} (${ARCH_LABEL}/exp)"
 echo "  Build hash:   ${BUILD_HASH}"
 echo "  VERSIONNAME:  ${VERSIONNAME}  (shown as \"v${MTX_VER} ('${VERSIONNAME}')\" in the About dialog)"
 echo ""
@@ -1184,4 +1184,4 @@ echo "    open \"${BUILD_DIR}/${DMG_FINAL_NAME}\""
 echo "    cp -R \"/Volumes/MKVToolNix-${MTX_VER}/MKVToolNix-${MTX_VER}.app\" /Applications/"
 echo "    hdiutil detach \"/Volumes/MKVToolNix-${MTX_VER}\""
 echo ""
-echo "NOTE: This DMG is a fork/experimental build — NOT a release. release/ was not touched."
+echo "NOTE: This DMG is an experimental build — NOT a release. release/ was not touched."

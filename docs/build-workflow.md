@@ -186,20 +186,26 @@ flowchart TD
 
 ## Build Numbers
 
-Each build increments a per-architecture counter stored in:
+Each build increments a per-architecture counter. As of 2026-05-06, production and experimental builds use separate counters:
 
-- `.build-counter-arm`
-- `.build-counter-intel`
+- Production (release-track) builds: `.build-counter-arm-rel`, `.build-counter-intel-rel`
+- Experimental builds (`tools/build-exp.sh`): `.build-counter-arm-exp`, `.build-counter-intel-exp`
 
-These files are **tracked in git on purpose**, so the counter persists across machines. If you build on your desktop (counter reaches 13) then push, a subsequent build on your laptop continues from 14 instead of restarting at 1. Build numbers appear in internal DMG filenames (`MKVToolNix-{ver}-macos-{arch}-b013-{branch}.dmg`) and correlate binaries with entries in `build-report-{tag}.txt`, which helps when diagnosing failures across machines.
+These files are **tracked in git on purpose**, so the counter persists across machines. If you build on your desktop (counter reaches 13) then push, a subsequent build on your laptop continues from 14 instead of restarting at 1. Build numbers appear in internal DMG filenames:
+
+- Production: `MKVToolNix-{ver}-{arch}-rel{NNN}-{branch}.dmg`
+- Experimental: `MKVToolNix-{ver}-{arch}-exp{NNN}-{slug}-{hash}.dmg`
+
+This correlates binaries with entries in `build-report-{tag}.txt`, which helps when diagnosing failures across machines. Builds before 2026-05-06 used a single combined `.build-counter-{arm,intel}` with a `b{NNN}` prefix; pre-rename DMGs in `build/` retain those filenames as historical record.
 
 ### Resetting the counter
 
-If you cloned this repo for your own use and want to start build numbering fresh on a new machine, delete the counter files before your first build:
+If you cloned this repo for your own use and want to start build numbering fresh on a new machine, delete the relevant counter files before your first build:
 
 ```sh
-rm .build-counter-arm .build-counter-intel
-# or just the one for your architecture
+rm .build-counter-arm-rel .build-counter-intel-rel
+rm .build-counter-arm-exp .build-counter-intel-exp
+# or just the ones for your architecture and build type
 ```
 
 The counter then restarts at 1 and increments locally from there. **Do not push resets back to this repo** — doing so would collide with the maintainer's build numbering.

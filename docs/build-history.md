@@ -8,7 +8,7 @@ Index of every DMG build produced by `build-local.sh` with provenance, release m
 |-------|---------|
 | **#** | Build counter (`.build-counter-{arm,intel}`, advances on every successful build) |
 | **Arch** | `arm` (Apple Silicon) or `intel` (x86_64) |
-| **Type** | `main` (built on main branch) · `feature` (feature/fix branch) · `experimental` (experimental/* branch) · `fork` (`tools/build-fork.sh` build from an upstream worktree) |
+| **Type** | `main` (built on main branch with build-local.sh) · `feature` (feature/fix branch with build-local.sh) · `experimental` (experimental/* branch with build-local.sh) · `fork` (legacy `tools/build-fork.sh` build, used through 2026-05-06) · `exp` (`tools/build-exp.sh` build from an experimental worktree) |
 | **Date** | Local time of build completion |
 | **Branch/Slug** | Git branch name at build time (sanitized for filename) |
 | **DMG** | Filename in `build/`, or `—` if missing |
@@ -65,8 +65,8 @@ Index of every DMG build produced by `build-local.sh` with provenance, release m
 Three builds without artifacts in `build/`:
 
 - **b015 (arm, 2026-04-19):** Undocumented. Counter advanced but no DMG preserved. Likely an aborted build during experimental work on that date.
-- **b016 (arm, 2026-04-19):** Per memory entry `experimental-build-ritual.md`: built without `tools/stage-source-tarball.sh` helper and "lost both patches" — effectively a broken build, not retained.
-- **b019 (arm, 2026-04-20):** Built on main branch with yesterday's contaminated tarball as source. DMG had experimental content but main-branch filename — misleading artifact. Deleted 2026-04-21 during cleanup. See ``.
+- **b016 (arm, 2026-04-19):** Built without the staging helper that ensures patches survive — effectively a broken build, not retained.
+- **b019 (arm, 2026-04-20):** Built on main branch with yesterday's contaminated tarball as source. DMG had experimental content but main-branch filename — misleading artifact. Deleted 2026-04-21 during cleanup.
 
 ## Provenance methodology
 
@@ -80,6 +80,30 @@ Column conventions:
 - Use `—` for not-applicable or empty cells (not blank)
 - Bold a build number (`**b013**`) to mark its status as currently-shipped
 - SHA256 is first 10 chars only; full value lives in the paired `.sha256` file
+
+## Build runs after 2026-04-22 (summary)
+
+Builds b022–b032 on ARM were development-track and fork builds rather than main-branch production builds. High-level purpose:
+
+| # | Type | Purpose |
+|---|------|---------|
+| b022 | feature | LTO + `-Os` + aggressive-strip combined (--full rebuild) — initial size measurement |
+| b023 | feature | Strip-only isolation test — measured against b022 to attribute savings |
+| b024 | feature | LTO + `-Os` isolation test — confirmed LTO+`-Os` carries the full ~1.1 MB DMG / ~3.5 MB app reduction; aggressive-strip retired as no-op |
+| b025 | main | Production build run on `main` |
+| b026 | feature | Build-system improvement run |
+| b027 | experimental | First DMG with sentinel manifest sidecars — initial validation of the experimental-build architecture |
+| b028 | experimental | Portability-fix end-to-end verification — drift-handling against the existing dep cache |
+| b029 | experimental | Canonical baseline — pure upstream/main + Qt 6.11.0, no wrapper patches; established the pre-optimization measurement reference for this Qt version |
+| b030 | experimental | LTO+`-Os` measurement against b029 — −0.90 MB DMG / −2.63 MB app at Qt 6.11.0 |
+| b031 | experimental | Remove-PrintSupport measurement against b029 — Qt rebuilt without PrintSupport, −0.12 MB DMG / −0.48 MB app |
+| b032 | experimental | Integration measurement — both LTO+`-Os` and remove-PrintSupport stacked — −1.05 MB DMG / −3.11 MB app, additive (no interaction) |
+
+Per-build provenance (DMG SHA256, source refs, deps used, configure args hash, host specs, build timing, verification results) lives in the `.dmg.manifest.json` sidecars alongside each DMG in `build/`. Experimental-build manifests in particular capture the full reproducibility chain.
+
+Builds b027 onward used `tools/build-fork.sh` (renamed to `tools/build-exp.sh` on 2026-05-06); their DMG filenames in `build/` retain the historical `b{NNN}-fork-{slug}-{hash}` form.
+
+The optimization patches that landed in production from these measurements are documented in `PATCHES.md`.
 
 ## Naming convention change — 2026-04-22
 
