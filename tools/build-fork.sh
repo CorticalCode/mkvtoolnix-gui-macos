@@ -22,6 +22,43 @@ set -e
 setopt NULL_GLOB
 unalias -a 2>/dev/null || true
 
+# --- Startup tool probe ---
+# Verify every required external tool is reachable in PATH before doing any
+# real work. Without this, a missing tool surfaces mid-build with a cryptic
+# pipe error; here it surfaces immediately with the tool's name.
+#
+# Note on `unalias -a` (the line above): this only affects THIS script's
+# subshell. It does not touch the user's interactive aliases — those persist
+# in the parent shell unchanged.
+_required_tools=(
+  # POSIX core (every macOS install)
+  awk grep sed find sort tr wc du xargs cat shasum file uname mktemp ls head
+  # always present on macOS dev installs
+  date stat rsync perl
+  # macOS-specific (script is macOS-only by design; fail fast elsewhere)
+  sw_vers sysctl xcrun clang hdiutil codesign strings
+)
+for _t in "${_required_tools[@]}"; do
+  if ! command -v "$_t" >/dev/null 2>&1; then
+    echo "ERROR: required tool '$_t' not found in PATH" >&2
+    echo "       This script is for macOS builds. PATH=$PATH" >&2
+    exit 1
+  fi
+done
+unset _t _required_tools
+
+# --- BSD-find probe ---
+# The script uses BSD-specific `find -perm +111` syntax. GNU find errors out
+# on that flag form. If the user has homebrew gfind first on PATH and it
+# shadows BSD find, this catches it at startup.
+if ! command find /tmp -maxdepth 0 -perm +111 >/dev/null 2>&1; then
+  echo "ERROR: 'find' in PATH appears to be GNU find, not BSD find." >&2
+  echo "       This script uses BSD find flags (e.g. -perm +111)." >&2
+  echo "       Ensure /usr/bin precedes homebrew prefixes in PATH, or" >&2
+  echo "       resolve the conflict (e.g. 'brew unlink findutils')." >&2
+  exit 1
+fi
+
 TRAPZERR() {
   echo "ERROR: build-fork.sh failed at ${funcfiletrace[1]:-line ${LINENO}} (exit code $?)" >&2
 }
@@ -199,7 +236,7 @@ mkdir -p "${WORK_DIR}"
 LOG_FILE="${WORK_DIR}/build-fork-${SLUG}-${BUILD_LABEL}-${BUILD_HASH}.log"
 exec > >(tee "${LOG_FILE}") 2>&1
 BUILD_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')          # local time, for human log
-BUILD_START_ISO=$(/bin/date -u +"%Y-%m-%dT%H:%M:%SZ")  # UTC ISO, for manifests
+BUILD_START_ISO=$(command date -u +"%Y-%m-%dT%H:%M:%SZ")  # UTC ISO, for manifests
 SECONDS=0
 
 trap 'echo "==> Interrupted."; exit 130' INT TERM HUP
@@ -233,20 +270,20 @@ _json_str() {
 }
 
 # ISO 8601 UTC "Z" timestamp.
-_iso_utc() { /bin/date -u +"%Y-%m-%dT%H:%M:%SZ"; }
+_iso_utc() { command date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 
 # Non-identifying host info as a single-line JSON object.
 _host_json() {
   local cpu_brand arch cores ram_bytes ram_gb macos clang_ver sdk_ver
-  cpu_brand=$(/usr/sbin/sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "unknown")
-  arch=$(/usr/bin/uname -m)
-  cores=$(/usr/sbin/sysctl -n hw.physicalcpu 2>/dev/null || echo 0)
-  ram_bytes=$(/usr/sbin/sysctl -n hw.memsize 2>/dev/null || echo 0)
+  cpu_brand=$(command sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "unknown")
+  arch=$(command uname -m)
+  cores=$(command sysctl -n hw.physicalcpu 2>/dev/null || echo 0)
+  ram_bytes=$(command sysctl -n hw.memsize 2>/dev/null || echo 0)
   ram_gb=$(( ram_bytes / 1073741824 ))
-  macos=$(/usr/bin/sw_vers -productVersion 2>/dev/null || echo "unknown")
-  clang_ver=$(/usr/bin/clang --version 2>/dev/null | /usr/bin/head -1 | /usr/bin/sed -E 's/.*version ([0-9.]+).*/\1/')
+  macos=$(command sw_vers -productVersion 2>/dev/null || echo "unknown")
+  clang_ver=$(command clang --version 2>/dev/null | command head -1 | command sed -E 's/.*version ([0-9.]+).*/\1/')
   [[ -z "$clang_ver" ]] && clang_ver="unknown"
-  sdk_ver=$(/usr/bin/xcrun --show-sdk-version 2>/dev/null || echo "unknown")
+  sdk_ver=$(command xcrun --show-sdk-version 2>/dev/null || echo "unknown")
   printf '{"cpu_brand":%s,"arch":%s,"cores_total":%d,"ram_gb":%d,"macos_version":%s,"clang_version":%s,"sdk_version":%s}' \
     "$(_json_str "$cpu_brand")" "$(_json_str "$arch")" "$cores" "$ram_gb" \
     "$(_json_str "$macos")" "$(_json_str "$clang_ver")" "$(_json_str "$sdk_ver")"
@@ -267,17 +304,17 @@ _host_json() {
 # configure args.
 _qt_args_hash() {
   local build_sh="$1"
-  /usr/bin/awk '
+  command awk '
     /^function build_qt/ { in_qt = 1 }
     in_qt && /^[[:space:]]*args=\(/ { in_args = 1; next }
     in_args && /^[[:space:]]*\)/ { in_args = 0; in_qt = 0; next }
     in_args { print }
   ' "$build_sh" \
-    | /usr/bin/sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
-    | /usr/bin/grep -v '^$' \
-    | /usr/bin/sort \
-    | /usr/bin/shasum -a 256 \
-    | /usr/bin/awk '{print substr($1, 1, 12)}'
+    | command sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
+    | command grep -v '^$' \
+    | command sort \
+    | command shasum -a 256 \
+    | command awk '{print substr($1, 1, 12)}'
 }
 
 # 12-char hash of patches relevant to this dep. For Qt, hashes the contents
@@ -296,16 +333,18 @@ _patch_state_hash() {
       local patches_dir="${SCRIPT_DIR}/patches/qt-patches"
       if [[ -d "$patches_dir" ]]; then
         local files
-        files=$(/usr/bin/find "$patches_dir" -name '*.patch' -type f 2>/dev/null | /usr/bin/sort)
+        files=$(command find "$patches_dir" -name '*.patch' -type f 2>/dev/null | command sort)
         if [[ -n "$files" ]]; then
-          # /bin/cat (NOT /usr/bin/cat — that path does not exist on macOS).
-          # No `2>/dev/null` here: silent suppression hid this exact bug
-          # in Phase 1 (xargs failed to invoke /usr/bin/cat, hashed empty
-          # input, produced e3b0c44298fc... for any patch set, masking
-          # patch-state changes).
-          print "$files" | /usr/bin/xargs /bin/cat \
-            | /usr/bin/shasum -a 256 \
-            | /usr/bin/awk '{print substr($1, 1, 12)}'
+          # No `2>/dev/null` here: loud failure is preferable. The original
+          # implementation used `/usr/bin/cat` (which does not exist on
+          # macOS — cat is at /bin/cat) plus `2>/dev/null`, producing the
+          # empty-input SHA-256 prefix `e3b0c44298fc...` for every patch set
+          # and masking patch-state changes (commit 37683b1 fixed it).
+          # Subsequent portability pass replaced absolute paths with
+          # `command <tool>` to remove the path-drift bug class entirely.
+          print "$files" | command xargs command cat \
+            | command shasum -a 256 \
+            | command awk '{print substr($1, 1, 12)}'
           return
         fi
       fi
@@ -323,13 +362,13 @@ _patch_state_hash() {
 # if the field is missing.
 _manifest_field() {
   local sidecar="$1" field="$2"
-  /usr/bin/grep -oE "\"${field}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$sidecar" 2>/dev/null \
-    | /usr/bin/sed -E 's/.*"([^"]*)"$/\1/'
+  command grep -oE "\"${field}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$sidecar" 2>/dev/null \
+    | command sed -E 's/.*"([^"]*)"$/\1/'
 }
 _manifest_int_field() {
   local sidecar="$1" field="$2"
-  /usr/bin/grep -oE "\"${field}\"[[:space:]]*:[[:space:]]*[0-9]+" "$sidecar" 2>/dev/null \
-    | /usr/bin/awk '{print $NF}'
+  command grep -oE "\"${field}\"[[:space:]]*:[[:space:]]*[0-9]+" "$sidecar" 2>/dev/null \
+    | command awk '{print $NF}'
 }
 
 # Reads a dep cache manifest sidecar; prints a short one-line summary
@@ -439,7 +478,7 @@ _write_dep_manifest() {
   target_lib_dir="${TARGET}/lib"
   dylib_count=0
   if [[ "$spec_name" == "qt" && -d "$target_lib_dir" ]]; then
-    dylib_count=$(/usr/bin/find "$target_lib_dir" -name 'libQt6*.dylib' -not -type l 2>/dev/null | /usr/bin/wc -l | /usr/bin/tr -d ' ')
+    dylib_count=$(command find "$target_lib_dir" -name 'libQt6*.dylib' -not -type l 2>/dev/null | command wc -l | command tr -d ' ')
   fi
   local wrapper_branch wrapper_sha
   wrapper_branch=$(git -C "${SCRIPT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
@@ -707,7 +746,7 @@ fi
 echo "==> Setting VERSIONNAME = ${VERSIONNAME}"
 perl -pi -e "s{^constexpr.*VERSIONNAME.*}{constexpr auto VERSIONNAME = \"${VERSIONNAME}\";}" "${VERSION_FILE}"
 # Verify the substitution actually happened
-if ! /usr/bin/grep -q "VERSIONNAME = \"${VERSIONNAME}\"" "${VERSION_FILE}"; then
+if ! command grep -q "VERSIONNAME = \"${VERSIONNAME}\"" "${VERSION_FILE}"; then
   echo "ERROR: VERSIONNAME injection failed — source unchanged." >&2
   exit 1
 fi
@@ -824,7 +863,7 @@ if [[ -n "${VERIFY_SYMBOL}" ]]; then
   echo "==> Patch-presence verification: ${VERIFY_SYMBOL}"
 
   # 1. Presence + occurrence count in binary
-  symbol_count=$(/usr/bin/strings "${BINARY}" | /usr/bin/grep -c -- "${VERIFY_SYMBOL}" || true)
+  symbol_count=$(command strings "${BINARY}" | command grep -c -- "${VERIFY_SYMBOL}" || true)
   if [[ ${symbol_count} -ge 1 ]]; then
     echo "    PASS: '${VERIFY_SYMBOL}' appears ${symbol_count}x in binary"
   else
@@ -838,7 +877,7 @@ if [[ -n "${VERIFY_SYMBOL}" ]]; then
   # Counts across the whole staged tree; compiler deduplication means binary
   # count is always ≤ source count, but non-zero source + non-zero binary
   # confirms the source-to-binary path is intact.
-  source_count=$(/usr/bin/grep -rc -- "${VERIFY_SYMBOL}" "${FORK_BUILD_DIR}/src" 2>/dev/null \
+  source_count=$(command grep -rc -- "${VERIFY_SYMBOL}" "${FORK_BUILD_DIR}/src" 2>/dev/null \
     | awk -F: '{s+=$2} END {print s+0}')
   echo "    INFO: source tree had ${source_count} references; binary has ${symbol_count} (compiler may dedup)"
   if [[ ${source_count} -eq 0 ]]; then
@@ -865,7 +904,7 @@ while IFS= read -r -d '' b; do
     echo "    FAIL: wrong arch in ${b:t}"
     arch_errors=$((arch_errors + 1))
   fi
-done < <(/usr/bin/find "${APP_BUNDLE}/Contents/MacOS" \( -name "*.dylib" -o -type f -perm +111 \) -not -type d -print0 2>/dev/null)
+done < <(command find "${APP_BUNDLE}/Contents/MacOS" \( -name "*.dylib" -o -type f -perm +111 \) -not -type d -print0 2>/dev/null)
 if [[ ${arch_errors} -eq 0 ]] && [[ ${arch_checked} -gt 0 ]]; then
   echo "    PASS: all ${arch_checked} binaries/dylibs are ${MACHINE_ARCH}"
 elif [[ ${arch_errors} -gt 0 ]]; then
@@ -873,7 +912,7 @@ elif [[ ${arch_errors} -gt 0 ]]; then
 fi
 
 # 2. Size sanity (fork builds may differ from production, so wider range)
-app_bytes=$(/usr/bin/find "${APP_BUNDLE}" -type f -exec /usr/bin/stat -f '%z' {} + 2>/dev/null | awk '{s+=$1} END {print s}')
+app_bytes=$(command find "${APP_BUNDLE}" -type f -exec command stat -f '%z' {} + 2>/dev/null | awk '{s+=$1} END {print s}')
 size_mb=$(echo "${app_bytes:-0}" | awk '{printf "%.1f", $1/1000/1000}')
 if (( $(echo "${size_mb} < 50" | bc -l) )) || (( $(echo "${size_mb} > 150" | bc -l) )); then
   echo "    WARN: App size ${size_mb} MB outside typical 50-150 MB range"
@@ -908,11 +947,11 @@ fi
 # 5. Distinct Qt versions bundled in libs/ — must be exactly 1. More than 1
 # indicates the restore step extracted overlapping versions (the Fix 2 bug).
 if [[ -d "${APP_BUNDLE}/Contents/MacOS/libs" ]]; then
-  qt_versions=$(/usr/bin/find "${APP_BUNDLE}/Contents/MacOS/libs" -name 'libQt6Core.*.dylib' \
+  qt_versions=$(command find "${APP_BUNDLE}/Contents/MacOS/libs" -name 'libQt6Core.*.dylib' \
     -not -type l 2>/dev/null \
-    | /usr/bin/sed -E 's/.*libQt6Core\.([0-9.]+)\.dylib/\1/' \
-    | /usr/bin/sort -u)
-  qt_version_count=$(echo "${qt_versions}" | /usr/bin/grep -c . || true)
+    | command sed -E 's/.*libQt6Core\.([0-9.]+)\.dylib/\1/' \
+    | command sort -u)
+  qt_version_count=$(echo "${qt_versions}" | command grep -c . || true)
   if [[ ${qt_version_count} -eq 1 ]]; then
     echo "    PASS: exactly 1 Qt version bundled (${qt_versions})"
   elif [[ ${qt_version_count} -gt 1 ]]; then
@@ -928,7 +967,7 @@ fi
 # 6. Report bundled libs inventory for at-a-glance sanity
 if [[ -d "${APP_BUNDLE}/Contents/MacOS/libs" ]]; then
   echo "    --- bundled libs ---"
-  /usr/bin/find "${APP_BUNDLE}/Contents/MacOS/libs" -name '*.dylib' -not -type l 2>/dev/null \
+  command find "${APP_BUNDLE}/Contents/MacOS/libs" -name '*.dylib' -not -type l 2>/dev/null \
     | while read -r l; do echo "    $(basename "${l}")"; done
 fi
 
@@ -999,7 +1038,7 @@ if [[ -d "${_PATCH_DIR}" ]]; then
   for p in "${_PATCH_DIR}"/*.patch(N) "${_PATCH_DIR}"/qt-patches/*.patch(N); do
     [[ -f "$p" ]] || continue
     [[ ${_first_patch} -eq 1 ]] && _first_patch=0 || PATCHES_JSON+=", "
-    p_sha=$(/usr/bin/shasum -a 256 "$p" | /usr/bin/awk '{print $1}')
+    p_sha=$(command shasum -a 256 "$p" | command awk '{print $1}')
     p_rel="${p#${SCRIPT_DIR}/}"
     PATCHES_JSON+="{\"name\":$(_json_str "${p_rel}"),\"sha256\":$(_json_str "${p_sha}")}"
   done
@@ -1026,9 +1065,9 @@ for d in "${DEPS_JSON_PARTS[@]}"; do
 done
 _DEPS_JSON+="]"
 
-_dmg_size_bytes=$(/usr/bin/stat -f %z "${DMG_FINAL_PATH}")
-_dmg_sha=$(/usr/bin/shasum -a 256 "${DMG_FINAL_PATH}" | /usr/bin/awk '{print $1}')
-_app_kb=$(/usr/bin/du -sk "${APP_BUNDLE}" | /usr/bin/awk '{print $1}')
+_dmg_size_bytes=$(command stat -f %z "${DMG_FINAL_PATH}")
+_dmg_sha=$(command shasum -a 256 "${DMG_FINAL_PATH}" | command awk '{print $1}')
+_app_kb=$(command du -sk "${APP_BUNDLE}" | command awk '{print $1}')
 _app_bytes=$(( _app_kb * 1024 ))
 
 _wrapper_branch=$(git -C "${SCRIPT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
