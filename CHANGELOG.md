@@ -1,5 +1,32 @@
 # Changelog
 
+## Size optimization: LTO + -Os for mkvtoolnix (2026-05-06)
+
+**Production builds now ship smaller binaries.** Adds
+`patches/mkvtoolnix-size-opt.patch`, applied automatically by
+`build-local.sh`. The patch enables ThinLTO (`-flto=thin`) and
+optimize-for-size (`-Os`) for the mkvtoolnix compile only — deps
+continue building at the existing `-O2`.
+
+**Measured impact** (against an unpatched Qt 6.11.0 baseline, fork-build
+measurement on ARM64):
+
+| | Baseline | With LTO+-Os | Delta |
+|---|---|---|---|
+| DMG | 36.68 MB | 35.78 MB | −0.90 MB (−2.44%) |
+| App on disk | 79.87 MB | 77.24 MB | −2.63 MB (−3.29%) |
+
+Combined with the existing PrintSupport-removal patch: −1.05 MB DMG /
+−3.11 MB app vs the unpatched Qt 6.11 baseline. The two optimizations
+are additive — no interaction.
+
+**No functional change**, just smaller binaries. App still launches and
+runs all features. ThinLTO is fast incremental LTO; `-Os` chooses
+size-favoring optimization paths over speed-favoring ones. Speed impact
+is at the noise floor for this codebase.
+
+---
+
 ## Build wrapper architecture overhaul (2026-05-06)
 
 **Major reworking of the experimental build wrapper, plus portability
