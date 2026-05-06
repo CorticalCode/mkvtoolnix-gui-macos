@@ -252,13 +252,29 @@ _host_json() {
     "$(_json_str "$macos")" "$(_json_str "$clang_ver")" "$(_json_str "$sdk_ver")"
 }
 
-# 12-char hash of the staged build_qt configure args (the lines starting
-# with `-` inside the build_qt function body), normalized via sort. Two
-# Qt builds with the same args_hash are configured identically.
+# 12-char hash of the staged build_qt configure args (only the lines inside
+# the `args=(...)` array assignment in build_qt). Whitespace-normalized then
+# sorted, so reformatting indent or line order doesn't perturb the hash.
+#
+# Source-level (not closure-level): variable references like ${TARGET} are
+# hashed literally; their RUNTIME values aren't part of this fingerprint.
+# That means MACOSX_DEPLOYMENT_TARGET, compiler version, SDK version are
+# NOT captured here. Phase 1 acceptable; Phase 2 needs a richer identity.
+#
+# Earlier versions captured everything in build_qt that started with `-`,
+# which included `time $DEBUG cmake --build .` and `--parallel
+# $DRAKETHREADS` from the cmake invocation — unstable and not actually
+# configure args.
 _qt_args_hash() {
   local build_sh="$1"
-  /usr/bin/awk '/^function build_qt/,/^}/' "$build_sh" \
-    | /usr/bin/grep -E '^[[:space:]]+-' \
+  /usr/bin/awk '
+    /^function build_qt/ { in_qt = 1 }
+    in_qt && /^[[:space:]]*args=\(/ { in_args = 1; next }
+    in_args && /^[[:space:]]*\)/ { in_args = 0; in_qt = 0; next }
+    in_args { print }
+  ' "$build_sh" \
+    | /usr/bin/sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
+    | /usr/bin/grep -v '^$' \
     | /usr/bin/sort \
     | /usr/bin/shasum -a 256 \
     | /usr/bin/awk '{print substr($1, 1, 12)}'
@@ -289,8 +305,14 @@ _dep_manifest_summary() {
 #       $4=source_sha256, $5=output_path
 _write_dep_manifest() {
   local spec_name="$1" package="$2" tarball="$3" source_sha="$4" out="$5"
-  local args_hash dylib_count target_lib_dir
-  args_hash=$(_qt_args_hash "${FORK_BUILD_DIR}/packaging/macos/build.sh")
+  local args_hash="" dylib_count target_lib_dir
+  # configure_args_hash is Qt-specific (it reads build_qt's args=(...)).
+  # Other deps don't have a comparable structured-args list in build.sh, so
+  # leave the field empty rather than recording a misleading Qt hash for
+  # zlib/etc. (Earlier versions emitted the Qt hash for all deps.)
+  if [[ "$spec_name" == "qt" ]]; then
+    args_hash=$(_qt_args_hash "${FORK_BUILD_DIR}/packaging/macos/build.sh")
+  fi
   target_lib_dir="${TARGET}/lib"
   dylib_count=0
   if [[ "$spec_name" == "qt" && -d "$target_lib_dir" ]]; then
