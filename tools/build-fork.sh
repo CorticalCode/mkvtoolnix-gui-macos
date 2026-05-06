@@ -711,11 +711,32 @@ fi
 # Source upstream's config.sh (provides CMPL, RAKE, MACOSX_DEPLOYMENT_TARGET, etc.)
 # then the wrapper config (already resolved to WRAPPER_CONFIG above —
 # config.fork.local.sh preferred, falls back to config.local.sh).
+#
+# Preserve any user-provided TARGET/SRCDIR env overrides. Upstream's config.sh
+# unconditionally writes `export TARGET=$HOME/opt`, `export SRCDIR=$HOME/opt/source`,
+# `export PACKAGE_DIR=$HOME/opt/packages`. Without this guard,
+# `TARGET=/Volumes/Fast/opt ./tools/build-fork.sh ...` silently mixes dep
+# trees: cache restore (which ran BEFORE this block, with the override
+# honored) extracts into /Volumes/Fast/opt while build links against
+# $HOME/opt. The restoration below re-asserts the user's choice and
+# re-anchors PACKAGE_DIR so the promote step finds tarballs in the right
+# place.
+_saved_target="${TARGET:-}"
+_saved_srcdir="${SRCDIR:-}"
 _SAVED_OPTS=$(setopt | tr '\n' ' ')
 source "${FORK_BUILD_DIR}/packaging/macos/config.sh"
 if [[ -n "${WRAPPER_CONFIG}" ]]; then
   source "${WRAPPER_CONFIG}"
 fi
+if [[ -n "${_saved_target}" ]]; then
+  export TARGET="${_saved_target}"
+  export PACKAGE_DIR="${TARGET}/packages"
+  [[ -z "${_saved_srcdir}" ]] && export SRCDIR="${TARGET}/source"
+fi
+if [[ -n "${_saved_srcdir}" ]]; then
+  export SRCDIR="${_saved_srcdir}"
+fi
+unset _saved_target _saved_srcdir
 # Re-enable our options after sourced files may have changed them
 setopt ${=_SAVED_OPTS} 2>/dev/null
 set -e
