@@ -13,6 +13,45 @@ set -e
 setopt NULL_GLOB  # Unmatched globs expand to nothing instead of aborting
 unalias -a 2>/dev/null || true  # Prevent .zshenv aliases from leaking into script
 
+# --- Startup tool probe ---
+# Verify required external tools are reachable in PATH before doing real work.
+# Without this, a missing tool surfaces mid-build with a cryptic pipe error;
+# here it surfaces immediately with the tool's name. Same probe as
+# tools/build-fork.sh — duplicated inline rather than sourced from a shared
+# helper to keep each script self-contained.
+#
+# Note on `unalias -a` (line above): only affects THIS script's subshell.
+# Your interactive aliases in the parent shell are unaffected.
+_required_tools=(
+  # POSIX core (every macOS install)
+  awk grep sed find sort tr wc du xargs cat shasum file uname mktemp ls head
+  # always present on macOS dev installs
+  date stat rsync perl
+  # macOS-specific (script is macOS-only by design; fail fast elsewhere)
+  sw_vers sysctl xcrun clang hdiutil codesign strings
+)
+for _t in "${_required_tools[@]}"; do
+  if ! command -v "$_t" >/dev/null 2>&1; then
+    echo "ERROR: required tool '$_t' not found in PATH" >&2
+    echo "       This script is for macOS builds. PATH=$PATH" >&2
+    exit 1
+  fi
+done
+unset _t _required_tools
+
+# --- BSD-find probe ---
+# The script uses BSD-specific `find -perm +111` syntax (line ~872 — see
+# explicit BSD-vs-GNU comment there). GNU find errors out on that flag form.
+# If a user has homebrew gfind first on PATH and it shadows BSD find, this
+# catches it at startup.
+if ! command find /tmp -maxdepth 0 -perm +111 >/dev/null 2>&1; then
+  echo "ERROR: 'find' in PATH appears to be GNU find, not BSD find." >&2
+  echo "       This script uses BSD find flags (e.g. -perm +111)." >&2
+  echo "       Ensure /usr/bin precedes homebrew prefixes in PATH, or" >&2
+  echo "       resolve the conflict (e.g. 'brew unlink findutils')." >&2
+  exit 1
+fi
+
 TRAPZERR() {
   echo "ERROR: build-local.sh failed at ${funcfiletrace[1]:-line ${LINENO}} (exit code $?)" >&2
 }
@@ -818,9 +857,9 @@ if [[ "${BUILD_MODE}" != "promote" ]]; then
   # -maxdepth 1 -type f excludes the `latest` symlink upstream creates.
   # wipe_workspace has already cleared stale DMGs at the top of ${WORK_DIR},
   # so at most one match is expected; -print | head -1 is defensive.
-  ACTUAL_DMG=$(/usr/bin/find "${WORK_DIR}" -maxdepth 1 -type f -name 'MKVToolNix-*.dmg' -print 2>/dev/null | /usr/bin/head -1)
+  ACTUAL_DMG=$(command find "${WORK_DIR}" -maxdepth 1 -type f -name 'MKVToolNix-*.dmg' -print 2>/dev/null | command head -1)
   if [[ -n "${ACTUAL_DMG}" ]]; then
-    ACTUAL_VERSION=$(basename "${ACTUAL_DMG}" | /usr/bin/sed -E 's/^MKVToolNix-(.+)\.dmg$/\1/')
+    ACTUAL_VERSION=$(basename "${ACTUAL_DMG}" | command sed -E 's/^MKVToolNix-(.+)\.dmg$/\1/')
     if [[ "${ACTUAL_VERSION}" != "${VERSION}" ]]; then
       echo "==> VERSION corrected from '${VERSION}' (from TAG) to '${ACTUAL_VERSION}' (from DMG filename)"
       VERSION="${ACTUAL_VERSION}"
@@ -867,8 +906,8 @@ if [[ -d "${DMG_APP}" ]]; then
         arch_errors=$((arch_errors + 1))
         VERIFY_PASSED=false
       fi
-    # Note: -perm +111 is BSD find syntax (deprecated but macOS /usr/bin/find doesn't support -perm /111)
-    done < <(/usr/bin/find "${DMG_APP}/Contents/MacOS" \( -name "*.dylib" -o -type f -perm +111 \) -not -type d -print0 2>/dev/null)
+    # Note: -perm +111 is BSD find syntax (deprecated but macOS command find doesn't support -perm /111)
+    done < <(command find "${DMG_APP}/Contents/MacOS" \( -name "*.dylib" -o -type f -perm +111 \) -not -type d -print0 2>/dev/null)
   fi
   if [[ ${arch_checked} -eq 0 ]]; then
     echo "    FAIL: No binaries found to check architecture"
@@ -878,7 +917,7 @@ if [[ -d "${DMG_APP}" ]]; then
   fi
 
   # 3. Duplicate dylib scan
-  dupes=$(/usr/bin/find "${DMG_APP}/Contents/MacOS/libs" -name "*.dylib" -not -type l 2>/dev/null | sed 's/\(\.[0-9][0-9]*\)*\.dylib/.dylib/' | sort | uniq -d)
+  dupes=$(command find "${DMG_APP}/Contents/MacOS/libs" -name "*.dylib" -not -type l 2>/dev/null | sed 's/\(\.[0-9][0-9]*\)*\.dylib/.dylib/' | sort | uniq -d)
   if [[ -n "${dupes}" ]]; then
     echo "    FAIL: Duplicate dylib versions found:"
     echo "${dupes}" | while read -r d; do echo "      ${d}"; done
@@ -888,7 +927,7 @@ if [[ -d "${DMG_APP}" ]]; then
   fi
 
   # 4. Size sanity check (decimal MB to match Finder)
-  app_bytes=$(/usr/bin/find "${DMG_APP}" -type f -exec /usr/bin/stat -f '%z' {} + 2>/dev/null | awk '{s+=$1} END {print s}')
+  app_bytes=$(command find "${DMG_APP}" -type f -exec command stat -f '%z' {} + 2>/dev/null | awk '{s+=$1} END {print s}')
   size_mb=$(echo "${app_bytes}" | awk '{printf "%.1f", $1/1000/1000}')
   min_size=60  # MB — below this something is missing
   max_size=95  # MB — above this something is duplicated
@@ -919,7 +958,7 @@ if [[ -d "${DMG_APP}" ]]; then
 
   # 6. Bundle inventory
   echo "    --- Bundle inventory ---"
-  /usr/bin/find "${DMG_APP}/Contents/MacOS/libs" -name "*.dylib" -not -type l 2>/dev/null | while read -r lib; do
+  command find "${DMG_APP}/Contents/MacOS/libs" -name "*.dylib" -not -type l 2>/dev/null | while read -r lib; do
     echo "    $(basename "${lib}")"
   done
 
