@@ -298,7 +298,12 @@ _patch_state_hash() {
         local files
         files=$(/usr/bin/find "$patches_dir" -name '*.patch' -type f 2>/dev/null | /usr/bin/sort)
         if [[ -n "$files" ]]; then
-          print "$files" | /usr/bin/xargs /usr/bin/cat 2>/dev/null \
+          # /bin/cat (NOT /usr/bin/cat — that path does not exist on macOS).
+          # No `2>/dev/null` here: silent suppression hid this exact bug
+          # in Phase 1 (xargs failed to invoke /usr/bin/cat, hashed empty
+          # input, produced e3b0c44298fc... for any patch set, masking
+          # patch-state changes).
+          print "$files" | /usr/bin/xargs /bin/cat \
             | /usr/bin/shasum -a 256 \
             | /usr/bin/awk '{print substr($1, 1, 12)}'
           return
