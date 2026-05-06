@@ -207,16 +207,28 @@ trap 'echo "==> Interrupted."; exit 130' INT TERM HUP
 # --- Helper functions for manifest writing/reading ---
 
 # JSON string escaper. Handles backslash, quote, newline, tab, CR.
-# Replacement-side escapes need a doubled backslash so the parameter-expansion
-# replacement engine sees literal "\" + literal char (verified empirically;
-# `\\n` here would produce a stray "n" instead of the JSON `\n` sequence).
+#
+# Replacement-side escape format is `\\<char>` (two-character sequence in zsh
+# source: backslash + char), NOT `\\\<char>` (three chars). Empirically tested
+# 2026-05-04 with `xxd` byte dumps and `python3 json.loads()` round-trips:
+#
+#   Form `\\n`  : real newline → JSON `\n` (2 bytes 5c 6e) → parses back to NL
+#   Form `\\\n` : real newline → JSON `\\n` (3 bytes 5c 5c 6e) → parses back
+#                to literal "\n" string (backslash + letter), losing the
+#                original control char
+#
+# A previous review claimed the opposite and led to a regression; the comment
+# is preserved here to keep that finding load-bearing for future readers.
+# Both forms produce valid JSON (so `python3 -m json.tool` validation alone
+# does not catch the difference); semantic correctness requires actual
+# round-trip via `json.loads()`.
 _json_str() {
   local s="$1"
   s="${s//\\/\\\\}"
   s="${s//\"/\\\"}"
-  s="${s//$'\n'/\\\n}"
-  s="${s//$'\r'/\\\r}"
-  s="${s//$'\t'/\\\t}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
   printf '"%s"' "$s"
 }
 
