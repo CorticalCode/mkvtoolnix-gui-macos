@@ -245,20 +245,15 @@ trap 'echo "==> Interrupted."; exit 130' INT TERM HUP
 
 # JSON string escaper. Handles backslash, quote, newline, tab, CR.
 #
-# Replacement-side escape format is `\\<char>` (two-character sequence in zsh
-# source: backslash + char), NOT `\\\<char>` (three chars). Empirically tested
-# 2026-05-04 with `xxd` byte dumps and `python3 json.loads()` round-trips:
+# Replacement strings use `\\<char>` (2-char sequence) not `\\\<char>` (3-char).
+# Both forms produce syntactically valid JSON, but they round-trip differently:
 #
 #   Form `\\n`  : real newline → JSON `\n` (2 bytes 5c 6e) → parses back to NL
 #   Form `\\\n` : real newline → JSON `\\n` (3 bytes 5c 5c 6e) → parses back
-#                to literal "\n" string (backslash + letter), losing the
-#                original control char
+#                to literal "\n" (backslash + letter), losing the control char
 #
-# A previous review claimed the opposite and led to a regression; the comment
-# is preserved here to keep that finding load-bearing for future readers.
-# Both forms produce valid JSON (so `python3 -m json.tool` validation alone
-# does not catch the difference); semantic correctness requires actual
-# round-trip via `json.loads()`.
+# `python3 -m json.tool` accepts both. Correctness requires a full
+# `json.loads()` round-trip, not just a JSON-syntax check.
 _json_str() {
   local s="$1"
   s="${s//\\/\\\\}"
@@ -505,11 +500,11 @@ _write_dep_manifest() {
 EOF
 }
 
-# --- Wipe workspace (preserve proven, proven-experimental, source) ---
-echo "==> Wiping workspace TARGET (preserve proven/, proven-experimental/, source/)..."
+# --- Wipe workspace (preserve proven, proven-experimental, source, staging) ---
+echo "==> Wiping workspace TARGET (preserve proven/, proven-experimental/, source/, staging/)..."
 for item in "${TARGET}"/*; do
   case "${item:t}" in
-    proven|proven-experimental|source) continue ;;
+    proven|proven-experimental|source|staging) continue ;;
   esac
   [[ -e "${item}" ]] && echo "    rm -rf ${item:t}" && command rm -rf "${item}"
 done
