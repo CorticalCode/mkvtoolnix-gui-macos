@@ -600,8 +600,14 @@ for i in {1..${#EXPECTED_PACKAGES[@]}}; do
       unsentineled_experimental+=("${pkg}")
       summary="absent"
     else
-      validation_msg=$(_validate_dep_manifest "${manifest_path}" "${target}" "${pkg}" "${EXPECTED_SHAS[$i]}")
-      validation_result=$?
+      # Capture validation result via if/else so set -e doesn't treat the
+      # function's non-zero return (1=REFUSE, 2=DRIFT) as a fatal error.
+      # Plain `var=$(...)` triggers errexit on non-zero substitution in zsh.
+      if validation_msg=$(_validate_dep_manifest "${manifest_path}" "${target}" "${pkg}" "${EXPECTED_SHAS[$i]}"); then
+        validation_result=0
+      else
+        validation_result=$?
+      fi
       if [[ ${validation_result} -eq 1 ]]; then
         echo "" >&2
         echo "ERROR: cache validation refused ${pkg}:" >&2
