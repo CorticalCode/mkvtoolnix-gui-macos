@@ -314,6 +314,19 @@ _patch_state_hash() {
   esac
 }
 
+# Reads a single field from a manifest sidecar via grep+sed. Returns empty
+# if the field is missing.
+_manifest_field() {
+  local sidecar="$1" field="$2"
+  /usr/bin/grep -oE "\"${field}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$sidecar" 2>/dev/null \
+    | /usr/bin/sed -E 's/.*"([^"]*)"$/\1/'
+}
+_manifest_int_field() {
+  local sidecar="$1" field="$2"
+  /usr/bin/grep -oE "\"${field}\"[[:space:]]*:[[:space:]]*[0-9]+" "$sidecar" 2>/dev/null \
+    | /usr/bin/awk '{print $NF}'
+}
+
 # Reads a dep cache manifest sidecar; prints a short one-line summary
 # suitable for the restore log, or "absent" / "malformed" sentinel.
 _dep_manifest_summary() {
@@ -322,15 +335,85 @@ _dep_manifest_summary() {
     print "absent"
     return
   fi
-  local args_hash built_at dylibs
-  args_hash=$(/usr/bin/grep -oE '"configure_args_hash"[[:space:]]*:[[:space:]]*"[^"]*"' "$sidecar" | /usr/bin/sed -E 's/.*"([^"]*)"$/\1/')
-  built_at=$(/usr/bin/grep -oE '"built_at"[[:space:]]*:[[:space:]]*"[^"]*"' "$sidecar" | /usr/bin/sed -E 's/.*"([^"]*)"$/\1/')
-  dylibs=$(/usr/bin/grep -oE '"dylib_count"[[:space:]]*:[[:space:]]*[0-9]+' "$sidecar" | /usr/bin/awk '{print $NF}')
-  if [[ -z "$args_hash" ]]; then
+  local args_hash patch_hash built_at dylibs
+  args_hash=$(_manifest_field "$sidecar" "configure_args_hash")
+  patch_hash=$(_manifest_field "$sidecar" "patch_state_hash")
+  built_at=$(_manifest_field "$sidecar" "built_at")
+  dylibs=$(_manifest_int_field "$sidecar" "dylib_count")
+  if [[ -z "$built_at" ]]; then
     print "malformed"
     return
   fi
-  printf 'args_hash=%s built=%s dylibs=%s' "${args_hash}" "${built_at}" "${dylibs:-?}"
+  printf 'args=%s patches=%s built=%s dylibs=%s' "${args_hash:-n/a}" "${patch_hash:-n/a}" "${built_at}" "${dylibs:-?}"
+}
+
+# Validates a dep cache manifest against expected spec values. Refuses on
+# critical mismatches (schema_version, spec_name, package, source_sha256).
+# Drift on optional fields (configure_args_hash, patch_state_hash) is a
+# warning, not a refusal — those are advisory in Phase 1.
+#
+# Args: $1=manifest_path, $2=expected_spec_name, $3=expected_package,
+#       $4=expected_source_sha256 (may be empty)
+# Stdout: human-readable validation message
+# Exit:   0=valid, 1=REFUSE (critical mismatch), 2=WARN (drift on advisory fields)
+_validate_dep_manifest() {
+  local manifest="$1" exp_spec="$2" exp_pkg="$3" exp_src_sha="$4"
+  if [[ ! -f "$manifest" ]]; then
+    print "no manifest sidecar"
+    return 1
+  fi
+
+  local schema spec pkg src_sha
+  schema=$(_manifest_int_field "$manifest" "schema_version")
+  spec=$(_manifest_field "$manifest" "spec_name")
+  pkg=$(_manifest_field "$manifest" "package")
+  src_sha=$(_manifest_field "$manifest" "source_sha256")
+
+  if [[ -z "$schema" ]]; then
+    print "REFUSE: malformed manifest (no schema_version)"
+    return 1
+  fi
+  if [[ "$schema" != "1" ]]; then
+    print "REFUSE: schema_version=${schema} (this build-fork.sh handles only v1)"
+    return 1
+  fi
+  if [[ "$spec" != "$exp_spec" ]]; then
+    print "REFUSE: spec_name=${spec} (expected ${exp_spec})"
+    return 1
+  fi
+  if [[ "$pkg" != "$exp_pkg" ]]; then
+    print "REFUSE: package=${pkg} (expected ${exp_pkg})"
+    return 1
+  fi
+  if [[ -n "$exp_src_sha" && "$src_sha" != "$exp_src_sha" ]]; then
+    print "REFUSE: source_sha256 mismatch (cache built from different source tarball)"
+    return 1
+  fi
+
+  # Optional/advisory drift checks (warn, don't refuse).
+  local cur_args="" manifest_args drift=()
+  if [[ "$exp_spec" == "qt" && -n "${SRC:-}" && -f "${SRC}/packaging/macos/build.sh" ]]; then
+    cur_args=$(_qt_args_hash "${SRC}/packaging/macos/build.sh")
+  fi
+  manifest_args=$(_manifest_field "$manifest" "configure_args_hash")
+  if [[ -n "$cur_args" && -n "$manifest_args" && "$cur_args" != "$manifest_args" ]]; then
+    drift+=("args_hash:${manifest_args}→${cur_args}")
+  fi
+
+  local cur_patch manifest_patch
+  cur_patch=$(_patch_state_hash "$exp_spec")
+  manifest_patch=$(_manifest_field "$manifest" "patch_state_hash")
+  if [[ -n "$cur_patch" && -n "$manifest_patch" && "$cur_patch" != "$manifest_patch" ]]; then
+    drift+=("patch_state:${manifest_patch}→${cur_patch}")
+  fi
+
+  if [[ ${#drift[@]} -gt 0 ]]; then
+    print "DRIFT: ${(j:, :)drift}"
+    return 2
+  fi
+
+  print "OK (args=${manifest_args:-n/a} patches=${manifest_patch:-n/a})"
+  return 0
 }
 
 # Writes the dep cache manifest sidecar after promoting a freshly-built dep.
@@ -446,7 +529,7 @@ EXPECTED_PACKAGES=("${EXPECTED_PACKAGES[@]/zlib-v/zlib-}")
 
 echo "==> Expected packages (${#EXPECTED_PACKAGES[@]}): ${EXPECTED_PACKAGES[*]}"
 
-echo "==> Restoring packages (experimental wins on match; sentinels checked)..."
+echo "==> Restoring packages (experimental wins on match; sentinels validated)..."
 restored=0
 from_experimental=0
 from_proven=0
@@ -454,6 +537,7 @@ missing=()
 missing_targets=()
 DEPS_JSON_PARTS=()
 unsentineled_experimental=()
+drifting_caches=()
 # Defense-in-depth: zsh's `{1..0}` produces a descending range (1, 0) rather
 # than an empty sequence, so guard against an empty EXPECTED_PACKAGES.
 if [[ ${#EXPECTED_PACKAGES[@]} -eq 0 ]]; then
@@ -466,12 +550,34 @@ for i in {1..${#EXPECTED_PACKAGES[@]}}; do
   exp_tarball="${EXPERIMENTAL_DIR}/${pkg}.tar.gz"
   proven_tarball="${PROVEN_DIR}/${pkg}.tar.gz"
   if [[ -f "${exp_tarball}" ]]; then
-    summary=$(_dep_manifest_summary "${exp_tarball}.manifest.json")
-    if [[ "$summary" == "absent" ]]; then
+    manifest_path="${exp_tarball}.manifest.json"
+    if [[ ! -f "${manifest_path}" ]]; then
       echo "    ${pkg} (experimental, NO PROVENANCE MANIFEST)"
       unsentineled_experimental+=("${pkg}")
+      summary="absent"
     else
-      echo "    ${pkg} (experimental, ${summary})"
+      validation_msg=$(_validate_dep_manifest "${manifest_path}" "${target}" "${pkg}" "${EXPECTED_SHAS[$i]}")
+      validation_result=$?
+      if [[ ${validation_result} -eq 1 ]]; then
+        echo "" >&2
+        echo "ERROR: cache validation refused ${pkg}:" >&2
+        echo "       ${validation_msg}" >&2
+        echo "" >&2
+        echo "       The cached tarball does not match the expected build inputs." >&2
+        echo "       To replace it, remove all three sidecar files:" >&2
+        echo "         rm '${exp_tarball}'" >&2
+        echo "         rm '${exp_tarball}.sha256'" >&2
+        echo "         rm '${manifest_path}'" >&2
+        echo "       Then re-run with --rebuild-deps to populate cleanly." >&2
+        exit 1
+      elif [[ ${validation_result} -eq 2 ]]; then
+        echo "    ${pkg} (experimental, ${validation_msg})"
+        drifting_caches+=("${pkg}")
+        summary="${validation_msg}"
+      else
+        echo "    ${pkg} (experimental, ${validation_msg})"
+        summary="${validation_msg}"
+      fi
     fi
     (cd "${TARGET}" && tar xzf "${exp_tarball}")
     from_experimental=$((from_experimental + 1))
@@ -512,6 +618,16 @@ if [[ ${#unsentineled_experimental[@]} -gt 0 ]]; then
   echo "      first remove them from ${EXPERIMENTAL_DIR}/, then re-run with" >&2
   echo "      --rebuild-deps. (--rebuild-deps only rebuilds MISSING entries;" >&2
   echo "      existing-but-unsentineled tarballs must be removed first.)" >&2
+  echo "" >&2
+fi
+if [[ ${#drifting_caches[@]} -gt 0 ]]; then
+  echo "" >&2
+  echo "WARN: ${#drifting_caches[@]} experimental cache entry(ies) show drift from current state:" >&2
+  for d in "${drifting_caches[@]}"; do echo "      - ${d}" >&2; done
+  echo "      The cache was built with different configure args or patch state" >&2
+  echo "      than the current source. The build will proceed (drift is advisory" >&2
+  echo "      in Phase 1), but consider --rebuild-deps to refresh if accuracy" >&2
+  echo "      matters for this measurement." >&2
   echo "" >&2
 fi
 if [[ ${#missing[@]} -gt 0 ]]; then
