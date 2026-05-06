@@ -660,8 +660,7 @@ echo "==> Verified: QTVER=${QTVER} matches specs.sh (${SPECS_QT_FILE})"
 
 # Verify upstream mkvtoolnix tarball signature before letting build.sh use it.
 # Upstream build.sh does not checksum or signature-verify the source tarball
-# (build_package /path mode bypasses retrieve_file). This closes the gap that
-# allowed the 2026-04-20 contamination incident.
+# (build_package /path mode bypasses retrieve_file).
 PUBKEY="${SCRIPT_DIR}/tools/mbunkus-pubkey.asc"
 PINNED_FP_FILE="${SCRIPT_DIR}/tools/mbunkus-fingerprint.txt"
 SOURCE_DIR="${SRCDIR:-${HOME}/opt/source}"
