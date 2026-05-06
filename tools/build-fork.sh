@@ -7,7 +7,7 @@
 # produces a DMG in build/ with a fork-specific filename, and never copies
 # to release/.
 #
-# Usage: ./tools/build-fork.sh <path-to-source> [--slug NAME] [--verify-symbol SYM]
+# Usage: ./tools/build-fork.sh <path-to-source> [--slug NAME] [--verify-symbol SYM] [--rebuild-deps]
 
 if [[ -z "${ZSH_VERSION}" ]]; then
   echo "ERROR: This script requires zsh. Run it with: ./tools/build-fork.sh" >&2
@@ -31,7 +31,7 @@ SCRIPT_DIR=${0:a:h:h}
 
 usage() {
   cat <<'USAGE'
-Usage: ./tools/build-fork.sh <path-to-source> [--slug NAME] [--verify-symbol SYM]
+Usage: ./tools/build-fork.sh <path-to-source> [--slug NAME] [--verify-symbol SYM] [--rebuild-deps]
 
 Build MKVToolNix from a fork/worktree source tree. Produces a DMG in
 build/ with a fork-specific filename. Uses proven + experimental dep
@@ -51,6 +51,16 @@ Options:
                            before declaring success. Abort if missing.
                            Intended to catch "patch didn't compile in"
                            failure mode. Example: lastProgramRunnerAudioDir
+  --rebuild-deps           Allow building missing deps from source. Without
+                           this flag, missing entries in the experimental
+                           cache cause an immediate hard-fail (preserves
+                           cache-only smart-restore semantics for fast
+                           iteration). With this flag, the missing deps
+                           are added to upstream's build.sh target list,
+                           built fresh, and promoted to the experimental
+                           cache (with a provenance manifest sidecar) for
+                           future runs. Use this once when (re)populating
+                           the cache; omit it for measurement runs.
   --help, -h               Show this help.
 USAGE
 }
@@ -59,6 +69,7 @@ USAGE
 SRC=""
 SLUG=""
 VERIFY_SYMBOL=""
+REBUILD_DEPS=0
 while [[ -n $1 ]]; do
   case $1 in
     --slug)
@@ -68,6 +79,9 @@ while [[ -n $1 ]]; do
     --verify-symbol)
       shift
       VERIFY_SYMBOL="$1"
+      ;;
+    --rebuild-deps)
+      REBUILD_DEPS=1
       ;;
     --help|-h)
       usage
@@ -184,10 +198,115 @@ fi
 mkdir -p "${WORK_DIR}"
 LOG_FILE="${WORK_DIR}/build-fork-${SLUG}-${BUILD_LABEL}-${BUILD_HASH}.log"
 exec > >(tee "${LOG_FILE}") 2>&1
-BUILD_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+BUILD_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')          # local time, for human log
+BUILD_START_ISO=$(/bin/date -u +"%Y-%m-%dT%H:%M:%SZ")  # UTC ISO, for manifests
 SECONDS=0
 
 trap 'echo "==> Interrupted."; exit 130' INT TERM HUP
+
+# --- Helper functions for manifest writing/reading ---
+
+# JSON string escaper. Handles backslash, quote, newline, tab, CR.
+# Replacement-side escapes need a doubled backslash so the parameter-expansion
+# replacement engine sees literal "\" + literal char (verified empirically;
+# `\\n` here would produce a stray "n" instead of the JSON `\n` sequence).
+_json_str() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\\n}"
+  s="${s//$'\r'/\\\r}"
+  s="${s//$'\t'/\\\t}"
+  printf '"%s"' "$s"
+}
+
+# ISO 8601 UTC "Z" timestamp.
+_iso_utc() { /bin/date -u +"%Y-%m-%dT%H:%M:%SZ"; }
+
+# Non-identifying host info as a single-line JSON object.
+_host_json() {
+  local cpu_brand arch cores ram_bytes ram_gb macos clang_ver sdk_ver
+  cpu_brand=$(/usr/sbin/sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "unknown")
+  arch=$(/usr/bin/uname -m)
+  cores=$(/usr/sbin/sysctl -n hw.physicalcpu 2>/dev/null || echo 0)
+  ram_bytes=$(/usr/sbin/sysctl -n hw.memsize 2>/dev/null || echo 0)
+  ram_gb=$(( ram_bytes / 1073741824 ))
+  macos=$(/usr/bin/sw_vers -productVersion 2>/dev/null || echo "unknown")
+  clang_ver=$(/usr/bin/clang --version 2>/dev/null | /usr/bin/head -1 | /usr/bin/sed -E 's/.*version ([0-9.]+).*/\1/')
+  [[ -z "$clang_ver" ]] && clang_ver="unknown"
+  sdk_ver=$(/usr/bin/xcrun --show-sdk-version 2>/dev/null || echo "unknown")
+  printf '{"cpu_brand":%s,"arch":%s,"cores_total":%d,"ram_gb":%d,"macos_version":%s,"clang_version":%s,"sdk_version":%s}' \
+    "$(_json_str "$cpu_brand")" "$(_json_str "$arch")" "$cores" "$ram_gb" \
+    "$(_json_str "$macos")" "$(_json_str "$clang_ver")" "$(_json_str "$sdk_ver")"
+}
+
+# 12-char hash of the staged build_qt configure args (the lines starting
+# with `-` inside the build_qt function body), normalized via sort. Two
+# Qt builds with the same args_hash are configured identically.
+_qt_args_hash() {
+  local build_sh="$1"
+  /usr/bin/awk '/^function build_qt/,/^}/' "$build_sh" \
+    | /usr/bin/grep -E '^[[:space:]]+-' \
+    | /usr/bin/sort \
+    | /usr/bin/shasum -a 256 \
+    | /usr/bin/awk '{print substr($1, 1, 12)}'
+}
+
+# Reads a dep cache manifest sidecar; prints a short one-line summary
+# suitable for the restore log, or "absent" / "malformed" sentinel.
+_dep_manifest_summary() {
+  local sidecar="$1"
+  if [[ ! -f "$sidecar" ]]; then
+    print "absent"
+    return
+  fi
+  local args_hash built_at dylibs
+  args_hash=$(/usr/bin/grep -oE '"configure_args_hash"[[:space:]]*:[[:space:]]*"[^"]*"' "$sidecar" | /usr/bin/sed -E 's/.*"([^"]*)"$/\1/')
+  built_at=$(/usr/bin/grep -oE '"built_at"[[:space:]]*:[[:space:]]*"[^"]*"' "$sidecar" | /usr/bin/sed -E 's/.*"([^"]*)"$/\1/')
+  dylibs=$(/usr/bin/grep -oE '"dylib_count"[[:space:]]*:[[:space:]]*[0-9]+' "$sidecar" | /usr/bin/awk '{print $NF}')
+  if [[ -z "$args_hash" ]]; then
+    print "malformed"
+    return
+  fi
+  printf 'args_hash=%s built=%s dylibs=%s' "${args_hash}" "${built_at}" "${dylibs:-?}"
+}
+
+# Writes the dep cache manifest sidecar after promoting a freshly-built dep.
+# Args: $1=spec_name (qt|zlib|...), $2=package (e.g. qt-everywhere-src-6.11.0),
+#       $3=spec_tarball (e.g. qt-everywhere-src-6.11.0.tar.xz),
+#       $4=source_sha256, $5=output_path
+_write_dep_manifest() {
+  local spec_name="$1" package="$2" tarball="$3" source_sha="$4" out="$5"
+  local args_hash dylib_count target_lib_dir
+  args_hash=$(_qt_args_hash "${FORK_BUILD_DIR}/packaging/macos/build.sh")
+  target_lib_dir="${TARGET}/lib"
+  dylib_count=0
+  if [[ "$spec_name" == "qt" && -d "$target_lib_dir" ]]; then
+    dylib_count=$(/usr/bin/find "$target_lib_dir" -name 'libQt6*.dylib' -not -type l 2>/dev/null | /usr/bin/wc -l | /usr/bin/tr -d ' ')
+  fi
+  local wrapper_branch wrapper_sha
+  wrapper_branch=$(git -C "${SCRIPT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  wrapper_sha=$(git -C "${SCRIPT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  cat > "$out" <<EOF
+{
+  "schema_version": 1,
+  "kind": "dep_cache",
+  "spec_name": $(_json_str "$spec_name"),
+  "package": $(_json_str "$package"),
+  "spec_tarball": $(_json_str "$tarball"),
+  "source_sha256": $(_json_str "$source_sha"),
+  "configure_args_hash": $(_json_str "$args_hash"),
+  "built_at": $(_json_str "$(_iso_utc)"),
+  "built_by": {
+    "tool": "tools/build-fork.sh",
+    "wrapper_branch": $(_json_str "$wrapper_branch"),
+    "wrapper_sha": $(_json_str "$wrapper_sha")
+  },
+  "dylib_count": ${dylib_count},
+  "host": $(_host_json)
+}
+EOF
+}
 
 # --- Wipe workspace (preserve proven, proven-experimental, source) ---
 echo "==> Wiping workspace TARGET (preserve proven/, proven-experimental/, source/)..."
@@ -231,8 +350,13 @@ setopt ${=_SAVED_OPTS_RESTORE} 2>/dev/null
 set -e
 
 EXPECTED_PACKAGES=()
+EXPECTED_TARGETS=()
+EXPECTED_TARBALLS=()
+EXPECTED_SHAS=()
 # Deliberately omit spec_curl — mkvtoolnix compile doesn't link curl, and the
 # wrapper's proven cache predates its addition to upstream specs.
+# spec_NAME → build_NAME target → "NAME" (no "spec_" prefix). Verified against
+# upstream's build.sh dispatcher (`while [[ -n $1 ]]; do build_$1; shift; done`).
 for spec_var in spec_autoconf spec_automake spec_pkgconfig spec_libiconv \
                 spec_cmake spec_ogg spec_vorbis spec_flac spec_zlib spec_gettext \
                 spec_cmark spec_gmp spec_boost spec_qt; do
@@ -240,6 +364,11 @@ for spec_var in spec_autoconf spec_automake spec_pkgconfig spec_libiconv \
   [[ -z "${filename}" ]] && continue
   pkg="${filename%%.tar.*}"
   EXPECTED_PACKAGES+=("${pkg}")
+  EXPECTED_TARGETS+=("${spec_var#spec_}")
+  EXPECTED_TARBALLS+=("${filename}")
+  # spec_arr[3] is the source SHA256 (when present). Empty if not.
+  src_sha="${${(P)spec_var}[3]}"
+  EXPECTED_SHAS+=("${src_sha:-}")
 done
 # Normalize zlib filename — specs use "zlib-vN.N.N" in source-tarball URL, but
 # the built package is named "zlib-N.N.N" (no "v"). Matches build-local.sh.
@@ -247,25 +376,48 @@ EXPECTED_PACKAGES=("${EXPECTED_PACKAGES[@]/zlib-v/zlib-}")
 
 echo "==> Expected packages (${#EXPECTED_PACKAGES[@]}): ${EXPECTED_PACKAGES[*]}"
 
-echo "==> Restoring packages (experimental wins on match)..."
+echo "==> Restoring packages (experimental wins on match; sentinels checked)..."
 restored=0
 from_experimental=0
 from_proven=0
 missing=()
-for pkg in "${EXPECTED_PACKAGES[@]}"; do
-  if [[ -f "${EXPERIMENTAL_DIR}/${pkg}.tar.gz" ]]; then
-    echo "    ${pkg} (experimental)"
-    (cd "${TARGET}" && tar xzf "${EXPERIMENTAL_DIR}/${pkg}.tar.gz")
+missing_targets=()
+DEPS_JSON_PARTS=()
+unsentineled_experimental=()
+# Defense-in-depth: zsh's `{1..0}` produces a descending range (1, 0) rather
+# than an empty sequence, so guard against an empty EXPECTED_PACKAGES.
+if [[ ${#EXPECTED_PACKAGES[@]} -eq 0 ]]; then
+  echo "ERROR: EXPECTED_PACKAGES is empty — specs.sh enumeration failed?" >&2
+  exit 1
+fi
+for i in {1..${#EXPECTED_PACKAGES[@]}}; do
+  pkg="${EXPECTED_PACKAGES[$i]}"
+  target="${EXPECTED_TARGETS[$i]}"
+  exp_tarball="${EXPERIMENTAL_DIR}/${pkg}.tar.gz"
+  proven_tarball="${PROVEN_DIR}/${pkg}.tar.gz"
+  if [[ -f "${exp_tarball}" ]]; then
+    summary=$(_dep_manifest_summary "${exp_tarball}.manifest.json")
+    if [[ "$summary" == "absent" ]]; then
+      echo "    ${pkg} (experimental, NO PROVENANCE MANIFEST)"
+      unsentineled_experimental+=("${pkg}")
+    else
+      echo "    ${pkg} (experimental, ${summary})"
+    fi
+    (cd "${TARGET}" && tar xzf "${exp_tarball}")
     from_experimental=$((from_experimental + 1))
     restored=$((restored + 1))
-  elif [[ -f "${PROVEN_DIR}/${pkg}.tar.gz" ]]; then
+    DEPS_JSON_PARTS+=("{\"spec_name\":$(_json_str "${target}"),\"package\":$(_json_str "${pkg}"),\"from\":\"experimental_cache\",\"manifest_summary\":$(_json_str "${summary}")}")
+  elif [[ -f "${proven_tarball}" ]]; then
     echo "    ${pkg}"
-    (cd "${TARGET}" && tar xzf "${PROVEN_DIR}/${pkg}.tar.gz")
+    (cd "${TARGET}" && tar xzf "${proven_tarball}")
     from_proven=$((from_proven + 1))
     restored=$((restored + 1))
+    DEPS_JSON_PARTS+=("{\"spec_name\":$(_json_str "${target}"),\"package\":$(_json_str "${pkg}"),\"from\":\"proven_cache\"}")
   else
-    echo "    MISSING: ${pkg}"
+    echo "    MISSING: ${pkg}  (target: ${target})"
     missing+=("${pkg}")
+    missing_targets+=("${target}")
+    DEPS_JSON_PARTS+=("{\"spec_name\":$(_json_str "${target}"),\"package\":$(_json_str "${pkg}"),\"from\":\"built_from_source\"}")
   fi
 done
 
@@ -281,10 +433,38 @@ elif [[ -f "${PROVEN_DIR}/docbook-xsl.tar.gz" ]]; then
 fi
 
 echo "==> Restored ${restored} packages (${from_experimental} experimental, ${from_proven} proven)."
+if [[ ${#unsentineled_experimental[@]} -gt 0 ]]; then
+  echo "" >&2
+  echo "WARN: ${#unsentineled_experimental[@]} experimental cache entry(ies) lack provenance manifests:" >&2
+  for u in "${unsentineled_experimental[@]}"; do echo "      - ${u}" >&2; done
+  echo "      These tarballs may have been built outside tools/build-fork.sh and" >&2
+  echo "      could carry unintended configure-time decisions. To refresh them," >&2
+  echo "      first remove them from ${EXPERIMENTAL_DIR}/, then re-run with" >&2
+  echo "      --rebuild-deps. (--rebuild-deps only rebuilds MISSING entries;" >&2
+  echo "      existing-but-unsentineled tarballs must be removed first.)" >&2
+  echo "" >&2
+fi
 if [[ ${#missing[@]} -gt 0 ]]; then
-  echo "WARN: ${#missing[@]} expected package(s) missing from both caches:" >&2
-  for m in "${missing[@]}"; do echo "      - ${m}" >&2; done
-  echo "      Build may fail. Run './build-local.sh --restore-cache' if needed." >&2
+  if [[ ${REBUILD_DEPS} -eq 1 ]]; then
+    echo "==> ${#missing[@]} dep(s) will be built from source: ${missing_targets[*]}"
+    echo "    (--rebuild-deps in effect; freshly-built deps will be promoted to" \
+         "experimental cache with provenance manifests after build success.)"
+  else
+    echo "" >&2
+    echo "ERROR: ${#missing[@]} expected package(s) missing from both caches:" >&2
+    for m in "${missing[@]}"; do echo "       - ${m}" >&2; done
+    echo "" >&2
+    echo "       Smart-restore semantics require all expected packages to be in" >&2
+    echo "       proven/ or proven-experimental/. To populate the experimental" >&2
+    echo "       cache by building these from source (one-time per Qt/zlib bump)," >&2
+    echo "       re-run with --rebuild-deps:" >&2
+    echo "" >&2
+    cmd_recommendation="$0 ${SRC} --slug ${SLUG} --rebuild-deps"
+    [[ -n "${VERIFY_SYMBOL}" ]] && cmd_recommendation+=" --verify-symbol ${VERIFY_SYMBOL}"
+    echo "         ${cmd_recommendation}" >&2
+    echo "" >&2
+    exit 1
+  fi
 fi
 
 # --- Stage source into WORK_DIR (upstream build.sh expects ${CMPL}/mkvtoolnix-${MTX_VER}) ---
@@ -305,16 +485,23 @@ rsync -a \
   "${SRC}/" \
   "${FORK_BUILD_DIR}/"
 
-# --- Copy wrapper's config.local.sh into staged packaging dir ---
-# Upstream build.sh sources config.local.sh from its own directory (packaging/
-# macos/) if present. This is how our SIGNATURE_IDENTITY="-" (ad-hoc signing)
-# and DRAKETHREADS=12 overrides reach build.sh's subprocesses. Without this
-# copy, build.sh's own config.sh resets SIGNATURE_IDENTITY to mbunkus's cert
-# identity, which we don't have, causing codesign failure.
-if [[ -f "${SCRIPT_DIR}/config/config.local.sh" ]]; then
-  echo "==> Copying wrapper config.local.sh into staged packaging dir..."
-  command cp "${SCRIPT_DIR}/config/config.local.sh" \
-    "${FORK_BUILD_DIR}/packaging/macos/config.local.sh"
+# --- Stage wrapper's config into the staged packaging dir ---
+# Upstream build.sh sources packaging/macos/config.local.sh if present. We
+# prefer config.fork.local.sh (fork-only: no QTVER pin, defers to upstream
+# specs.sh) and fall back to config.local.sh if the fork-specific file is
+# absent. Production build-local.sh continues to consume config.local.sh
+# unchanged; only fork builds get the fork.local.sh substitution.
+WRAPPER_CONFIG=""
+if [[ -f "${SCRIPT_DIR}/config/config.fork.local.sh" ]]; then
+  WRAPPER_CONFIG="${SCRIPT_DIR}/config/config.fork.local.sh"
+  echo "==> Staging config.fork.local.sh as packaging/macos/config.local.sh..."
+elif [[ -f "${SCRIPT_DIR}/config/config.local.sh" ]]; then
+  WRAPPER_CONFIG="${SCRIPT_DIR}/config/config.local.sh"
+  echo "==> Staging config.local.sh as packaging/macos/config.local.sh (no fork-specific config found)..."
+fi
+if [[ -n "${WRAPPER_CONFIG}" ]]; then
+  STAGED_CONFIG="${FORK_BUILD_DIR}/packaging/macos/config.local.sh"
+  command cp "${WRAPPER_CONFIG}" "${STAGED_CONFIG}"
 fi
 
 # --- Inject VERSIONNAME into staged source ---
@@ -336,11 +523,12 @@ fi
 
 # --- Environment for upstream build.sh ---
 # Source upstream's config.sh (provides CMPL, RAKE, MACOSX_DEPLOYMENT_TARGET, etc.)
-# then wrapper's config.local.sh (provides SIGNATURE_IDENTITY="-", DRAKETHREADS=12, -O2).
+# then the wrapper config (already resolved to WRAPPER_CONFIG above —
+# config.fork.local.sh preferred, falls back to config.local.sh).
 _SAVED_OPTS=$(setopt | tr '\n' ' ')
 source "${FORK_BUILD_DIR}/packaging/macos/config.sh"
-if [[ -f "${SCRIPT_DIR}/config/config.local.sh" ]]; then
-  source "${SCRIPT_DIR}/config/config.local.sh"
+if [[ -n "${WRAPPER_CONFIG}" ]]; then
+  source "${WRAPPER_CONFIG}"
 fi
 # Re-enable our options after sourced files may have changed them
 setopt ${=_SAVED_OPTS} 2>/dev/null
@@ -380,9 +568,20 @@ if [[ ! -f "${FORK_BUILD_DIR}/configure" ]]; then
 fi
 
 # --- Compile ---
+# NO_EXTRACTION must be unset for dep builds (they extract their own source
+# from ${SRCDIR}) but set for build_mkvtoolnix (which would wipe our staged
+# source if allowed to extract). Two-phase invocation keeps the semantics
+# clean per phase.
 echo ""
-echo "==> Building mkvtoolnix (this is the long step)..."
 cd "${FORK_BUILD_DIR}/packaging/macos"
+if [[ ${#missing_targets[@]} -gt 0 ]]; then
+  echo "==> Building missing deps from source: ${missing_targets[*]}"
+  echo "    (NO_EXTRACTION unset for this phase — deps must extract their tarballs)"
+  ( unset NO_EXTRACTION; ./build.sh ${missing_targets} )
+fi
+
+echo ""
+echo "==> Building mkvtoolnix (NO_EXTRACTION=1; staged source preserved)..."
 ./build.sh mkvtoolnix
 
 echo ""
@@ -532,6 +731,168 @@ echo "${BUILD_NUM}" > "${BUILD_COUNTER_FILE}.tmp" && command mv "${BUILD_COUNTER
 DMG_FINAL_NAME="MKVToolNix-${MTX_VER}-${ARCH_LABEL}-${BUILD_LABEL}-fork-${SLUG}-${BUILD_HASH}.dmg"
 command cp "${DMG_PATH}" "${BUILD_DIR}/${DMG_FINAL_NAME}"
 (cd "${BUILD_DIR}" && shasum -a 256 "${DMG_FINAL_NAME}" > "${DMG_FINAL_NAME}.sha256")
+DMG_FINAL_PATH="${BUILD_DIR}/${DMG_FINAL_NAME}"
+
+# --- Promote freshly-built deps to experimental cache (if --rebuild-deps) ---
+# Each successfully-built dep has its install tarball deposited in PACKAGE_DIR
+# by upstream's build_tarball helper. We copy it into the experimental cache
+# and write a provenance manifest sidecar so future restore-time checks can
+# verify its origin.
+PROMOTED_DEPS=()
+if [[ ${REBUILD_DEPS} -eq 1 ]] && [[ ${#missing_targets[@]} -gt 0 ]]; then
+  echo ""
+  echo "==> Promoting freshly-built deps to experimental cache..."
+  mkdir -p "${EXPERIMENTAL_DIR}"
+  for j in {1..${#missing_targets[@]}}; do
+    target="${missing_targets[$j]}"
+    pkg=""
+    tarball=""
+    src_sha=""
+    # Look up the package and source SHA for this target via the parallel arrays.
+    for k in {1..${#EXPECTED_TARGETS[@]}}; do
+      if [[ "${EXPECTED_TARGETS[$k]}" == "${target}" ]]; then
+        pkg="${EXPECTED_PACKAGES[$k]}"
+        tarball="${EXPECTED_TARBALLS[$k]}"
+        src_sha="${EXPECTED_SHAS[$k]}"
+        break
+      fi
+    done
+    if [[ -z "${pkg}" ]]; then
+      echo "    WARN: could not map target '${target}' to a package; skipping promote." >&2
+      continue
+    fi
+    # PACKAGE_DIR was set via upstream's config.sh (= ${TARGET}/packages by default).
+    src_built="${PACKAGE_DIR:-${TARGET}/packages}/${pkg}.tar.gz"
+    if [[ ! -f "${src_built}" ]]; then
+      echo "    WARN: expected build_tarball output ${src_built} missing; skipping promote." >&2
+      continue
+    fi
+    dest="${EXPERIMENTAL_DIR}/${pkg}.tar.gz"
+    command cp "${src_built}" "${dest}"
+    (cd "${EXPERIMENTAL_DIR}" && shasum -a 256 "${pkg}.tar.gz" > "${pkg}.tar.gz.sha256")
+    _write_dep_manifest "${target}" "${pkg}" "${tarball}" "${src_sha}" "${dest}.manifest.json"
+    PROMOTED_DEPS+=("${pkg}")
+    echo "    promoted: ${pkg}.tar.gz (+ .sha256, + .manifest.json)"
+  done
+fi
+
+# --- Write DMG sidecar manifest ---
+# Captures full build provenance: source refs, deps used, host machine specs
+# (non-identifying), patches, timing, verification results. Sits alongside
+# the DMG and its .sha256 in build/.
+_PATCH_DIR="${SCRIPT_DIR}/patches"
+PATCHES_JSON="["
+_first_patch=1
+if [[ -d "${_PATCH_DIR}" ]]; then
+  for p in "${_PATCH_DIR}"/*.patch(N) "${_PATCH_DIR}"/qt-patches/*.patch(N); do
+    [[ -f "$p" ]] || continue
+    [[ ${_first_patch} -eq 1 ]] && _first_patch=0 || PATCHES_JSON+=", "
+    p_sha=$(/usr/bin/shasum -a 256 "$p" | /usr/bin/awk '{print $1}')
+    p_rel="${p#${SCRIPT_DIR}/}"
+    PATCHES_JSON+="{\"name\":$(_json_str "${p_rel}"),\"sha256\":$(_json_str "${p_sha}")}"
+  done
+fi
+PATCHES_JSON+="]"
+
+_BUNDLED_LIBS_JSON="["
+_first_lib=1
+if [[ -d "${APP_BUNDLE}/Contents/MacOS/libs" ]]; then
+  for lib in "${APP_BUNDLE}"/Contents/MacOS/libs/*.dylib(N); do
+    [[ -f "$lib" && ! -L "$lib" ]] || continue
+    libname="${lib:t}"
+    [[ ${_first_lib} -eq 1 ]] && _first_lib=0 || _BUNDLED_LIBS_JSON+=", "
+    _BUNDLED_LIBS_JSON+=$(_json_str "${libname}")
+  done
+fi
+_BUNDLED_LIBS_JSON+="]"
+
+_DEPS_JSON="["
+_first_dep=1
+for d in "${DEPS_JSON_PARTS[@]}"; do
+  [[ ${_first_dep} -eq 1 ]] && _first_dep=0 || _DEPS_JSON+=", "
+  _DEPS_JSON+="${d}"
+done
+_DEPS_JSON+="]"
+
+_dmg_size_bytes=$(/usr/bin/stat -f %z "${DMG_FINAL_PATH}")
+_dmg_sha=$(/usr/bin/shasum -a 256 "${DMG_FINAL_PATH}" | /usr/bin/awk '{print $1}')
+_app_kb=$(/usr/bin/du -sk "${APP_BUNDLE}" | /usr/bin/awk '{print $1}')
+_app_bytes=$(( _app_kb * 1024 ))
+
+_wrapper_branch=$(git -C "${SCRIPT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+_wrapper_sha=$(git -C "${SCRIPT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+_wrapper_subj=$(git -C "${SCRIPT_DIR}" log -1 --format='%s' 2>/dev/null || echo "")
+_fork_basename="${SRC:t}"
+_fork_ref=$(git -C "${SRC}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "detached")
+_fork_sha=$(git -C "${SRC}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+_fork_subj=$(git -C "${SRC}" log -1 --format='%s' 2>/dev/null || echo "")
+
+_args_hash=$(_qt_args_hash "${FORK_BUILD_DIR}/packaging/macos/build.sh")
+_finished_at=$(_iso_utc)
+_duration=${SECONDS}
+_started_iso="${BUILD_START_ISO}"
+
+DMG_MANIFEST_PATH="${BUILD_DIR}/${DMG_FINAL_NAME}.manifest.json"
+cat > "${DMG_MANIFEST_PATH}" <<EOF
+{
+  "schema_version": 1,
+  "kind": "fork_build",
+  "dmg": {
+    "filename": $(_json_str "${DMG_FINAL_NAME}"),
+    "size_bytes": ${_dmg_size_bytes},
+    "sha256": $(_json_str "${_dmg_sha}")
+  },
+  "app": {
+    "size_bytes": ${_app_bytes},
+    "size_kb": ${_app_kb},
+    "bundle_name": $(_json_str "${APP_BUNDLE:t}"),
+    "bundled_libs": ${_BUNDLED_LIBS_JSON},
+    "qt_version_in_binary": $(_json_str "${BUILT_QT:-unknown}")
+  },
+  "build_meta": {
+    "kind": "fork",
+    "slug": $(_json_str "${SLUG}"),
+    "build_label": $(_json_str "${BUILD_LABEL}"),
+    "build_hash": $(_json_str "${BUILD_HASH}"),
+    "version_name": $(_json_str "${VERSIONNAME}"),
+    "mtx_version": $(_json_str "${MTX_VER}"),
+    "rebuild_deps_used": $([[ ${REBUILD_DEPS} -eq 1 ]] && echo "true" || echo "false")
+  },
+  "source": {
+    "wrapper": {
+      "branch": $(_json_str "${_wrapper_branch}"),
+      "sha": $(_json_str "${_wrapper_sha}"),
+      "subject": $(_json_str "${_wrapper_subj}")
+    },
+    "fork": {
+      "path_basename": $(_json_str "${_fork_basename}"),
+      "ref": $(_json_str "${_fork_ref}"),
+      "sha": $(_json_str "${_fork_sha}"),
+      "subject": $(_json_str "${_fork_subj}")
+    }
+  },
+  "patches": ${PATCHES_JSON},
+  "deps": ${_DEPS_JSON},
+  "configure_args_hash": $(_json_str "${_args_hash}"),
+  "host": $(_host_json),
+  "build_timing": {
+    "started_at": $(_json_str "${_started_iso}"),
+    "finished_at": $(_json_str "${_finished_at}"),
+    "duration_seconds": ${_duration}
+  },
+  "verification": {
+    "verify_symbol": $(_json_str "${VERIFY_SYMBOL:-}"),
+    "verify_symbol_count": ${symbol_count:-0},
+    "qt_version_count": ${qt_version_count:-0},
+    "qt_version_in_libs": $(_json_str "${qt_versions:-}"),
+    "homebrew_leaks_detected": $(${leak_found:-false} && echo "true" || echo "false"),
+    "binary_arch_check": $(_json_str "${arch_checked} ${MACHINE_ARCH} of ${arch_checked} (${arch_errors} failures)"),
+    "verify_issues": ${VERIFY_ISSUES:-0}
+  }
+}
+EOF
+echo ""
+echo "==> Wrote DMG manifest sidecar: ${DMG_MANIFEST_PATH:t}"
 
 # --- Summary ---
 elapsed=$SECONDS
@@ -543,7 +904,11 @@ echo "==> DONE in ${mins}m $(printf '%02d' ${secs})s."
 echo ""
 echo "  DMG:          ${BUILD_DIR}/${DMG_FINAL_NAME}"
 echo "  SHA256:       ${BUILD_DIR}/${DMG_FINAL_NAME}.sha256"
+echo "  Manifest:     ${BUILD_DIR}/${DMG_FINAL_NAME}.manifest.json"
 echo "  Log:          ${LOG_FILE}"
+if [[ ${#PROMOTED_DEPS[@]} -gt 0 ]]; then
+  echo "  Promoted deps: ${PROMOTED_DEPS[*]} → ${EXPERIMENTAL_DIR}"
+fi
 echo "  Build number: ${BUILD_NUM} (${ARCH_LABEL}/fork)"
 echo "  Build hash:   ${BUILD_HASH}"
 echo "  VERSIONNAME:  ${VERSIONNAME}  (shown as \"v${MTX_VER} ('${VERSIONNAME}')\" in the About dialog)"
