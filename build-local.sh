@@ -751,10 +751,13 @@ echo "==> Verified: tarball signature OK (mbunkus key ${PINNED_FP:0:16}...)"
 
 # Derive expected package names from specs.sh (single source of truth for versions)
 # Produces names like: autoconf-2.69, boost_1_88_0, qt-everywhere-src-6.10.2, etc.
+# spec_gpg (gnupg) is built from source and cached: upstream's
+# retrieve_verified_source_tarball uses gpg to check the mkvtoolnix source
+# signature, so smart-restore builds need it in the proven cache.
 EXPECTED_SPEC_VARS=(
   spec_autoconf spec_automake spec_pkgconfig spec_libiconv
   spec_cmake spec_ogg spec_vorbis spec_flac spec_zlib spec_gettext
-  spec_cmark spec_gmp spec_boost spec_qt
+  spec_cmark spec_gmp spec_boost spec_qt spec_gpg
 )
 EXPECTED_PACKAGES=()
 for spec_var in "${EXPECTED_SPEC_VARS[@]}"; do
@@ -809,6 +812,11 @@ case "${BUILD_MODE}" in
     if restore_from_proven; then
       BUILD_SUMMARY="Restored from proven, built mkvtoolnix only"
       echo "==> All dependencies restored from proven. Building mkvtoolnix only..."
+      # shared-mime-info produces no cacheable package (NO_CONFIGURE installs the
+      # MIME DB straight into ${TARGET}/share/mime), so restore can't bring it back.
+      # Rebuild it before mkvtoolnix, or build_configured_mkvtoolnix silently ships
+      # without the FreeDesktop MIME DB (upstream #6248).
+      ./build.sh shared_mime_info
       ./build.sh mkvtoolnix
     else
       BUILD_SUMMARY="No proven cache, full build from source"
