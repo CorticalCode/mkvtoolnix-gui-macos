@@ -60,6 +60,8 @@ This clones upstream at a few recent release tags, verifies each against the pin
 
 `gpg --verify` runs against the pinned key on the upstream `mkvtoolnix-${VERSION}.tar.xz` and its detached `.sig`. Failure aborts the build with a remediation message. See [tarball-verification.md](tarball-verification.md) for the full operational deep-dive (download flow, sequence diagrams, what to do if verification fails).
 
+As of 99.0, upstream's `build.sh` re-verifies the same tarball mid-build (`retrieve_verified_source_tarball`, using a `gnupg` it builds from source and a key it downloads live from `mkvtoolnix.download`). That's a weaker check — it trusts whatever key the server serves, with no pinned fingerprint — so this pinned-key step, which runs first, stays authoritative; upstream's is a redundant second pass.
+
 ### 4. Dependency SHA256
 
 Upstream's `retrieve_file` function (from `packaging/macos/build.sh`) downloads each dependency over HTTPS and computes SHA256 against the hash in `specs.sh`. If the hash doesn't match, the build aborts. This is upstream behavior, but because step 2 cryptographically roots `specs.sh` in mbunkus's key, those hashes are now trusted.
