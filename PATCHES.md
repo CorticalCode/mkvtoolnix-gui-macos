@@ -4,7 +4,7 @@ Living document tracking every modification made to build MKVToolNix on macOS (A
 
 ## Build status
 
-v99.0 build in progress. **All wrapper patches were retired at v99.0** — upstream `release-99.0` merged or superseded every one (see "Retired patches"). The build now compiles MKVToolNix from pristine upstream source plus our config overlay and dependency-cache tooling only. release-99.0 also adds two macOS build dependencies that the wrapper now tracks: `gnupg` (source-signature verification) and `shared-mime-info` (FreeDesktop MIME database, upstream #6248).
+v99.0 built and verified (Apple Silicon). Upstream `release-99.0` merged or superseded **7 of the 8** wrapper patches; only **`mkvtoolnix-size-opt`** (our ThinLTO/`-Os` optimization, no upstream equivalent) remains active, re-added after measuring it against the pure baseline (see "Active patch" + "Size progression"). release-99.0 also adds two macOS build dependencies the wrapper now tracks: `gnupg` (source-signature verification) and `shared-mime-info` (FreeDesktop MIME database, upstream #6248).
 
 Previous release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build process uses a proven cache architecture with per-architecture storage: dependencies are compiled once, verified, and promoted to a cache. Subsequent builds restore from cache and only rebuild mkvtoolnix. See the "Build script fixes" section below for details.
 
@@ -22,12 +22,30 @@ Previous release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build proces
 | b008 (build-cache, restore) | 33.9 MB | 78.5 MB | 6.10.2 | verified, smart restore |
 | b009 (+ O2, dead_strip) | 31.9 MB | 72.0 MB | 6.10.2 | ARM, verified, optimization flags |
 | Intel b001 | 39.0 MB | 86.6 MB | 6.10.2 | Intel, verified, pre-optimization |
+| **v99 rel001 (pure baseline)** | 28.57 MB | 79.15 MB | 6.11.0 | ARM, verified, zero wrapper patches (APFS+ULMO DMG now upstream) |
+| **v99 rel002 (+ LTO/-Os)** | 27.49 MB | 76.50 MB | 6.11.0 | ARM, verified, −1.08 MB DMG / −2.65 MB app vs rel001 |
 
 ---
 
-## Patches (all retired at v99.0)
+## Patches
 
-As of upstream `release-99.0` there are **no active wrapper patches**. Each was verified against the actual release-99.0 source before removal (reverse-applies clean = change present upstream; conflicts investigated individually). The detailed entries below are retained as historical record.
+v99.0 retired **7 of the 8** wrapper patches — upstream `release-99.0` merged or superseded them. One remains active: **`mkvtoolnix-size-opt`**, our ThinLTO/`-Os` optimization, which has no upstream equivalent and was re-added after measuring it against the pure baseline.
+
+### Active patch — `mkvtoolnix-size-opt`
+
+Adds `-flto=thin -Os` to `CXXFLAGS` (and `-flto=thin` to `LDFLAGS`) for the mkvtoolnix compile only, scoped inside `build_mkvtoolnix` (re-targeted for release-99.0's function). Dependencies keep building at `-O2`. Measured on ARM64 — v99 rel002 vs the pure rel001 baseline, identical restored deps so the only difference is the flags:
+
+| | Baseline (rel001) | + LTO/-Os (rel002) | Delta |
+|---|---|---|---|
+| DMG | 28.57 MB | 27.49 MB | −1.08 MB (−3.78%) |
+| App on disk | 79.15 MB | 76.50 MB | −2.65 MB (−3.35%) |
+| `mkvtoolnix-gui` binary | 7.66 MB | 6.65 MB | −1.00 MB (−13.10%) |
+
+No functional change; ThinLTO is fast incremental LTO and `-Os` favors size over speed (speed impact at the noise floor).
+
+### Retired at v99.0 (7 patches)
+
+Each was verified against the actual release-99.0 source before removal (reverse-applies clean = change present upstream; conflicts investigated individually). The detailed entries below are retained as historical record.
 
 | Patch | Retirement evidence |
 |-------|---------------------|
@@ -38,7 +56,6 @@ As of upstream `release-99.0` there are **no active wrapper patches**. Each was 
 | `cmark-release-build` | Merged upstream (#6207, fixed-in 99.0); reverse-applies clean |
 | `qt-fix-homebrew-leak` | Merged upstream (#6208, fixed-in 99.0); reverse-applies clean |
 | `qt-patches/001-arm-yield` | Upstream ships `qt-patches/fix-qyieldcpu-yield-for-arm.patch` (same fix, same file) |
-| `mkvtoolnix-size-opt` | Dropped for the pure baseline build; **returns as an isolated LTO measurement patch** (not a redundancy — our optimization, no upstream equivalent) |
 
 ### Historical detail
 
@@ -240,9 +257,9 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 ## Retired patches
 
-All wrapper patches were retired at **v99.0** — see the table under "Patches (all retired at v99.0)" for the per-patch retirement evidence; the detailed historical entries for each are preserved in that section.
+7 of the 8 wrapper patches were retired at **v99.0** — see "Retired at v99.0 (7 patches)" above for the per-patch evidence; the detailed historical entries are preserved in that section.
 
-`mkvtoolnix-size-opt` is the only one that was *not* made redundant by upstream — it is our own ThinLTO/`-Os` optimization with no upstream equivalent. It is dropped from the pure v99 baseline build and will return as an isolated measurement patch so its size delta can be measured against the baseline.
+`mkvtoolnix-size-opt` was *not* retired — it is our own ThinLTO/`-Os` optimization with no upstream equivalent. It was dropped from the pure rel001 baseline only to measure it in isolation, then re-added (rel002) once the delta was confirmed (−1.08 MB DMG / −2.65 MB app). It is the single active wrapper patch — see "Active patch" above.
 
 ---
 

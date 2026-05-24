@@ -1,5 +1,31 @@
 # Changelog
 
+## v99.0 — LTO/-Os size optimization re-added (measured) + naming fix (2026-05-24)
+
+After the pure v99 baseline build (rel001, zero wrapper patches), the
+`mkvtoolnix-size-opt` patch was re-targeted for release-99.0's `build_mkvtoolnix`
+and re-added (rel002). Measured on ARM64 with identical restored deps — only the
+mkvtoolnix compile flags differ:
+
+| | Baseline rel001 | + LTO/-Os rel002 | Delta |
+|---|---|---|---|
+| DMG | 28.57 MB | 27.49 MB | −1.08 MB (−3.78%) |
+| App on disk | 79.15 MB | 76.50 MB | −2.65 MB (−3.35%) |
+| mkvtoolnix-gui binary | 7.66 MB | 6.65 MB | −1.00 MB (−13.10%) |
+
+`-flto=thin -Os` is scoped to the mkvtoolnix compile only; deps stay at `-O2`. No
+functional change. This is the single active wrapper patch for v99.
+
+Also in this round:
+- **build-local.sh adapted to release-99.0's macOS artifact naming**
+  (`APP_BUNDLE_NAME` / `DMG_REVISION`). The new DMG name
+  (`MKVToolNix-${MTX_VER}-${DMG_REVISION}-${machine}.dmg`) and fixed
+  `MKVToolNix.app` bundle name had silently skipped post-build verification; the
+  wrapper now recovers the clean version, locates the bundle, and names the
+  local/release DMG correctly.
+- **Proven cache (arm) promoted to v99 deps** (Qt 6.11.0, zlib 1.3.2, gnupg).
+- **`proven/NOTICE.md`** updated to attribute GnuPG (GPL-3.0-or-later).
+
 ## v99.0 prep — retire all wrapper patches, track gpg + shared-mime-info deps (2026-05-24)
 
 Upstream `release-99.0` merged or superseded every wrapper patch, so the
