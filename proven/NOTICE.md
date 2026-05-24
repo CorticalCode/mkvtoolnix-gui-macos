@@ -69,6 +69,7 @@ machine and are not redistributed inside the final DMG — **they appear in
 | **GNU automake** | 1.16.1 | `GPL-2.0-or-later` | https://gnu.org/software/automake/ |
 | **pkg-config** | 0.29.2 | `GPL-2.0-or-later` | https://gitlab.freedesktop.org/pkg-config/pkg-config |
 | **docbook-xsl** | 1.79.2 | `MIT` (DocBook variant) | https://github.com/docbook/xslt10-stylesheets |
+| **GnuPG** (`gpg`; 99.0+ — verifies the upstream source-tarball OpenPGP signature at build time) | 1.4.23 | `GPL-3.0-or-later` | https://gnupg.org |
 
 ---
 
@@ -106,4 +107,4 @@ If you believe any attribution here is missing, incorrect, or stale, please
 open an issue at
 https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues and we will fix it.
 
-Last updated: 2026-04-19 (covers both `proven/arm/` and `proven/intel/`).
+Last updated: 2026-05-24 — added GnuPG (`gpg`) to the build-time tools cache for v99 (covers both `proven/arm/` and `proven/intel/`).
