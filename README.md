@@ -27,10 +27,12 @@ CI builds also include a build provenance attestation (verifiable with `gh attes
 
 ## Trust & install
 
-These DMGs are ad-hoc signed, not Apple-notarized. macOS will block the first launch — this is Gatekeeper working correctly. To override:
+These DMGs are ad-hoc signed, not Apple-notarized. macOS will block the first launch — this is Gatekeeper working correctly. After dragging the app to Applications, double-click it; macOS will say it can't verify it (**don't** click "Move to Trash"). Then allow it one of two ways:
 
-- **Either** right-click the app → Open, then confirm in the dialog (on macOS Sequoia and newer, may push you to System Settings → Privacy & Security → Open Anyway), **or**
-- Run `xattr -cr /Applications/MKVToolNix*.app` to clear the quarantine attribute, then launch normally
+- **System Settings:** open System Settings → Privacy & Security, scroll to the MKVToolNix message, and click **Open Anyway**, then confirm.
+- **Terminal:** run `xattr -cr /Applications/MKVToolNix*.app` to clear the quarantine attribute, then launch normally.
+
+macOS 15+ removed the old right-click → Open shortcut, so that no longer works (it only offers "Move to Trash").
 
 This is the same trust model that applied to mbunkus's official DMGs before April 2026, and the same model MacPorts uses for its `+qtgui` variant. The DMG isn't notarized because notarizing would put my name on a chain of trust I can't honestly back — I'm not the upstream maintainer, I haven't audited Qt or boost or the other dependencies, and I'm in no position to vouch for them the way Developer ID signing implies.
 
