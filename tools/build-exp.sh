@@ -786,6 +786,10 @@ unset _saved_target _saved_srcdir
 setopt ${=_SAVED_OPTS} 2>/dev/null
 set -e
 
+# Upstream's chain-6 (e23dc8919) moved PATH/DYLD out of config.sh — restore here for autogen.sh.
+export PATH="${TARGET}/bin:$PATH"
+export DYLD_LIBRARY_PATH="${TARGET}/lib:${DYLD_LIBRARY_PATH}"
+
 # Normalize paths — upstream config.sh hardcodes $HOME/tmp/compile; honor our WORK_DIR if different
 export CMPL="${WORK_DIR}"
 export TARGET
@@ -802,6 +806,8 @@ echo "    QTVER:       ${QTVER:-<unset>}"
 echo "    DRAKETHREADS: ${DRAKETHREADS:-4}"
 echo "    MACOSX_DEPLOYMENT_TARGET: ${MACOSX_DEPLOYMENT_TARGET}"
 echo "    SIGNATURE_IDENTITY: ${SIGNATURE_IDENTITY:-<unset>}"
+echo "    APP_BUNDLE_NAME: ${APP_BUNDLE_NAME:-<unset>}"
+echo "    DMG_REVISION: ${DMG_REVISION:-<unset>}"
 echo "    NO_EXTRACTION: ${NO_EXTRACTION}"
 
 # --- Generate ./configure via autogen.sh ---
@@ -832,17 +838,31 @@ if [[ ${#missing_targets[@]} -gt 0 ]]; then
   ( unset NO_EXTRACTION; ./build.sh ${missing_targets} )
 fi
 
+# Build the shared-mime-info dep (#6248): it installs the FreeDesktop MIME DB that
+# build_configured_mkvtoolnix embeds via qt_resources_macos.qrc. It isn't in the
+# proven cache / EXPECTED_TARGETS, and the TARGET wipe above removed any prior
+# install, so build it explicitly here — after the wipe, before configured_mkvtoolnix.
+( unset NO_EXTRACTION; ./build.sh shared_mime_info )
+
 echo ""
-echo "==> Building mkvtoolnix (NO_EXTRACTION=1; staged source preserved)..."
-./build.sh mkvtoolnix
+# Skip build_mkvtoolnix → retrieve_verified_source_tarball gate (fails on
+# pre-release MTX_VER). Source is pre-staged in ${CMPL}/mkvtoolnix-${MTX_VER};
+# reproduce build_mkvtoolnix's remaining steps (configure + drake) inline.
+echo "==> Building mkvtoolnix (configure + drake; staged source preserved)..."
+(
+  cd "${FORK_BUILD_DIR}"
+  ./packaging/macos/build.sh configured_mkvtoolnix
+  ./drake clean
+  ./drake -j "${DRAKETHREADS}"
+)
 
 echo ""
 echo "==> Packaging DMG..."
 ./build.sh dmg
 
 # --- DMG + binary verification ---
-DMG_PATH="${WORK_DIR}/MKVToolNix-${MTX_VER}.dmg"
-APP_BUNDLE="${WORK_DIR}/dmg-${MTX_VER}/MKVToolNix-${MTX_VER}.app"
+DMG_PATH="${WORK_DIR}/MKVToolNix-${MTX_VER}-${DMG_REVISION}-${MACHINE_ARCH}.dmg"
+APP_BUNDLE="${WORK_DIR}/dmg-${MTX_VER}/${APP_BUNDLE_NAME}"
 BINARY="${APP_BUNDLE}/Contents/MacOS/mkvtoolnix-gui"
 
 if [[ ! -f "${DMG_PATH}" ]]; then
