@@ -10,14 +10,14 @@ This document describes what `mkvtoolnix-gui-macos` verifies, what it doesn't, a
 - Every build cryptographically verifies mbunkus's GPG signature on the upstream source **and** on the codeberg release tag, both against the same pinned key.
 - Every dependency tarball is verified against an SHA256 hash pinned in upstream's `specs.sh`. The `specs.sh` file is itself trust-rooted in mbunkus's tag signature.
 - The pinned mbunkus key is cross-checked monthly against three independent sources (bunkus.org, codeberg, keys.openpgp.org). Drift fails CI.
-- CI-built DMGs (Apple Silicon) include GitHub-issued build provenance attestations. Users can verify a downloaded DMG was built by this exact workflow from a specific commit. Locally-built DMGs (currently the Intel path, uploaded manually) are not attested but inherit the same upstream verification.
+- DMGs built via the CI workflow include GitHub-issued build provenance attestations. Users can verify such a DMG was built by this exact workflow from a specific commit. DMGs built and uploaded manually (as the current v99 release was, both architectures) are not attested but inherit the same upstream verification.
 - **What's not verified:** GPG signatures on individual dependency tarballs (Qt doesn't publish them, so coverage would be partial and misleading). Dependencies are SHA256-rooted instead.
 
 ## Why no notarization
 
 Notarizing with my Apple Developer ID would tell macOS "this developer vouches for this binary." I don't, and won't.
 
-I'm not the upstream maintainer. I'm a translator running someone else's source through a build script on my hardware. I haven't audited Qt 6.10.2's source — nobody could, realistically. I haven't reviewed boost 1.88. I'm in no position to back the chain of trust that Developer ID notarization implies. Mbunkus didn't notarize his official DMGs either, for the same structural reason: he didn't own a Mac and wasn't in a position to act as a vouching distributor.
+I'm not the upstream maintainer. I'm a translator running someone else's source through a build script on my hardware. I haven't audited Qt 6.11.0's source — nobody could, realistically. I haven't reviewed boost 1.88. I'm in no position to back the chain of trust that Developer ID notarization implies. Mbunkus didn't notarize his official DMGs either, for the same structural reason: he didn't own a Mac and wasn't in a position to act as a vouching distributor.
 
 This is also consistent with how MacPorts ships `mkvtoolnix +qtgui` today — same model, same trust posture. Notarization isn't part of the long-running pattern that brought users here.
 
@@ -99,10 +99,10 @@ This doesn't replace SHA256 verification; it complements it. SHA256 verifies the
 This was considered and explicitly rejected. The reasoning:
 
 - **Qt does not publish GPG signatures.** Qt is the largest dependency by far and the most security-relevant (renders user input, network code, etc.). Qt only publishes `md5sums.txt`, an unsigned hash file on the same server as the tarball.
-- Per-dep verification would cover roughly 11 of 14 dependencies (boost, gnu tools, xiph libs, cmark, cmake — most have signatures), but the missing one is Qt.
+- Per-dep verification would cover most dependencies (boost, gnu tools, xiph libs, cmark, cmake mostly publish signatures), but the most important one — Qt — does not.
 - Partial coverage that excludes Qt would create a false sense of completeness while leaving the largest attack surface uncovered.
 
-The `git verify-tag` approach gets equivalent protection for all 14 dependencies simultaneously — `specs.sh` is signed by mbunkus, so the SHA256 hashes inside it inherit his attestation. This is the same model used by Debian, Homebrew, MacPorts, and most distribution package recipes: pinned hashes in a maintainer-signed recipe, no per-package GPG check.
+The `git verify-tag` approach gets equivalent protection for all dependencies simultaneously — `specs.sh` is signed by mbunkus, so the SHA256 hashes inside it inherit his attestation. This is the same model used by Debian, Homebrew, MacPorts, and most distribution package recipes: pinned hashes in a maintainer-signed recipe, no per-package GPG check.
 
 ### Audit of dependency source code
 
@@ -147,7 +147,7 @@ spctl --assess --type execute --verbose \
     /Volumes/MKVToolNix/MKVToolNix.app
 ```
 
-Step 2 only applies to the Apple Silicon DMG. The Intel DMG is currently built locally and uploaded manually (no Intel CI runner), so it has no attestation; for Intel, steps 1 and 3 are the available checks.
+Step 2 (attestation) applies only to DMGs built via the CI workflow. The current v99 release was built and uploaded manually (both architectures), so it has no attestation; for it, steps 1 and 3 are the available checks.
 
 Step 3 will return "rejected" because the DMG isn't notarized. That's expected. The verbose output will confirm the binary is ad-hoc signed and the signature is consistent (i.e., the app hasn't been modified since signing).
 

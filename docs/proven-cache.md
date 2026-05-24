@@ -8,7 +8,7 @@ When you run `./build-local.sh release-98.0`:
 
 1. The workspace (`~/opt/`) is wiped clean (except the cache and source tarballs)
 2. Compiled dependencies are restored from `~/opt/proven/{arch}/`. Each restored package is **SHA256-verified against its `.sha256` sidecar** before being trusted; mismatches abort the build (see [trust-model.md §6](trust-model.md) for context).
-3. If all 15 dependencies are found, only MKVToolNix is built from source
+3. If all dependencies are found, only MKVToolNix is built from source
 4. If any are missing, a full build from source runs automatically
 
 The cache is per-architecture — Apple Silicon (arm64) and Intel (x86_64) have separate caches and cannot cross-contaminate.
@@ -96,6 +96,6 @@ The proven cache is not modified by `--full` — it remains as a safety net.
 If you modify a patch that affects a specific dependency without bumping its version, delete that package from the cache to force a rebuild:
 
 ```sh
-rm ~/opt/proven/arm/qt-everywhere-src-6.10.2.tar.gz
-./build-local.sh release-98.0  # will detect missing Qt and do a full build
+rm ~/opt/proven/arm/qt-everywhere-src-6.11.0.tar.gz
+./build-local.sh release-99.0  # will detect missing Qt and do a full build
 ```

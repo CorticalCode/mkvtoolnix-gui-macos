@@ -221,7 +221,7 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 **Post-build verification:** Checks Qt version in binary, architecture of all binaries and dylibs, duplicate dylib scan, size sanity (60-95 MB range), Homebrew/external library leak detection, and bundle inventory. Promotion is blocked if verification fails.
 
-**Pre-build verification:** QTVER/specs.sh consistency check (already existed), stale build directory cleanup for all 14 dependencies (extended from Qt-only).
+**Pre-build verification:** QTVER/specs.sh consistency check (already existed), stale build directory cleanup for all dependencies (extended from Qt-only).
 
 **EXPECTED_PACKAGES derived from specs.sh:** Package names are extracted dynamically from upstream's `spec_*` variables after sourcing specs.sh. Fails fast if any spec variable is missing (catches upstream renames). Eliminates version drift between specs.sh and the build script.
 
@@ -267,7 +267,7 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 **`-no-rpath` crash:** Flagged in research as a common Qt6 build failure. Not present in v98.0 -- already removed upstream.
 
-**Dependency build failures on ARM:** No ARM-specific issues. All 15 dependencies build cleanly on Apple Silicon.
+**Dependency build failures on ARM:** No ARM-specific issues. All dependencies build cleanly on Apple Silicon.
 
 **macOS 13 deployment target:** No issues. Binaries built on macOS 26 with `MACOSX_DEPLOYMENT_TARGET=13` work correctly.
 
