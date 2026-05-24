@@ -1,5 +1,24 @@
 # Changelog
 
+## v99.0-b2026.05.1 (2026-05-24) — Current Release
+
+First v99.0 release — both architectures, built locally (manual release, so no CI
+provenance attestation on these assets).
+
+**Downloads:**
+- Apple Silicon (arm64): `MKVToolNix-99.0-macos-apple-silicon.dmg` — 27 MB DMG (~76 MB app)
+- Intel (x86_64): `MKVToolNix-99.0-macos-intel.dmg` — 30 MB DMG
+
+**Highlights:**
+- MKVToolNix 99.0 "Buka" upstream (Qt 6.11.0, zlib 1.3.2).
+- All wrapper patches retired except `mkvtoolnix-size-opt` (ThinLTO/`-Os`) — upstream
+  merged or superseded the rest at 99.0.
+- Notably smaller DMGs than 98.0: upstream's APFS+ULMO DMG compression (now upstream)
+  stacked with our LTO/`-Os` (−1.08 MB DMG / −2.65 MB app on arm vs the pure baseline).
+
+Full technical detail in the two entries below (patch retirements, new gpg + MIME
+deps, LTO measurements, the release-99.0 naming fix).
+
 ## v99.0 — LTO/-Os size optimization re-added (measured) + naming fix (2026-05-24)
 
 After the pure v99 baseline build (rel001, zero wrapper patches), the
@@ -350,7 +369,7 @@ Proven dependency cache is now opt-in. Cloning the repo no longer downloads ~534
 
 ---
 
-## v98.0-b2026.04.3 (2026-04-15) — Current Release
+## v98.0-b2026.04.3 (2026-04-15)
 
 Critical fix for Homebrew library leak that caused DYLD crashes on launch.
 

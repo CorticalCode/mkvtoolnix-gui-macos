@@ -10,6 +10,7 @@ This repo is a personal learning project and proof-of-concept; the builds are sh
 
 | Date | Release | MKVToolNix | Apple Silicon | Intel |
 |------|---------|:----------:|:-------------:|:-----:|
+| 2026-05-24 | [v99.0-b2026.05.1](../../releases/tag/v99.0-b2026.05.1) | 99.0 | [DMG (27 MB)](../../releases/download/v99.0-b2026.05.1/MKVToolNix-99.0-macos-apple-silicon.dmg) | [DMG (30 MB)](../../releases/download/v99.0-b2026.05.1/MKVToolNix-99.0-macos-intel.dmg) |
 | 2026-04-15 | [v98.0-b2026.04.3](../../releases/tag/v98.0-b2026.04.3) | 98.0 | [DMG (34 MB)](../../releases/download/v98.0-b2026.04.3/MKVToolNix-98.0-macos-apple-silicon.dmg) | [DMG (36 MB)](../../releases/download/v98.0-b2026.04.3/MKVToolNix-98.0-macos-intel.dmg) |
 
 All releases on the [Releases page](../../releases).
@@ -19,7 +20,7 @@ Not sure which? Apple menu → About This Mac. "Apple M_" = Apple Silicon, "Inte
 Each DMG ships with a matching `.sha256` file:
 
 ```
-shasum -a 256 -c MKVToolNix-98.0-macos-apple-silicon.dmg.sha256
+shasum -a 256 -c MKVToolNix-99.0-macos-apple-silicon.dmg.sha256
 ```
 
 CI builds also include a build provenance attestation (verifiable with `gh attestation verify`).
