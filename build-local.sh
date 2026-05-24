@@ -457,11 +457,22 @@ function do_promote {
     command rm -rf "${TARGET}/proven-${ARCH_LABEL}-old"
   fi
 
-  # Step 5: Update LFS with new proven
+  # Step 5: Update LFS with new proven. Sync repo_proven to EXACTLY the promoted
+  # set — prune any tracked package no longer present (e.g. a version-bumped
+  # predecessor like an old Qt/zlib) so it doesn't linger as an orphan. Step 1
+  # already committed the outgoing cache, so anything pruned here stays
+  # recoverable from git history.
   mkdir -p "${repo_proven}"
+  for existing in "${repo_proven}"/*.tar.gz; do
+    if [[ ! -f "${proven_dir}/${existing:t}" ]]; then
+      echo "    Pruning stale proven package: ${existing:t}"
+      command rm -f "${existing}" "${existing}.sha256"
+    fi
+  done
   command cp "${proven_dir}"/*.tar.gz "${repo_proven}/"
   (cd "${repo_proven}" && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
-  (cd "${SCRIPT_DIR}" && git add "proven/${ARCH_LABEL}/"*.tar.gz "proven/${ARCH_LABEL}/"*.sha256 && git diff --cached --quiet || git commit -m "promote: ${ARCH_LABEL} proven deps $(date +%Y-%m-%d)" -- "proven/${ARCH_LABEL}/")
+  # git add -A so pruned packages are staged as deletions, not just the new adds.
+  (cd "${SCRIPT_DIR}" && git add -A "proven/${ARCH_LABEL}/" && git diff --cached --quiet || git commit -m "promote: ${ARCH_LABEL} proven deps $(date +%Y-%m-%d)" -- "proven/${ARCH_LABEL}/")
 
   echo "==> Promotion complete. Proven cache updated."
   echo "    LFS archive committed. Push when ready."
