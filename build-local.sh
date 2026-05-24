@@ -858,16 +858,20 @@ if [[ "${BUILD_MODE}" != "promote" ]]; then
   # VERSION is initially derived as ${TAG#release-}, which is correct only when
   # TAG is a release-X.Y tag. For branch-name tags (e.g. "main") the DMG is
   # named after the in-source AC_INIT version string (e.g. "98.0" or
-  # "99.0-pre.1" with the version-marker patch), not after the TAG. Without
-  # this correction, post-build verification and the build/release/logs copies
-  # all look for a path that doesn't exist.
+  # "99.0-pre.1" with the version-marker patch), not after the TAG.
   #
+  # release-99.0 changed the DMG name to
+  # MKVToolNix-${MTX_VER}-${DMG_REVISION}-${machine}.dmg, so strip the known
+  # ${DMG_REVISION} and machine suffixes to recover the clean upstream version.
+  # ${DMG_REVISION} comes from upstream config.sh, sourced during pre-build.
   # -maxdepth 1 -type f excludes the `latest` symlink upstream creates.
-  # wipe_workspace has already cleared stale DMGs at the top of ${WORK_DIR},
-  # so at most one match is expected; -print | head -1 is defensive.
   ACTUAL_DMG=$(command find "${WORK_DIR}" -maxdepth 1 -type f -name 'MKVToolNix-*.dmg' -print 2>/dev/null | command head -1)
   if [[ -n "${ACTUAL_DMG}" ]]; then
-    ACTUAL_VERSION=$(basename "${ACTUAL_DMG}" | command sed -E 's/^MKVToolNix-(.+)\.dmg$/\1/')
+    _dmg_machine=$(command uname -m)
+    ACTUAL_VERSION=$(basename "${ACTUAL_DMG}" .dmg)
+    ACTUAL_VERSION=${ACTUAL_VERSION#MKVToolNix-}
+    ACTUAL_VERSION=${ACTUAL_VERSION%-${_dmg_machine}}
+    ACTUAL_VERSION=${ACTUAL_VERSION%-${DMG_REVISION}}
     if [[ "${ACTUAL_VERSION}" != "${VERSION}" ]]; then
       echo "==> VERSION corrected from '${VERSION}' (from TAG) to '${ACTUAL_VERSION}' (from DMG filename)"
       VERSION="${ACTUAL_VERSION}"
@@ -880,7 +884,10 @@ fi
 # --- Post-build verification ---
 
 VERIFY_PASSED=true
-DMG_APP="${WORK_DIR}/dmg-${VERSION}/MKVToolNix-${VERSION}.app"
+# Upstream stages the app at dmg-${MTX_VER}/${APP_BUNDLE_NAME}; release-99.0
+# renamed the bundle to a fixed "MKVToolNix.app" (APP_BUNDLE_NAME from config.sh)
+# rather than the old MKVToolNix-${VERSION}.app.
+DMG_APP="${WORK_DIR}/dmg-${VERSION}/${APP_BUNDLE_NAME}"
 
 if [[ -d "${DMG_APP}" ]]; then
   echo "==> Running post-build verification..."
@@ -998,7 +1005,9 @@ BUILD_COUNTER_FILE="${SCRIPT_DIR}/.build-counter-${ARCH_LABEL}-rel"
 LOG_DIR="${SCRIPT_DIR}/logs"
 mkdir -p "${BUILD_DIR}" "${RELEASE_DIR}" "${LOG_DIR}"
 
-DMG_PATH="${WORK_DIR}/MKVToolNix-${VERSION}.dmg"
+# Upstream's DMG carries ${DMG_REVISION}+machine suffixes (release-99.0), so use
+# the actual file located after the build rather than reconstructing the name.
+DMG_PATH="${ACTUAL_DMG:-${WORK_DIR}/MKVToolNix-${VERSION}.dmg}"
 
 if [[ -f "${DMG_PATH}" ]]; then
   # Increment global build counter (atomic write via temp+mv)
