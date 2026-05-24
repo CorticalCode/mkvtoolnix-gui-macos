@@ -1,5 +1,40 @@
 # Changelog
 
+## v99.0 prep — retire all wrapper patches, track gpg + shared-mime-info deps (2026-05-24)
+
+Upstream `release-99.0` merged or superseded every wrapper patch, so the
+production build now compiles from pristine upstream source plus our config
+overlay and dependency-cache tooling only.
+
+**Patches retired (7 build patches + 1 Qt source patch):**
+- `qt6-cmake-install`, `qt-fix-homebrew-leak`, `cmark-release-build`,
+  `remove-printsupport` — merged upstream (reverse-apply clean against the
+  release-99.0 source).
+- `specs-updates` — obsolete: Qt is 6.11.0 upstream, and zlib.net is reachable
+  again (the GitHub-mirror redirect is no longer needed).
+- `strip-dylibs` — upstream now strips bundled dylibs itself in `build_dmg`.
+- `qt-patches/001-fix-arm-yield-declaration` — upstream ships its own
+  `qt-patches/fix-qyieldcpu-yield-for-arm.patch` (same fix, same file).
+- `mkvtoolnix-size-opt` — dropped from the pure v99 baseline build; returns
+  later as an isolated LTO measurement patch (our optimization, no upstream
+  equivalent).
+
+**New macOS build dependencies in release-99.0:**
+- `gnupg` (gpg) — upstream's `retrieve_verified_source_tarball` uses it to
+  check the mkvtoolnix source signature. Added to `EXPECTED_SPEC_VARS` so
+  smart-restore builds cache and restore it.
+- `shared-mime-info` — installs the FreeDesktop MIME database (upstream
+  #6248). It builds with `NO_CONFIGURE` and produces no cacheable package, so
+  the smart-build path now rebuilds it before mkvtoolnix to embed the MIME DB
+  into `qt_resources_macos.qrc`.
+
+**Config:** `QTVER` bumped 6.10.2 → 6.11.0 to match upstream `specs.sh`.
+
+Applies to both architectures — Intel builds use the same changes (the ARM
+yield fix upstream ships is guarded and a no-op on x86_64).
+
+---
+
 ## Rename build-fork.sh → build-exp.sh + counter split (2026-05-06)
 
 Disambiguates "fork" (which collided with the upstream-fork repo concept) and

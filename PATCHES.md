@@ -4,7 +4,9 @@ Living document tracking every modification made to build MKVToolNix on macOS (A
 
 ## Build status
 
-Current release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build process uses a proven cache architecture with per-architecture storage: dependencies are compiled once, verified, and promoted to a cache. Subsequent builds restore from cache and only rebuild mkvtoolnix. See the "Build script fixes" section below for details.
+v99.0 build in progress. **All wrapper patches were retired at v99.0** — upstream `release-99.0` merged or superseded every one (see "Retired patches"). The build now compiles MKVToolNix from pristine upstream source plus our config overlay and dependency-cache tooling only. release-99.0 also adds two macOS build dependencies that the wrapper now tracks: `gnupg` (source-signature verification) and `shared-mime-info` (FreeDesktop MIME database, upstream #6248).
+
+Previous release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build process uses a proven cache architecture with per-architecture storage: dependencies are compiled once, verified, and promoted to a cache. Subsequent builds restore from cache and only rebuild mkvtoolnix. See the "Build script fixes" section below for details.
 
 ## Size progression
 
@@ -23,7 +25,22 @@ Current release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build process
 
 ---
 
-## Active patches (7 build patches + 1 Qt source patch)
+## Patches (all retired at v99.0)
+
+As of upstream `release-99.0` there are **no active wrapper patches**. Each was verified against the actual release-99.0 source before removal (reverse-applies clean = change present upstream; conflicts investigated individually). The detailed entries below are retained as historical record.
+
+| Patch | Retirement evidence |
+|-------|---------------------|
+| `qt6-cmake-install` | Merged upstream (#6205, fixed-in 99.0); reverse-applies clean |
+| `specs-updates` | Obsolete — Qt is 6.11.0 upstream; zlib.net 200 OK (mirror redirect moot) |
+| `remove-printsupport` | Merged upstream; reverse-applies clean against release-99.0 |
+| `strip-dylibs` | Merged upstream (#6206, fixed-in 99.0); `build_dmg` strips dylibs (build.sh) |
+| `cmark-release-build` | Merged upstream (#6207, fixed-in 99.0); reverse-applies clean |
+| `qt-fix-homebrew-leak` | Merged upstream (#6208, fixed-in 99.0); reverse-applies clean |
+| `qt-patches/001-arm-yield` | Upstream ships `qt-patches/fix-qyieldcpu-yield-for-arm.patch` (same fix, same file) |
+| `mkvtoolnix-size-opt` | Dropped for the pure baseline build; **returns as an isolated LTO measurement patch** (not a redundancy — our optimization, no upstream equivalent) |
+
+### Historical detail
 
 ### 1. Qt6 cmake install (`patches/qt6-cmake-install.patch`)
 
@@ -223,7 +240,9 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 ## Retired patches
 
-(None currently.)
+All wrapper patches were retired at **v99.0** — see the table under "Patches (all retired at v99.0)" for the per-patch retirement evidence; the detailed historical entries for each are preserved in that section.
+
+`mkvtoolnix-size-opt` is the only one that was *not* made redundant by upstream — it is our own ThinLTO/`-Os` optimization with no upstream equivalent. It is dropped from the pure v99 baseline build and will return as an isolated measurement patch so its size delta can be measured against the baseline.
 
 ---
 
