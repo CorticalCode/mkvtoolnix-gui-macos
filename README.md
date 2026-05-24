@@ -2,9 +2,9 @@
 
 Unofficial, build-from-source macOS builds of [MKVToolNix GUI](https://mkvtoolnix.download/) for Apple Silicon and Intel — and a personal learning project in reproducible macOS packaging.
 
-**Most people want the official builds.** As of 98.0, MKVToolNix again ships **signed, Apple-notarized** macOS DMGs — Apple Silicon, Intel, and universal — on the [official downloads page](https://mkvtoolnix.download/downloads.html#macosx) (packaged by Touchstone64; see [Credits](#credits)). They install with no Gatekeeper workarounds, so prefer them.
+**Most people want the official builds.** As of 98.0, MKVToolNix again ships **signed, Apple-notarized** macOS DMGs — Apple Silicon, Intel, and universal — on the [official downloads page](https://mkvtoolnix.download/downloads.html#macosx) or via Homebrew (`brew install --cask mkvtoolnix-app`); both are packaged by Touchstone64 (see [Credits](#credits)). They install with no Gatekeeper workarounds, so prefer them.
 
-This repo is a proof-of-concept that builds the full GUI from upstream source and publishes **unofficial, ad-hoc-signed** DMGs (not notarized). It's handy if you want to build it yourself, audit the process, or tinker with the build automation — shared as-is, no warranty, no SLA. (The CLI tools are on Homebrew via `brew install mkvtoolnix`; there's no GUI cask.)
+This repo is a proof-of-concept that builds the full GUI from upstream source and publishes **unofficial, ad-hoc-signed** DMGs (not notarized). It's handy if you want to build it yourself, audit the process, or tinker with the build automation — shared as-is, no warranty, no SLA. (The MKVToolNix CLI tools are also on Homebrew via `brew install mkvtoolnix`.)
 
 ## Download
 
@@ -72,7 +72,7 @@ This repo builds on the work of the macOS build community on the [MKVToolNix for
 - **Ryu67** — provided community ARM builds (v92 through v98.0)
 - **umzyi99** — documented Qt version-specific fixes and dark mode icon support
 - **SoCuul** — demonstrated signed and notarized builds on Apple Silicon
-- **[Touchstone64](https://github.com/Touchstone64/package-mkvtoolnix-for-mac)** — now packages MKVToolNix's official **signed, notarized** macOS releases (Apple Silicon, Intel, universal) for the [official downloads page](https://mkvtoolnix.download/downloads.html#macosx); his macOS packaging work is upstream in MKVToolNix
+- **[Touchstone64](https://github.com/Touchstone64/package-mkvtoolnix-for-mac)** — now packages MKVToolNix's official **signed, notarized** macOS releases (Apple Silicon, Intel, universal) for the [official downloads page](https://mkvtoolnix.download/downloads.html#macosx) and the Homebrew `mkvtoolnix-app` cask; his macOS packaging work is upstream in MKVToolNix
 
 The build patches in this repo were informed by solutions shared across the [Building MKVToolNix with GUI on a Mac](https://help.mkvtoolnix.download/t/building-mkvtoolnix-with-gui-on-a-mac/1361) and [Apple Silicon / Retirement of Rosetta 2](https://help.mkvtoolnix.download/t/apple-silicon-retirement-of-rosetta-2/1371) forum threads.
 
