@@ -97,7 +97,10 @@ jobs:
               mkdir -p ~/opt/proven/${ARCH_LABEL}
               cp proven/${ARCH_LABEL}/*.tar.gz ~/opt/proven/${ARCH_LABEL}/
               echo "Restored $(ls proven/${ARCH_LABEL}/*.tar.gz | wc -l) packages."
-              # Clean up working copy to save runner disk space
+              # Clean up working copy to save runner disk space. rm first: the clean
+              # filter maps the binaries back to their committed pointers, so a bare
+              # checkout would be a no-op and leave the full files in place.
+              rm -f proven/${ARCH_LABEL}/*.tar.gz
               GIT_LFS_SKIP_SMUDGE=1 git checkout -- "proven/${ARCH_LABEL}/"
               git lfs prune
             else

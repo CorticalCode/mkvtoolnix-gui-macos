@@ -187,7 +187,10 @@ function cleanup_repo_lfs {
     fi
 
     echo "    Restoring pointer files in proven/${arch_name}/..."
-    (cd "${SCRIPT_DIR}" && GIT_LFS_SKIP_SMUDGE=1 git checkout -- "proven/${arch_name}/")
+    # rm first: the clean filter normalizes the full binary to its committed
+    # pointer, so a bare checkout sees no diff and is a no-op. Removing the
+    # binaries forces checkout to repopulate them (as pointers, via SKIP_SMUDGE).
+    (cd "${SCRIPT_DIR}" && command rm -f "proven/${arch_name}/"*.tar.gz(N) && GIT_LFS_SKIP_SMUDGE=1 git checkout -- "proven/${arch_name}/")
 
     # Verify the checkout actually restored pointers
     sample_file=("${arch_dir}"/*.tar.gz(N[1]))
@@ -479,6 +482,9 @@ function do_promote {
 
   # Clean up only the arch we promoted; leave other working copies alone.
   cleanup_repo_lfs "${ARCH_LABEL}"
+
+  echo "    After pushing, run './build-local.sh --cleanup-lfs' to reclaim cached"
+  echo "    objects this promote retained (git-lfs keeps objects of unpushed commits)."
 }
 
 # Defaults
