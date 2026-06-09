@@ -214,7 +214,10 @@ else
 fi
 BUILD_LABEL="exp$(printf '%03d' ${BUILD_NUM})"
 BUILD_HASH=$(print -n "${SLUG}|${BUILD_NUM}|${MTX_VER}" | shasum -a 256 | head -c 6)
-VERSIONNAME="99pre-exp-${SLUG}-${BUILD_LABEL}-${BUILD_HASH}"
+# Experimental builds target the next upstream release, so label them
+# <next-major>pre derived from the source version (99.0 -> 100pre).
+DEV_VER="$(( ${MTX_VER%%.*} + 1 ))pre"
+VERSIONNAME="${DEV_VER}-exp-${SLUG}-${BUILD_LABEL}-${BUILD_HASH}"
 
 echo "==> build-exp.sh"
 echo "    Source:      ${SRC}"
@@ -1000,7 +1003,7 @@ mkdir -p "${BUILD_DIR}"
 
 echo "${BUILD_NUM}" > "${BUILD_COUNTER_FILE}.tmp" && command mv "${BUILD_COUNTER_FILE}.tmp" "${BUILD_COUNTER_FILE}"
 
-DMG_FINAL_NAME="MKVToolNix-${MTX_VER}-${ARCH_LABEL}-${BUILD_LABEL}-${SLUG}-${BUILD_HASH}.dmg"
+DMG_FINAL_NAME="MKVToolNix-${DEV_VER}-${ARCH_LABEL}-${BUILD_LABEL}-${SLUG}-${BUILD_HASH}.dmg"
 command cp "${DMG_PATH}" "${BUILD_DIR}/${DMG_FINAL_NAME}"
 (cd "${BUILD_DIR}" && shasum -a 256 "${DMG_FINAL_NAME}" > "${DMG_FINAL_NAME}.sha256")
 DMG_FINAL_PATH="${BUILD_DIR}/${DMG_FINAL_NAME}"
