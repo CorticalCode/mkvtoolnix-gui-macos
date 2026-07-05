@@ -26,7 +26,7 @@ Each DMG ships with a matching `.sha256` file:
 shasum -a 256 -c MKVToolNix-100.0-macos-apple-silicon.dmg.sha256
 ```
 
-DMGs produced by the CI workflow also carry a GitHub build-provenance attestation; the current v99 release was built and uploaded manually, so it isn't attested. For a verified, notarized binary, use the [official builds](https://mkvtoolnix.download/downloads.html#macosx).
+DMGs produced by the CI workflow also carry a GitHub build-provenance attestation; the current release was built and uploaded manually, so it isn't attested. For a verified, notarized binary, use the [official builds](https://mkvtoolnix.download/downloads.html#macosx).
 
 ## Trust & install
 
@@ -49,10 +49,10 @@ Requirements: Xcode CLI tools, ~10 GB disk space, 1–3 hours first build.
 git clone https://github.com/CorticalCode/mkvtoolnix-gui-macos.git
 cd mkvtoolnix-gui-macos
 ./build-local.sh --restore-cache    # optional, pulls pre-built deps from LFS
-./build-local.sh release-99.0
+./build-local.sh release-100.0
 ```
 
-The DMG will be at `~/tmp/compile/MKVToolNix-99.0.dmg`. See [docs/proven-cache.md](docs/proven-cache.md) for the cache architecture and `--full` for forced full rebuild.
+The DMG will be at `~/tmp/compile/MKVToolNix-100.0.dmg`. See [docs/proven-cache.md](docs/proven-cache.md) for the cache architecture and `--full` for forced full rebuild.
 
 ## What this repo contains
 

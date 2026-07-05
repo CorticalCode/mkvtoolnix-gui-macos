@@ -41,7 +41,7 @@ shipped `.app` bundle. Both architecture caches contain equivalent builds.
 
 | Library | Version | License (SPDX) | Copyright | Source |
 |---------|---------|---------------|-----------|--------|
-| **Qt** (Core, Gui, Widgets, Network, Concurrent, Multimedia, MultimediaWidgets, MultimediaQuick, Svg, SvgWidgets, NetworkAuth, Core5Compat) | 6.11.0 | `LGPL-3.0-only` with Qt GPL Exception v1.0 | The Qt Company Ltd. and other contributors | https://download.qt.io/archive/qt/6.11/6.11.0/ |
+| **Qt** (Core, Gui, Widgets, Network, Concurrent, Multimedia, MultimediaWidgets, MultimediaQuick, Svg, SvgWidgets, NetworkAuth, Core5Compat) | 6.11.1 | `LGPL-3.0-only` with Qt GPL Exception v1.0 | The Qt Company Ltd. and other contributors | https://download.qt.io/archive/qt/6.11/6.11.1/ |
 | **Boost** (system; headers-only components are not separately bundled) | 1.88.0 | `BSL-1.0` (Boost Software License 1.0) | Boost contributors | https://boost.org |
 | **zlib** | 1.3.2 | `Zlib` | Jean-loup Gailly & Mark Adler | https://zlib.net |
 | **FLAC** (`libFLAC`) | 1.5.0 | `BSD-3-Clause` (Xiph variant) | Josh Coalson, Xiph.Org Foundation | https://xiph.org/flac/ |
