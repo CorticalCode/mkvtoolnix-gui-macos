@@ -4,7 +4,7 @@ The build system caches compiled dependencies so that subsequent builds only nee
 
 ## How it works
 
-When you run `./build-local.sh release-98.0`:
+When you run `./build-local.sh release-100.0`:
 
 1. The workspace (`~/opt/`) is wiped clean (except the cache and source tarballs)
 2. Compiled dependencies are restored from `~/opt/proven/{arch}/`. Each restored package is **SHA256-verified against its `.sha256` sidecar** before being trusted; mismatches abort the build (see [trust-model.md §6](trust-model.md) for context).
@@ -76,7 +76,7 @@ cd mkvtoolnix-gui-macos
 ./build-local.sh --restore-cache
 
 # Build (will restore from cache, ~15 minutes)
-./build-local.sh release-98.0
+./build-local.sh release-100.0
 ```
 
 The `--restore-cache` flag handles everything: pulls LFS objects for your architecture only (~130 MB), copies them to `~/opt/proven/{arch}/`, and cleans up the repo working copy so it returns to its lightweight state.
@@ -86,7 +86,7 @@ The `--restore-cache` flag handles everything: pulls LFS objects for your archit
 To rebuild all dependencies from source (ignoring the cache):
 
 ```sh
-./build-local.sh release-98.0 --full
+./build-local.sh release-100.0 --full
 ```
 
 The proven cache is not modified by `--full` — it remains as a safety net.
@@ -96,6 +96,6 @@ The proven cache is not modified by `--full` — it remains as a safety net.
 If you modify a patch that affects a specific dependency without bumping its version, delete that package from the cache to force a rebuild:
 
 ```sh
-rm ~/opt/proven/arm/qt-everywhere-src-6.11.0.tar.gz
-./build-local.sh release-99.0  # will detect missing Qt and do a full build
+rm ~/opt/proven/arm/qt-everywhere-src-6.11.1.tar.gz
+./build-local.sh release-100.0  # will detect missing Qt and do a full build
 ```

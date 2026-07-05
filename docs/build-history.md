@@ -33,7 +33,7 @@ Index of every DMG build produced by `build-local.sh` with provenance, release m
 | b010 | arm | main | 2026-04-14 15:50 | main | `MKVToolNix-98.0-macos-arm-b010-main.dmg` | `e61b7b4c2a` | — | **retracted: v98.0-b2026.04.1** | First main release; retracted due to Homebrew leak crash |
 | b011 | arm | feature | 2026-04-15 00:53 | fix-qt-remove-pkg-config | `MKVToolNix-98.0-macos-arm-b011-fix-qt-remove-pkg-config.dmg` | `4566f85ec8` | — | — | Homebrew leak fix attempt 1 |
 | b012 | arm | feature | 2026-04-15 01:54 | fix-qt-force-bundled-libs | `MKVToolNix-98.0-macos-arm-b012-fix-qt-force-bundled-libs.dmg` | `591603aed5` | — | — | Homebrew leak fix attempt 2 |
-| **b013** | arm | main | 2026-04-15 02:23 | fix-qt-homebrew-leak | `MKVToolNix-98.0-macos-arm-b013-fix-qt-homebrew-leak.dmg` | **`556382284a`** | — | **v98.0-b2026.04.3 → apple-silicon.dmg** | **Current shipped release** (SHA-verified match) |
+| b013 | arm | main | 2026-04-15 02:23 | fix-qt-homebrew-leak | `MKVToolNix-98.0-macos-arm-b013-fix-qt-homebrew-leak.dmg` | `556382284a` | — | v98.0-b2026.04.3 → apple-silicon.dmg | Shipped v98 (SHA-verified); superseded by v99, v100 |
 | b014 | arm | experimental | 2026-04-19 13:52 | experimental-upstream-main | `MKVToolNix-98.0-macos-arm-b014-experimental-upstream-main.dmg` | `612192fe73` | `logs/MKVToolNix-98.0-macos-arm-b014-experimental-upstream-main.log` | — | Experimental upstream/main tracking |
 | b015 | arm | experimental | 2026-04-19 | (unknown) | **missing** | — | — | — | No preservation; likely aborted/failed during experimental work |
 | b016 | arm | experimental | 2026-04-19 | (experimental) | **missing** | — | — | — | Per memory: *"b016 without helper lost both patches"* — broken test build, not preserved |
@@ -51,13 +51,26 @@ Index of every DMG build produced by `build-local.sh` with provenance, release m
 | b002 | intel | main | 2026-04-14 16:08 | main | `MKVToolNix-98.0-macos-intel-b002-main.dmg` | `207b736e58` | — | — | Post-retraction main iteration |
 | b003 | intel | feature | 2026-04-15 00:52 | fix-qt-force-bundled-libs | `MKVToolNix-98.0-macos-intel-b003-fix-qt-force-bundled-libs.dmg` | `e629d5ce9b` | — | — | Homebrew leak fix attempt (intel) |
 | b004 | intel | feature | 2026-04-15 02:09 | fix-qt-remove-pkg-config | `MKVToolNix-98.0-macos-intel-b004-fix-qt-remove-pkg-config.dmg` | `be43cb47f0` | — | — | Homebrew leak fix iteration (intel) |
-| **b005** | intel | main | 2026-04-15 03:13 | fix-qt-homebrew-leak | `MKVToolNix-98.0-macos-intel-b005-fix-qt-homebrew-leak.dmg` | **`baa706c301`** | — | **v98.0-b2026.04.3 → intel.dmg** | **Current shipped intel release** (SHA-verified match) |
+| b005 | intel | main | 2026-04-15 03:13 | fix-qt-homebrew-leak | `MKVToolNix-98.0-macos-intel-b005-fix-qt-homebrew-leak.dmg` | `baa706c301` | — | v98.0-b2026.04.3 → intel.dmg | Shipped v98 intel (SHA-verified); superseded |
+
+## Release builds (`rel` counter, v99 onward)
+
+At v99 the build counter moved from `bNNN` to `relNNN` (release-track) plus `expNNN` (experimental worktrees, not cataloged here). The shipped release builds:
+
+| # | Arch | Type | Date | Branch/Slug | DMG | SHA256 | Log | Release | Notes |
+|---|------|------|------|-------------|-----|--------|-----|---------|-------|
+| rel002 | arm | main | 2026-05-24 10:02 | main | `MKVToolNix-99.0-arm-rel002-main.dmg` | `55822890d2` | — | v99.0-b2026.05.1 → apple-silicon.dmg | Qt 6.11.0, LTO/-Os; superseded by v100 |
+| rel002 | intel | main | 2026-05-24 11:09 | main | `MKVToolNix-99.0-intel-rel002-main.dmg` | `fcb5b0b378` | — | v99.0-b2026.05.1 → intel.dmg | Qt 6.11.0; superseded by v100 |
+| **rel003** | arm | main | 2026-07-05 13:01 | main | `MKVToolNix-100.0-arm-rel003-main.dmg` | **`53af0bea8c`** | — | **v100.0-b2026.07.1 → apple-silicon.dmg** | **Current shipped.** Qt 6.11.1, full from-source rebuild |
+| **rel003** | intel | main | 2026-07-05 13:32 | main | `MKVToolNix-100.0-intel-rel003-main.dmg` | **`453d903b2a`** | — | **v100.0-b2026.07.1 → intel.dmg** | **Current shipped.** Qt 6.11.1 |
 
 ## Summary
 
-- **Total builds preserved:** 22 (17 arm + 5 intel)
+- **v98 builds preserved:** 22 (17 arm + 5 intel) — the `bNNN` tables above
+- **Release builds (v99+):** 4 shipped — `rel002` arm+intel (v99), `rel003` arm+intel (v100)
 - **Missing from preservation:** 3 (arm b015, b016, b019)
-- **Currently shipped:** arm b013 + intel b005 (both verified by SHA256 match against GitHub release v98.0-b2026.04.3 assets)
+- **Currently shipped:** **arm rel003 + intel rel003** (v100.0-b2026.07.1; SHA256-verified against the GitHub release assets)
+- **Prior shipped (superseded):** v99.0-b2026.05.1 (arm/intel rel002); v98.0-b2026.04.3 (arm b013 / intel b005)
 - **Retracted:** v98.0-b2026.04.1 (arm b010 + intel b001 probable — Homebrew leak crash; assets removed from GitHub)
 
 ## Notes on preservation gaps
