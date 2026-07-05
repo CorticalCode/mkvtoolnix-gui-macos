@@ -220,7 +220,7 @@ For experimental builds (e.g. testing against upstream `main` with a bumped Qt v
 
 `build-local.sh` checks the experimental cache **first** for each expected package, falling back to the main proven cache. Packages are matched by exact filename, which includes the version:
 
-- `qt-everywhere-src-6.11.0.tar.gz` lives in proven (the current release's Qt)
+- `qt-everywhere-src-6.11.1.tar.gz` lives in proven (the current release's Qt)
 - a newer `qt-everywhere-src-*.tar.gz` could live in experimental (staged while you test an upstream Qt bump)
 
 Both are safe to coexist — the build picks whichever the active `specs.sh` + `QTVER` combination is looking for.

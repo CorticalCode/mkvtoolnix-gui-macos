@@ -17,7 +17,7 @@ This document describes what `mkvtoolnix-gui-macos` verifies, what it doesn't, a
 
 Notarizing with my Apple Developer ID would tell macOS "this developer vouches for this binary." I don't, and won't.
 
-I'm not the upstream maintainer. I'm a translator running someone else's source through a build script on my hardware. I haven't audited Qt 6.11.0's source — nobody could, realistically. I haven't reviewed boost 1.88. I'm in no position to back the chain of trust that Developer ID notarization implies. Mbunkus didn't notarize his official DMGs either, for the same structural reason: he didn't own a Mac and wasn't in a position to act as a vouching distributor.
+I'm not the upstream maintainer. I'm a translator running someone else's source through a build script on my hardware. I haven't audited Qt 6.11.1's source — nobody could, realistically. I haven't reviewed boost 1.88. I'm in no position to back the chain of trust that Developer ID notarization implies. Mbunkus didn't notarize his official DMGs either, for the same structural reason: he didn't own a Mac and wasn't in a position to act as a vouching distributor.
 
 This is also consistent with how MacPorts ships `mkvtoolnix +qtgui` today — same model, same trust posture. Notarization isn't part of the long-running pattern that brought users here.
 
