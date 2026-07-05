@@ -105,7 +105,7 @@ function usage {
   cat <<'USAGE'
 Usage: build-local.sh [options] [tag]
 
-  tag               Upstream release tag (e.g. release-98.0)
+  tag               Upstream release tag (e.g. release-XX.0)
                     Required for build and promote. Not used by
                     --restore-cache or --cleanup-lfs.
 
@@ -537,8 +537,8 @@ if [[ "${BUILD_MODE}" == "restore-cache" ]]; then
 fi
 
 if [[ -z "${TAG}" ]]; then
-  TAG="release-98.0"
-  echo "WARNING: No tag specified, defaulting to ${TAG}. Pass a tag explicitly for new versions."
+  echo "ERROR: No release tag given. Pass one explicitly, e.g. release-XX.0 (see --help)." >&2
+  exit 1
 fi
 VERSION=${TAG#release-}
 

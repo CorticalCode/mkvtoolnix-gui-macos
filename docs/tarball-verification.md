@@ -110,7 +110,7 @@ sequenceDiagram
     participant UP as mkvtoolnix.download
     participant G as gpg (temp keyring)
 
-    U->>W: ./build-local.sh release-XX.X
+    U->>W: ./build-local.sh release-XX.0
     W->>W: Verify embedded pubkey FP<br/>matches pinned fingerprint
 
     opt FP mismatch
@@ -226,7 +226,7 @@ If the monthly workflow fails or mbunkus rotates a subkey:
    the new fetch from bunkus.org.
 3. Verify locally:
    ```sh
-   ./build-local.sh release-XX.X  # pre-flight will exercise the new key
+   ./build-local.sh release-XX.0  # pre-flight will exercise the new key
    ```
 4. Commit with provenance note in the message.
 

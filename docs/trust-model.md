@@ -158,7 +158,7 @@ If you don't trust this repo's published binaries, the most direct alternative i
 ```
 git clone https://github.com/CorticalCode/mkvtoolnix-gui-macos.git
 cd mkvtoolnix-gui-macos
-./build-local.sh release-XX.X
+./build-local.sh release-XX.0
 ```
 
 This removes me from the trust chain. You're now trusting:

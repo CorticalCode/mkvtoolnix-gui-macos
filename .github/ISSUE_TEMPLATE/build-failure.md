@@ -14,7 +14,7 @@ labels: build
 
 **Command run:**
 ```
-./build-local.sh release-XX.X
+./build-local.sh release-XX.0
 ```
 
 **Which step failed** (dependency name or mkvtoolnix):

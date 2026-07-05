@@ -33,7 +33,7 @@ PINNED_FP_FILE="${SCRIPT_DIR}/mbunkus-fingerprint.txt"
 
 # Tags to check — recent releases plus the one we currently build against.
 # Adjust as needed; checking 3-5 recent tags gives a reasonable sample.
-TAGS_TO_CHECK=(release-98.0 release-97.0 release-96.0)
+TAGS_TO_CHECK=(release-100.0 release-99.0 release-98.0)
 
 # --- Preconditions ---
 if [[ ! -f "${PUBKEY}" ]] || [[ ! -f "${PINNED_FP_FILE}" ]]; then
