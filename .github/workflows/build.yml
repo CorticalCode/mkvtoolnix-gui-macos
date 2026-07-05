@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Upstream release tag (e.g. release-98.0)'
+        description: 'Upstream release tag (e.g. release-100.0)'
         required: true
-        default: 'release-98.0'
+        default: 'release-100.0'
       force:
         description: 'Force rebuild even if release exists'
         required: false

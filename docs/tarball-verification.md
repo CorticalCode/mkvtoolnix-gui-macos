@@ -110,7 +110,7 @@ sequenceDiagram
     participant UP as mkvtoolnix.download
     participant G as gpg (temp keyring)
 
-    U->>W: ./build-local.sh release-98.0
+    U->>W: ./build-local.sh release-XX.X
     W->>W: Verify embedded pubkey FP<br/>matches pinned fingerprint
 
     opt FP mismatch

@@ -49,10 +49,10 @@ Requirements: Xcode CLI tools, ~10 GB disk space, 1–3 hours first build.
 git clone https://github.com/CorticalCode/mkvtoolnix-gui-macos.git
 cd mkvtoolnix-gui-macos
 ./build-local.sh --restore-cache    # optional, pulls pre-built deps from LFS
-./build-local.sh release-100.0
+./build-local.sh release-XX.X
 ```
 
-The DMG will be at `~/tmp/compile/MKVToolNix-100.0.dmg`. See [docs/proven-cache.md](docs/proven-cache.md) for the cache architecture and `--full` for forced full rebuild.
+The DMG will be at `~/tmp/compile/MKVToolNix-XX.X.dmg`. See [docs/proven-cache.md](docs/proven-cache.md) for the cache architecture and `--full` for forced full rebuild.
 
 ## What this repo contains
 

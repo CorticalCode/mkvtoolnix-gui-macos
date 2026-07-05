@@ -269,7 +269,7 @@ cd mkvtoolnix-gui-macos
 git clone https://github.com/CorticalCode/mkvtoolnix-gui-macos.git
 cd mkvtoolnix-gui-macos
 ./build-local.sh --restore-cache          # ~2 min, populates local cache
-./build-local.sh release-100.0             # ~15 min, uses cached deps
+./build-local.sh release-XX.X             # ~15 min, uses cached deps
 ```
 
 ### First build on a new machine (from source)
@@ -277,19 +277,19 @@ cd mkvtoolnix-gui-macos
 ```sh
 git clone https://github.com/CorticalCode/mkvtoolnix-gui-macos.git
 cd mkvtoolnix-gui-macos
-./build-local.sh release-100.0             # ~1-3 hours, builds everything
+./build-local.sh release-XX.X             # ~1-3 hours, builds everything
 ```
 
 ### Subsequent builds (cache already populated)
 
 ```sh
-./build-local.sh release-100.0             # ~15 min, auto-restores from cache
+./build-local.sh release-XX.X             # ~15 min, auto-restores from cache
 ```
 
 ### Promote after verified build (maintainer only)
 
 ```sh
-./build-local.sh --full release-100.0      # Full rebuild from source
-./build-local.sh --promote release-100.0   # Archive to LFS, clean up
+./build-local.sh --full release-XX.X      # Full rebuild from source
+./build-local.sh --promote release-XX.X   # Archive to LFS, clean up
 git push                                  # Share with others
 ```

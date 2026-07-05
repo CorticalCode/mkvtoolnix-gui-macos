@@ -4,7 +4,7 @@ about: Request a build of a newer MKVToolNix version
 labels: release
 ---
 
-**Upstream version:** (e.g. 99.0)
+**Upstream version:** (e.g. 100.0)
 
 **Release link:** https://mkvtoolnix.download/
 

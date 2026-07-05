@@ -10,7 +10,7 @@ This document describes what `mkvtoolnix-gui-macos` verifies, what it doesn't, a
 - Every build cryptographically verifies mbunkus's GPG signature on the upstream source **and** on the codeberg release tag, both against the same pinned key.
 - Every dependency tarball is verified against an SHA256 hash pinned in upstream's `specs.sh`. The `specs.sh` file is itself trust-rooted in mbunkus's tag signature.
 - The pinned mbunkus key is cross-checked monthly against three independent sources (bunkus.org, codeberg, keys.openpgp.org). Drift fails CI.
-- DMGs built via the CI workflow include GitHub-issued build provenance attestations. Users can verify such a DMG was built by this exact workflow from a specific commit. DMGs built and uploaded manually (as the current v99 release was, both architectures) are not attested but inherit the same upstream verification.
+- DMGs built via the CI workflow include GitHub-issued build provenance attestations. Users can verify such a DMG was built by this exact workflow from a specific commit. DMGs built and uploaded manually (as the current release was, both architectures) are not attested but inherit the same upstream verification.
 - **What's not verified:** GPG signatures on individual dependency tarballs (Qt doesn't publish them, so coverage would be partial and misleading). Dependencies are SHA256-rooted instead.
 
 ## Why no notarization
@@ -147,7 +147,7 @@ spctl --assess --type execute --verbose \
     /Volumes/MKVToolNix/MKVToolNix.app
 ```
 
-Step 2 (attestation) applies only to DMGs built via the CI workflow. The current v99 release was built and uploaded manually (both architectures), so it has no attestation; for it, steps 1 and 3 are the available checks.
+Step 2 (attestation) applies only to DMGs built via the CI workflow. The current release was built and uploaded manually (both architectures), so it has no attestation; for it, steps 1 and 3 are the available checks.
 
 Step 3 will return "rejected" because the DMG isn't notarized. That's expected. The verbose output will confirm the binary is ad-hoc signed and the signature is consistent (i.e., the app hasn't been modified since signing).
 
@@ -158,7 +158,7 @@ If you don't trust this repo's published binaries, the most direct alternative i
 ```
 git clone https://github.com/CorticalCode/mkvtoolnix-gui-macos.git
 cd mkvtoolnix-gui-macos
-./build-local.sh release-98.0
+./build-local.sh release-XX.X
 ```
 
 This removes me from the trust chain. You're now trusting:
