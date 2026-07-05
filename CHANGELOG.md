@@ -1,6 +1,21 @@
 # Changelog
 
-## v99.0-b2026.05.1 (2026-05-24) — Current Release
+## v100.0-b2026.07.1 (2026-07-05) — Current Release
+
+MKVToolNix 100.0 "Do Hot Girls Like Chords" — Apple Silicon (arm64) and Intel (x86_64).
+
+**Downloads:**
+- Apple Silicon (arm64): `MKVToolNix-100.0-macos-apple-silicon.dmg` — ~25 MB DMG (~75 MB app)
+- Intel (x86_64): `MKVToolNix-100.0-macos-intel.dmg` — ~28 MB DMG
+
+**Highlights:**
+- MKVToolNix 100.0 upstream (Qt 6.11.1, Boost 1.88.0, zlib 1.3.2).
+- **Qt bumped 6.11.0 → 6.11.1** to match upstream's v100 macOS packaging (Codeberg #6277).
+- Single active wrapper patch (`mkvtoolnix-size-opt`, ThinLTO/`-Os`) — unchanged, still applies
+  cleanly; zero Qt source patches.
+- Full from-source rebuild (all deps + Qt 6.11.1 verified); arm64 DMG ~24.8 MB / app 74.8 MB.
+
+## v99.0-b2026.05.1 (2026-05-24)
 
 First v99.0 release — both architectures, built locally (manual release, so no CI
 provenance attestation on these assets).

@@ -12,6 +12,7 @@ These are this repo's **unofficial** builds. For official **notarized** DMGs (re
 
 | Date | Release | MKVToolNix | Apple Silicon | Intel |
 |------|---------|:----------:|:-------------:|:-----:|
+| 2026-07-05 | [v100.0-b2026.07.1](../../releases/tag/v100.0-b2026.07.1) | 100.0 | [DMG (25 MB)](../../releases/download/v100.0-b2026.07.1/MKVToolNix-100.0-macos-apple-silicon.dmg) | [DMG (28 MB)](../../releases/download/v100.0-b2026.07.1/MKVToolNix-100.0-macos-intel.dmg) |
 | 2026-05-24 | [v99.0-b2026.05.1](../../releases/tag/v99.0-b2026.05.1) | 99.0 | [DMG (27 MB)](../../releases/download/v99.0-b2026.05.1/MKVToolNix-99.0-macos-apple-silicon.dmg) | [DMG (30 MB)](../../releases/download/v99.0-b2026.05.1/MKVToolNix-99.0-macos-intel.dmg) |
 | 2026-04-15 | [v98.0-b2026.04.3](../../releases/tag/v98.0-b2026.04.3) | 98.0 | [DMG (34 MB)](../../releases/download/v98.0-b2026.04.3/MKVToolNix-98.0-macos-apple-silicon.dmg) | [DMG (36 MB)](../../releases/download/v98.0-b2026.04.3/MKVToolNix-98.0-macos-intel.dmg) |
 
@@ -22,7 +23,7 @@ Not sure which? Apple menu → About This Mac. "Apple M_" = Apple Silicon, "Inte
 Each DMG ships with a matching `.sha256` file:
 
 ```
-shasum -a 256 -c MKVToolNix-99.0-macos-apple-silicon.dmg.sha256
+shasum -a 256 -c MKVToolNix-100.0-macos-apple-silicon.dmg.sha256
 ```
 
 DMGs produced by the CI workflow also carry a GitHub build-provenance attestation; the current v99 release was built and uploaded manually, so it isn't attested. For a verified, notarized binary, use the [official builds](https://mkvtoolnix.download/downloads.html#macosx).
