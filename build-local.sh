@@ -215,7 +215,14 @@ function cleanup_repo_lfs {
 function run_cleanup_lfs_mode {
   echo "==> Cleaning up LFS objects..."
   cleanup_repo_lfs
-  echo "==> Done. Repo proven/ restored to pointer files."
+  # This mode's whole purpose is reclaiming disk, so always prune. cleanup_repo_lfs
+  # only prunes when it had to restore full binaries to pointers, which skips the
+  # common post-promote+push case (files already pointers) — the exact case the
+  # promote instructs this mode to handle. git lfs prune is safe (keeps unpushed +
+  # recently-referenced objects) and arch-agnostic (each machine prunes its own cache).
+  echo "==> Pruning LFS object cache..."
+  (cd "${SCRIPT_DIR}" && git lfs prune)
+  echo "==> Done. Repo proven/ restored to pointers; LFS cache pruned."
 }
 
 function run_restore_cache_mode {
