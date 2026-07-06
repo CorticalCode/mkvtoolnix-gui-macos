@@ -707,19 +707,23 @@ setopt ${=_SAVED_OPTS} 2>/dev/null
 set -e
 TARGET="${_SAVED_TARGET}"
 WORK_DIR="${_SAVED_WORK_DIR}"
-echo "==> Config: QTVER=${QTVER}, TARGET=${TARGET}, WORK_DIR=${WORK_DIR}"
+echo "==> Config: TARGET=${TARGET}, WORK_DIR=${WORK_DIR}"
 
-# Verify QTVER matches what specs.sh will download
+# Derive QTVER from specs.sh — the single source of truth for dependency
+# versions — instead of a manual pin in config.local.sh. This is authoritative
+# over any QTVER from the config files, so a stale pin can no longer cause a
+# wrong-Qt build and there's no per-release QTVER edit. Exported so the upstream
+# build.sh (which reads QTVER=${QTVER:-...}) picks up the same value.
 SPECS_QT_FILE="${spec_qt[1]}"
-EXPECTED_QT_DIR="qt-everywhere-src-${QTVER}"
-if [[ "${SPECS_QT_FILE}" != "${EXPECTED_QT_DIR}.tar.xz" ]]; then
-  echo "ERROR: Qt version mismatch!"
-  echo "  QTVER=${QTVER} expects: ${EXPECTED_QT_DIR}.tar.xz"
-  echo "  specs.sh has: ${SPECS_QT_FILE}"
-  echo "  Fix: update QTVER in config/config.local.sh to match specs-updates.patch"
+QTVER="${SPECS_QT_FILE#qt-everywhere-src-}"
+QTVER="${QTVER%.tar.*}"
+export QTVER
+if [[ -z "${QTVER}" || "${SPECS_QT_FILE}" != "qt-everywhere-src-${QTVER}.tar."* ]]; then
+  echo "ERROR: could not derive the Qt version from specs.sh (spec_qt='${SPECS_QT_FILE}')." >&2
+  echo "       Upstream may have changed the Qt spec naming; check packaging/macos/specs.sh." >&2
   exit 1
 fi
-echo "==> Verified: QTVER=${QTVER} matches specs.sh (${SPECS_QT_FILE})"
+echo "==> Qt version (derived from specs.sh): ${QTVER} (${SPECS_QT_FILE})"
 
 # Verify upstream mkvtoolnix tarball signature before letting build.sh use it.
 # Upstream build.sh does not checksum or signature-verify the source tarball
