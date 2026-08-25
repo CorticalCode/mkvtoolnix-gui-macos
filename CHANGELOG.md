@@ -1,6 +1,24 @@
 # Changelog
 
-## v100.0-b2026.07.1 (2026-07-05) — Current Release
+## v101.0-b2026.08.1 (2026-08-24) — Current Release
+
+MKVToolNix 101.0 "Time To Turn" — Apple Silicon (arm64) and Intel (x86_64).
+
+**Downloads:**
+- Apple Silicon (arm64): `MKVToolNix-101.0-macos-apple-silicon.dmg` — ~25 MB DMG (~75 MB app)
+- Intel (x86_64): `MKVToolNix-101.0-macos-intel.dmg` — ~28 MB DMG
+
+**Highlights:**
+- MKVToolNix 101.0 upstream (Qt 6.11.1, Boost 1.88.0, zlib 1.3.2).
+- **No dependency changes from v100** — upstream's `packaging/macos/specs.sh` is byte-identical
+  between `release-100.0` and `release-101.0`, so Qt stays 6.11.1.
+- Bundled libEBML 1.4.7 / libMatroska 1.7.2 — upstream flags these as security-sensitive; they
+  fix possible invalid memory accesses when reading files broken in certain specific ways.
+- Single active wrapper patch (`mkvtoolnix-size-opt`, ThinLTO/`-Os`) — unchanged, still applies
+  cleanly; zero Qt source patches.
+- Built from the proven dependency cache (deps unchanged); arm64 DMG ~24.8 MB / app 74.9 MB.
+
+## v100.0-b2026.07.1 (2026-07-05)
 
 MKVToolNix 100.0 "Do Hot Girls Like Chords" — Apple Silicon (arm64) and Intel (x86_64).
 
