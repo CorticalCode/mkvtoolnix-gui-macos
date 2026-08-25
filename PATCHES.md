@@ -225,7 +225,7 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 **Promotion workflow:** After a successful build and manual testing, `--promote` archives the current proven cache to Git LFS, atomically swaps in the new packages, and commits. Uses directory-swap for atomicity — interruption at any point leaves either old or new proven intact.
 
-**Post-build verification:** Checks Qt version in binary, architecture of all binaries and dylibs, duplicate dylib scan, size sanity (60-95 MB range), Homebrew/external library leak detection, and bundle inventory. Promotion is blocked if verification fails.
+**Post-build verification:** Checks Qt version in binary, architecture of all binaries and dylibs, duplicate dylib scan, size sanity (60-95 MB range), Homebrew/external library leak detection, and bundle inventory. Each check fails closed: an absent input (no dylibs found, no `otool` output) is reported as a failure rather than a clean result. If verification does not pass, promotion is blocked **and** the release-named DMG is withheld — only the internal `build/` copy is written, for diagnosis.
 
 **Pre-build verification:** QTVER/specs.sh consistency check (already existed), stale build directory cleanup for all dependencies (extended from Qt-only).
 
@@ -237,7 +237,7 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 **Error handling:** ERR trap prints line number and exit code on any command failure. Build output tee'd to timestamped log file. Build report with summary written after each build. Patch application distinguishes "already applied" from "genuinely broken."
 
-**`command cp` / `/usr/bin/find`:** macOS zsh aliases `cp` to `cp -i` and may alias `find` to GNU find. `command cp` and `/usr/bin/find` bypass aliases.
+**`command <tool>` throughout:** macOS zsh aliases `cp` to `cp -i`, and a Homebrew-first PATH can put GNU versions of `find`, `stat`, and `sed` ahead of the BSD ones. Calling tools via `command` bypasses aliases, and the scripts avoid flags that differ between the BSD and GNU implementations, so either set works.
 
 **`git checkout -- .` before patching:** Ensures clean slate on re-runs.
 

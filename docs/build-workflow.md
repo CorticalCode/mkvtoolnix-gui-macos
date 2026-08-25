@@ -216,42 +216,27 @@ For experimental builds (e.g. testing against upstream `main` with a bumped Qt v
 
 - `~/opt/proven-experimental/{arm,intel}/` — never pushed, never committed, machine-specific.
 
-### How the overlay works
+### One tier, one owner
 
-`build-local.sh` checks the experimental cache **first** for each expected package, falling back to the main proven cache. Packages are matched by exact filename, which includes the version:
+`tools/build-exp.sh` both fills and reads that directory. `build-local.sh` never looks in it.
 
-- `qt-everywhere-src-6.11.1.tar.gz` lives in proven (the current release's Qt)
-- a newer `qt-everywhere-src-*.tar.gz` could live in experimental (staged while you test an upstream Qt bump)
+That separation is deliberate. A release DMG has to be reproducible from what the repository ships in `proven/`, and a dependency built on one machine by the experimental builder is not. `build-local.sh` does still *preserve* the directory when it wipes the workspace, because `build-exp.sh` depends on it surviving between runs — but preserving it and reading from it are different things.
 
-Both are safe to coexist — the build picks whichever the active `specs.sh` + `QTVER` combination is looking for.
+### Filling it
 
-### Staging and clearing
+`build-exp.sh --rebuild-deps` builds whatever the experimental cache is missing and deposits each result there automatically, alongside a `.sha256` and a `.manifest.json` recording the source hash, configure-args hash, patch state, and build host. Subsequent experimental builds restore those in seconds instead of recompiling. There is no separate staging step.
 
-After a successful experimental build (packages are in `~/opt/packages/`):
-
-```sh
-./build-local.sh --stage-experimental
-```
-
-Copies all built package tarballs into `~/opt/proven-experimental/{arch}/`. Subsequent builds that need any of those versions restore them in seconds instead of recompiling.
-
-To revert to the main proven cache only (e.g. when you're done experimenting or want a clean slate):
+### Emptying it
 
 ```sh
-./build-local.sh --clear-experimental
+./tools/build-exp.sh --clear-cache
 ```
 
-Deletes `~/opt/proven-experimental/{arch}/` for the current architecture. The main proven cache is untouched.
+Removes `~/opt/proven-experimental/{arch}/` for the current architecture and exits; it takes no source path. The proven cache is untouched.
 
-### When to stage vs when to promote
+### When work graduates to a release
 
-| Use case | Action |
-|----------|--------|
-| You built Qt 6.11 against upstream main; iterating on patches | `--stage-experimental` — keeps Qt compiled between runs |
-| The experimental work graduates to a real release | Retire local patches, merge branch, run normal `--full` build, then `--promote` |
-| You want to test a totally different Qt configuration | `--clear-experimental`, then build, then `--stage-experimental` again |
-
-`--stage-experimental` never touches git or LFS. `--promote` still behaves exactly as before and still refuses to run outside the `main` branch.
+Retire the local patches, merge the branch, and run a normal `--full` build followed by `--promote`. The release path compiles from the verified upstream tarball and promotes into `proven/` — the experimental cache plays no part in it.
 
 ## Common Workflows
 

@@ -1,5 +1,50 @@
 # Changelog
 
+## Build script hardening: tool portability, cache integrity, verification (2026-08-25)
+
+**Four fixes to `build-local.sh` and `tools/build-exp.sh`.** No change to what
+gets built or shipped; every change is to how the scripts decide whether a build
+is sound. Net effect on `build-local.sh` is 43 lines shorter with three checks it
+previously lacked.
+
+- **BSD-only tool flags removed.** Both scripts required BSD `find` and `stat`
+  (`-perm +111`, `stat -f '%z'`) and aborted at startup on a GNU-first `PATH`.
+  The architecture sweep now selects `-type f` and leaves the existing Mach-O
+  test to identify binaries; sizes come from `wc -c`. Both spellings behave
+  identically under either toolchain, so the startup probe that guarded the old
+  ones is gone. Verified on the v101 bundle under both: identical byte total,
+  identical Mach-O set. The sweep no longer double-counts the 18 version
+  symlinks aliasing dylibs it already checked, so it reports 24 distinct
+  binaries rather than 42.
+- **Proven-cache verification actually runs.** The `.sha256` check described in
+  `trust-model.md` never executed: a missing sidecar was accepted with a
+  warning, and no sidecar ever reached the local cache, because
+  `--restore-cache` copied only `*.tar.gz` and `do_promote` wrote hashes into
+  the repo copy alone. Sidecars now travel with the packages in both
+  directions, and a package without one is refused. `trust-model.md` §6 now
+  distinguishes the two cases honestly — self-generated on the machine that
+  built the deps (corruption check) versus committed to signed history for
+  anyone restoring from LFS (integrity check).
+- **Experimental dependency cache no longer reachable from release builds.**
+  `restore_from_proven` consulted `~/opt/proven-experimental/` first and let it
+  win any collision, on `main`, ungated. `tools/build-exp.sh` owns that tier —
+  it populates it automatically with a `.sha256` and a provenance manifest per
+  package — so `--stage-experimental` was the weaker of two mechanisms and is
+  removed, along with `--clear-experimental`, whose replacement is
+  `build-exp.sh --clear-cache`. Promotion gained the case this exposed: a
+  smart-restore build leaves `packages/` incomplete by design, which is a
+  successful no-op when `proven/` already holds every package the tag expects,
+  not an error.
+- **Verification no longer reports success it did not earn.** The
+  external-library scan could print PASS without inspecting anything — an
+  unmatched `libs/*.dylib` glob vanishes under `NULL_GLOB`, and an absent
+  `otool` left the result empty via `|| true`. It now counts what it inspected
+  and fails when that count is too low or when `otool` returns nothing. `bc`
+  and `otool` joined the startup tool probe, having gated three of the five
+  verification checks while undeclared. And `VERIFY_PASSED` now gates artifact
+  naming as well as promotion: a build that fails verification keeps its
+  internal `build/` copy for diagnosis but does not get a release-named DMG.
+
 ## v101.0-b2026.08.1 (2026-08-24) — Current Release
 
 MKVToolNix 101.0 "Time To Turn" — Apple Silicon (arm64) and Intel (x86_64).

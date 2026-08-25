@@ -76,6 +76,8 @@ After the build produces a `.app` bundle, `build-local.sh` runs:
 - Size sanity check (60–95 MB) against a known-good baseline
 - Homebrew library leak detection via `otool -L` (catches `/opt/homebrew` or `/usr/local/opt` references that would crash on user machines)
 
+Each of these fails closed. A check that cannot run — no binaries located, no `otool` output — reports a failure rather than a pass, because "not inspected" is not the same as "clean". A build that fails any of them is refused promotion and does not get a release-named DMG.
+
 These don't prove the binary is malware-free, but they do catch a wide range of build-environment issues that have actually happened in this repo's history (see PATCHES.md).
 
 ### 6. Proven cache integrity
