@@ -4,7 +4,8 @@
 
 | Flag | Purpose | Who | Build time | Requires |
 |------|---------|-----|-----------|----------|
-| *(default)* | Auto-detect: use cache if available, otherwise full build | Anyone | 15 min (cached) / 1-3 hrs (full) | Tag |
+| *(default)* | Validate the cache against the tag, then restore it; full build if the cache is absent | Anyone | 15 min (cached) / 1-3 hrs (full) | Tag |
+| `tools/refresh-deps.sh` | Rebuild only the dependencies that no longer match the tag | Anyone | minutes to hours, depending on which | Tag |
 | `--restore-cache` | Pull pre-built deps from LFS to local cache | Anyone | ~2 min | Nothing |
 | `--full` | Rebuild all dependencies from source | Anyone | 1-3 hours | Tag |
 | `--promote` | Archive verified build to LFS | Maintainer | ~1 min | Verified build |
@@ -183,6 +184,37 @@ flowchart TD
     style D fill:#fff3e0,stroke:#ff9800,stroke-width:2px,color:#000
     style E fill:#f5f5f5,stroke:#9e9e9e,stroke-width:2px,color:#000
 ```
+
+## When the cache no longer matches the tag
+
+Each cached dependency carries a `.manifest.json` recording the source tarball it was built
+from, taken from that release's `specs.sh`. Before restoring anything, a build compares those
+records against the tag it is building.
+
+A version bump was always caught, because the version is part of the cache filename and the file
+simply goes missing. What the manifest adds is the case the filename cannot express: **same
+version, different content** — a source tarball that hashes differently, or a package promoted by
+something other than a release build.
+
+On a mismatch the build names the offending packages and stops. It does not fall back to a full
+rebuild, because a cache that contradicts the tag is a question for a person rather than
+something to paper over with three hours of compiling.
+
+```sh
+./tools/refresh-deps.sh release-XX.0 --dry-run   # what drifted, and why
+./tools/refresh-deps.sh release-XX.0             # rebuild only those
+./build-local.sh release-XX.0                    # normal build, ~15 min
+```
+
+`refresh-deps.sh` restores the dependencies that are still current, rebuilds the ones that are
+not — in upstream's own build order — and repromotes just those into the local cache. Everything
+else is left alone. The repo's LFS copy is untouched until you run `--promote` after a verified
+build.
+
+Two fields in the manifest, `configure_args_hash` and `patch_state_hash`, are reported when they
+drift but never refuse. They are approximations: the first is derived from the text of Qt's
+configure arguments and so is blind to compiler, SDK and deployment-target changes, and neither
+exists for dependencies other than Qt. The source hash is the one that decides.
 
 ## Build Numbers
 

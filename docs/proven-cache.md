@@ -7,7 +7,7 @@ The build system caches compiled dependencies so that subsequent builds only nee
 When you run `./build-local.sh release-XX.0`:
 
 1. The workspace (`~/opt/`) is wiped clean (except the cache and source tarballs)
-2. Compiled dependencies are restored from `~/opt/proven/{arch}/`. Each restored package is **SHA256-verified against its `.sha256` sidecar** before being trusted; a mismatch **or a missing sidecar** aborts the build (see [trust-model.md §6](trust-model.md) for context).
+2. Each cached package is checked twice before anything is extracted: its **`.sha256` sidecar** proves the file is intact, and its **`.manifest.json`** proves it was built from the source tarball this release tag declares. A mismatch, a missing sidecar, or a missing manifest aborts the build (see [trust-model.md §6](trust-model.md) for context).
 3. If all dependencies are found, only MKVToolNix is built from source
 4. If any are missing, a full build from source runs automatically
 
@@ -42,6 +42,11 @@ cp ~/opt/packages/*.tar.gz ~/opt/proven/arm/
 # unverifiable, and the restore step refuses it
 (cd ~/opt/proven/arm && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
 ```
+
+This does **not** produce the `.manifest.json` that records which source tarball each package was
+built from, and a manifest cannot honestly be written after the fact — it could only record what
+`specs.sh` says today, not what the package was actually built from. Use `--promote` after a
+verified build, or `./tools/refresh-deps.sh <tag>`; both write real ones.
 
 Future builds will restore from this cache automatically.
 

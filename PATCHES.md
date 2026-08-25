@@ -223,7 +223,11 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 **Proven cache architecture:** Compiled dependency packages are stored in an architecture-specific proven cache (`~/opt/proven/arm/` or `~/opt/proven/intel/`). Each build wipes the workspace (everything under `~/opt/` except `proven/` and `source/`), restores from the proven cache for the current architecture, and only builds what's missing. If all deps are available, only mkvtoolnix is rebuilt (minutes instead of hours). A full rebuild from source is available with `--full`.
 
-**Promotion workflow:** After a successful build and manual testing, `--promote` archives the current proven cache to Git LFS, atomically swaps in the new packages, and commits. Uses directory-swap for atomicity — interruption at any point leaves either old or new proven intact.
+**Promotion workflow:** After a successful build and manual testing, `--promote` archives the current proven cache to Git LFS, atomically swaps in the new packages, and commits. Uses directory-swap for atomicity — interruption at any point leaves either old or new proven intact. Each promoted package gets a `.manifest.json` recording the source tarball it was built from. A smart-restore build legitimately leaves `packages/` incomplete, which promotion reports as a successful no-op when the cache already covers the tag.
+
+**Cache/tag binding:** Restores are refused when a cached package's manifest names a different source tarball than the release tag declares, or when a package has no manifest. `tools/refresh-deps.sh <tag>` rebuilds only the affected dependencies, in upstream's build order, and repromotes those alone.
+
+**Build manifest:** Every DMG in `build/` gets a `<dmg>.manifest.json` recording the dependencies used and their origin (cache or from-source), source hashes, applied patches, bundled dylibs, toolchain, host, timings, and verification results. A maintainer diagnostic — diffing two manifests shows what changed between builds.
 
 **Post-build verification:** Checks Qt version in binary, architecture of all binaries and dylibs, duplicate dylib scan, size sanity (60-95 MB range), Homebrew/external library leak detection, and bundle inventory. Each check fails closed: an absent input (no dylibs found, no `otool` output) is reported as a failure rather than a clean result. If verification does not pass, promotion is blocked **and** the release-named DMG is withheld — only the internal `build/` copy is written, for diagnosis.
 

@@ -1,5 +1,53 @@
 # Changelog
 
+## Cache/tag binding + release build manifests (2026-08-25)
+
+**The build can now tell whether its dependency cache matches the release tag, and
+every DMG records what produced it.** Neither was previously possible.
+
+- **Dependencies carry provenance.** `--promote` writes a `.manifest.json` beside
+  each cached package recording the source tarball it was built from — the SHA256
+  upstream's `specs.sh` declares, which the tag signature already roots in
+  mbunkus's key. Before restoring, a build compares those records against the tag
+  it is building and refuses any package whose recorded source differs, or which
+  has no manifest.
+
+  This closes the case a filename cannot express. A version bump was always caught,
+  because the version is part of the cache filename and the file goes missing.
+  **Same version, different content was not** — a package rebuilt outside the release
+  path occupies the same filename with different contents, and nothing downstream
+  notices. Keeping the experimental tier out of release builds removes one way in;
+  this is the detection that was missing.
+
+  A refusal stops the build rather than falling back to a full rebuild: a cache that
+  contradicts the tag is a question for a person, not something to absorb with three
+  hours of compiling. `configure_args_hash` and `patch_state_hash` are reported when
+  they drift but never refuse — both are approximations, blind to compiler, SDK and
+  deployment-target changes, and neither exists for dependencies other than Qt.
+
+- **`tools/refresh-deps.sh` rebuilds only what drifted.** Given a tag it restores the
+  dependencies that are still current, rebuilds the ones that are not — in upstream's
+  own build order, which the wrapper already follows — and repromotes just those. A
+  single stale dependency costs one recompile instead of fifteen. `--dry-run` reports
+  what it would do. It lives beside `build-exp.sh` rather than inside `build-local.sh`
+  so the release path keeps its all-or-nothing restore and stays simple.
+
+- **Release DMGs get a build manifest.** `build/<dmg>.manifest.json` records the
+  dependencies used and whether each came from the cache or was built from source,
+  their source hashes, the applied patches with their hashes, bundled dylibs, the
+  verified source tarball's hash, toolchain, host, timings, and the verification
+  results. It is a maintainer diagnostic, not a published asset: diffing two manifests
+  shows what changed between builds. Without it, a substituted dependency surfaces
+  only as an unexplained size delta, if it surfaces at all.
+
+  The manifest is parsed before the build reports success — a file that looks like
+  provenance but cannot be read is worse than none.
+
+Together these supersede the "`--full` at every release" rule, which existed because a
+smart restore could silently reuse stale dependencies. It now refuses instead, so `--full`
+returns to meaning what it says: recompile everything from source, for when that is what
+you actually want.
+
 ## Build script hardening: tool portability, cache integrity, verification (2026-08-25)
 
 **Four fixes to `build-local.sh` and `tools/build-exp.sh`.** No change to what

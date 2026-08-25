@@ -91,6 +91,13 @@ How much that check is worth depends on where the sidecar came from, and the two
 
 Both paths populate the local cache with sidecars, so the restore check runs either way; only the strength of what it proves differs.
 
+Alongside each package sits a `.manifest.json` recording the source tarball it was compiled from —
+specifically the SHA256 that upstream's `specs.sh` declares for that dependency, which step 2 has
+already rooted in mbunkus's tag signature. Before restoring, the build compares that record against
+the tag being built and refuses any package whose recorded source differs, or which carries no
+manifest at all. This closes a gap the `.sha256` alone cannot: a sidecar proves a file is the one
+that was cached, not that the thing cached was built from the right source.
+
 ### 7. Build provenance (CI builds only)
 
 CI-built DMGs ship with GitHub-issued build provenance attestations. End users can verify a downloaded DMG was built by this exact workflow from a specific commit:
