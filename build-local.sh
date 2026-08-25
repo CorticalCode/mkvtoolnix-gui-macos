@@ -101,10 +101,6 @@ Options:
   --promote              Archive proven to LFS, replace with current build
   --restore-cache        Pull proven deps from LFS to local cache and clean up
   --cleanup-lfs          Restore proven/ to pointer files and prune LFS cache
-  --stage-experimental   Copy current packages/ into ~/opt/proven-experimental/
-                         (local-only cache used as an overlay on top of proven/,
-                         takes precedence for any dep present in both)
-  --clear-experimental   Remove the experimental cache for this architecture
   --help                 Show this help
 
 Default behavior:
@@ -282,115 +278,39 @@ function run_restore_cache_mode {
 }
 
 function restore_from_proven {
+  # Release builds read the proven cache only. The experimental tier is owned by
+  # tools/build-exp.sh, which both populates and consumes it; a release artifact
+  # must be reproducible from what the repository ships in proven/.
   local proven_dir="${TARGET}/proven/${ARCH_LABEL}"
-  local experimental_dir="${TARGET}/proven-experimental/${ARCH_LABEL}"
   local restored=0
   local missing=()
   local pkg pkg_file
 
-  if [[ -d "${experimental_dir}" ]]; then
-    echo "==> Restoring from proven cache (with experimental overlay)..."
-  else
-    echo "==> Restoring from proven cache..."
-  fi
+  echo "==> Restoring from proven cache..."
 
-  # First pass: confirm every expected package is available in at least one cache
-  for pkg in "${EXPECTED_PACKAGES[@]}"; do
-    if [[ ! -f "${experimental_dir}/${pkg}.tar.gz" ]] && [[ ! -f "${proven_dir}/${pkg}.tar.gz" ]]; then
+  # First pass: confirm every expected package is present before extracting any
+  for pkg in "${EXPECTED_PACKAGES[@]}" docbook-xsl; do
+    if [[ ! -f "${proven_dir}/${pkg}.tar.gz" ]]; then
       echo "    Missing: ${pkg}"
       missing+=("${pkg}")
     fi
   done
-
-  if [[ ! -f "${experimental_dir}/docbook-xsl.tar.gz" ]] && [[ ! -f "${proven_dir}/docbook-xsl.tar.gz" ]]; then
-    echo "    Missing: docbook-xsl"
-    missing+=("docbook-xsl")
-  fi
 
   if [[ ${#missing[@]} -gt 0 ]]; then
     echo "==> Restored ${restored} packages. Missing: ${#missing[@]}."
     return 1
   fi
 
-  # Restore pass: experimental takes precedence over proven for any package present in both
-  for pkg in "${EXPECTED_PACKAGES[@]}"; do
-    if [[ -f "${experimental_dir}/${pkg}.tar.gz" ]]; then
-      pkg_file="${experimental_dir}/${pkg}.tar.gz"
-      echo "    Restoring ${pkg} (experimental)..."
-    else
-      pkg_file="${proven_dir}/${pkg}.tar.gz"
-      echo "    Restoring ${pkg}..."
-    fi
+  for pkg in "${EXPECTED_PACKAGES[@]}" docbook-xsl; do
+    pkg_file="${proven_dir}/${pkg}.tar.gz"
+    echo "    Restoring ${pkg}..."
     verify_pkg_sha256 "${pkg_file}" || return 1
     (cd "${TARGET}" && tar xzf "${pkg_file}")
     restored=$((restored + 1))
   done
 
-  if [[ -f "${experimental_dir}/docbook-xsl.tar.gz" ]]; then
-    echo "    Restoring docbook-xsl (experimental)..."
-    verify_pkg_sha256 "${experimental_dir}/docbook-xsl.tar.gz" || return 1
-    (cd "${TARGET}" && tar xzf "${experimental_dir}/docbook-xsl.tar.gz")
-  else
-    echo "    Restoring docbook-xsl..."
-    verify_pkg_sha256 "${proven_dir}/docbook-xsl.tar.gz" || return 1
-    (cd "${TARGET}" && tar xzf "${proven_dir}/docbook-xsl.tar.gz")
-  fi
-  restored=$((restored + 1))
-
   echo "==> Restored ${restored} packages. Missing: 0."
   return 0
-}
-
-function do_stage_experimental {
-  local experimental_dir="${TARGET}/proven-experimental/${ARCH_LABEL}"
-  local proven_dir="${TARGET}/proven/${ARCH_LABEL}"
-  local packages_dir="${TARGET}/packages"
-  local pkg_files=("${packages_dir}"/*.tar.gz)
-  local pkg_file name
-  local staged=0 skipped=0
-
-  if [[ ! -d "${packages_dir}" ]] || [[ ${#pkg_files[@]} -eq 0 ]]; then
-    echo "ERROR: No packages found in ${packages_dir}."
-    echo "       Run a build first, then --stage-experimental."
-    exit 1
-  fi
-
-  echo "==> Staging experimental cache for ${ARCH_LABEL}..."
-  mkdir -p "${experimental_dir}"
-
-  # Skip any package whose filename already exists in proven/ — the overlay
-  # falls back to proven for anything missing from experimental, so
-  # duplicating those is wasted disk.
-  for pkg_file in "${pkg_files[@]}"; do
-    name="${pkg_file:t}"
-    if [[ -f "${proven_dir}/${name}" ]]; then
-      echo "    Skipping ${name} (already in proven)"
-      skipped=$((skipped + 1))
-    else
-      command cp "${pkg_file}" "${experimental_dir}/"
-      echo "    Staged ${name}"
-      staged=$((staged + 1))
-    fi
-  done
-
-  echo "==> Staged ${staged} new package(s), skipped ${skipped} already in proven."
-  if [[ ${staged} -gt 0 ]]; then
-    echo "    Subsequent builds on this machine will use these instead of proven."
-    echo "    Run --clear-experimental to revert to proven only."
-  fi
-}
-
-function do_clear_experimental {
-  local experimental_dir="${TARGET}/proven-experimental/${ARCH_LABEL}"
-
-  if [[ ! -d "${experimental_dir}" ]]; then
-    echo "==> No experimental cache for ${ARCH_LABEL}."
-    return 0
-  fi
-
-  echo "==> Clearing experimental cache for ${ARCH_LABEL}..."
-  command rm -rf "${experimental_dir}"
-  echo "==> Cleared. Future builds use proven cache only."
 }
 
 function do_promote {
@@ -418,16 +338,27 @@ function do_promote {
     exit 1
   fi
 
-  # Precondition: packages must contain all expected deps + docbook-xsl
-  for pkg in "${EXPECTED_PACKAGES[@]}"; do
+  # Precondition: packages must contain all expected deps + docbook-xsl.
+  # A smart-restore build only rebuilds mkvtoolnix, so packages/ is incomplete
+  # by design. That is not a failure when the proven cache already holds every
+  # package this tag expects — there is simply nothing new to archive.
+  local -a absent_from_proven=()
+  for pkg in "${EXPECTED_PACKAGES[@]}" docbook-xsl; do
     [[ -f "${packages_dir}/${pkg}.tar.gz" ]] || missing_pkgs+=("${pkg}")
+    [[ -f "${proven_dir}/${pkg}.tar.gz" ]]   || absent_from_proven+=("${pkg}")
   done
-  [[ -f "${packages_dir}/docbook-xsl.tar.gz" ]] || missing_pkgs+=("docbook-xsl")
   if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
+    if [[ ${#absent_from_proven[@]} -eq 0 ]]; then
+      echo "==> Nothing to promote — the proven cache already holds every package"
+      echo "    this tag expects, and this build rebuilt only mkvtoolnix."
+      echo "    Dependencies are unchanged; the cache stands as-is."
+      return 0
+    fi
     echo "ERROR: Cannot promote — packages/ is incomplete (${#missing_pkgs[@]} missing)."
-    echo "  Missing: ${missing_pkgs[*]}"
-    echo "  This can happen after a smart-restore build (only mkvtoolnix was rebuilt)."
-    echo "  Run a --full build first, then promote."
+    echo "  Missing from packages/: ${missing_pkgs[*]}"
+    echo "  Missing from proven/:   ${absent_from_proven[*]}"
+    echo "  A smart-restore build rebuilds only mkvtoolnix, and the proven cache"
+    echo "  cannot cover the gap. Run a --full build first, then promote."
     exit 1
   fi
 
@@ -515,8 +446,6 @@ while [[ -n $1 ]]; do
     --promote)             BUILD_MODE="promote" ;;
     --restore-cache)       BUILD_MODE="restore-cache" ;;
     --cleanup-lfs)         BUILD_MODE="cleanup-lfs" ;;
-    --stage-experimental)  BUILD_MODE="stage-experimental" ;;
-    --clear-experimental)  BUILD_MODE="clear-experimental" ;;
     --help|-h)             usage ;;
     -*)           echo "Unknown option: $1"; usage ;;
     *)            TAG="$1" ;;
@@ -528,17 +457,6 @@ done
 if [[ "${BUILD_MODE}" == "cleanup-lfs" ]]; then
   run_cleanup_lfs_mode
   exit 0
-fi
-
-# Handle experimental cache ops early (no tag, clone, or specs needed)
-if [[ "${BUILD_MODE}" == "stage-experimental" ]]; then
-  do_stage_experimental
-  exit $?
-fi
-
-if [[ "${BUILD_MODE}" == "clear-experimental" ]]; then
-  do_clear_experimental
-  exit $?
 fi
 
 # Handle --restore-cache early (no tag, clone, or specs needed)

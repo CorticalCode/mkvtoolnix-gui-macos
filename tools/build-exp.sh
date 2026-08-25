@@ -85,12 +85,16 @@ Options:
                            cache (with a provenance manifest sidecar) for
                            future runs. Use this once when (re)populating
                            the cache; omit it for measurement runs.
+  --clear-cache            Remove the experimental dep cache for this
+                           architecture and exit. Takes no source path.
+                           The proven cache is untouched.
   --help, -h               Show this help.
 USAGE
 }
 
 # --- Arg parsing ---
 SRC=""
+CLEAR_CACHE=0
 SLUG=""
 VERIFY_SYMBOL=""
 REBUILD_DEPS=0
@@ -106,6 +110,9 @@ while [[ -n $1 ]]; do
       ;;
     --rebuild-deps)
       REBUILD_DEPS=1
+      ;;
+    --clear-cache)
+      CLEAR_CACHE=1
       ;;
     --help|-h)
       usage
@@ -127,6 +134,27 @@ while [[ -n $1 ]]; do
   esac
   shift
 done
+
+# --clear-cache is a cache-management op: no source tree, no build. This script
+# owns the experimental tier — it is the only thing that writes to it, so it is
+# also what empties it.
+if [[ ${CLEAR_CACHE} -eq 1 ]]; then
+  _machine=$(command uname -m)
+  case "${_machine}" in
+    arm64)  _arch_label="arm" ;;
+    x86_64) _arch_label="intel" ;;
+    *)      _arch_label="${_machine}" ;;
+  esac
+  _exp_dir="${TARGET:-${HOME}/opt}/proven-experimental/${_arch_label}"
+  if [[ -d "${_exp_dir}" ]]; then
+    echo "==> Clearing experimental cache for ${_arch_label}..."
+    command rm -rf "${_exp_dir}"
+    echo "==> Cleared. Future builds use the proven cache only."
+  else
+    echo "==> No experimental cache for ${_arch_label}."
+  fi
+  exit 0
+fi
 
 if [[ -z "${SRC}" ]]; then
   echo "ERROR: source path required" >&2
