@@ -89,40 +89,43 @@ jobs:
       - name: Restore deps from LFS proven cache
         if: steps.dep-cache.outputs.cache-hit != 'true'
         run: |
-          ARCH_LABEL="arm"
-          if [[ -d "proven/${ARCH_LABEL}" ]]; then
-            echo "Pulling proven cache from LFS for ${ARCH_LABEL}..."
-            git lfs pull --include="proven/${ARCH_LABEL}/" --exclude=""
-            if ls proven/${ARCH_LABEL}/*.tar.gz &>/dev/null; then
-              mkdir -p ~/opt/proven/${ARCH_LABEL}
-              cp proven/${ARCH_LABEL}/*.tar.gz ~/opt/proven/${ARCH_LABEL}/
-              echo "Restored $(ls proven/${ARCH_LABEL}/*.tar.gz | wc -l) packages."
-              # Clean up working copy to save runner disk space. rm first: the clean
-              # filter maps the binaries back to their committed pointers, so a bare
-              # checkout would be a no-op and leave the full files in place.
-              rm -f proven/${ARCH_LABEL}/*.tar.gz
-              GIT_LFS_SKIP_SMUDGE=1 git checkout -- "proven/${ARCH_LABEL}/"
-              git lfs prune
-            else
-              echo "No LFS proven cache available, will build from source."
-            fi
-          else
-            echo "No proven directory for ${ARCH_LABEL}, will build from source."
-          fi
+          # --restore-cache pulls the LFS objects, copies each package together
+          # with its .sha256 and .manifest.json, checks every package has both,
+          # and returns the working copy to pointers. Reusing it keeps this in
+          # step with the script rather than duplicating the layout here.
+          #
+          # Not fatal: a cache that cannot be populated leaves the local cache
+          # absent, and the build then compiles the dependencies from source.
+          ./build-local.sh --restore-cache \
+            || echo "Proven cache unavailable; dependencies will be built from source."
 
       - name: Build MKVToolNix
         run: ./build-local.sh "${TAG}"
         timeout-minutes: 180
 
-      - name: Rename DMG for release
+      - name: Stage the release DMG
         run: |
-          mv ~/tmp/compile/MKVToolNix-${VERSION}.dmg \
-             ~/tmp/compile/MKVToolNix-${VERSION}-macos-apple-silicon.dmg
+          # build-local.sh writes release/MKVToolNix-<ver>-macos-<arch>.dmg only
+          # on main and only when post-build verification passed, so the file's
+          # existence is the gate. Reading it here rather than reconstructing a
+          # path under ~/tmp/compile also survives upstream renaming its own DMG,
+          # which it last did at release-99.0.
+          SRC="release/MKVToolNix-${VERSION}-macos-arm.dmg"
+          if [[ ! -f "${SRC}" ]]; then
+            echo "::error::${SRC} not found — the build did not pass verification."
+            exit 1
+          fi
+          DEST="release/MKVToolNix-${VERSION}-macos-apple-silicon.dmg"
+          cp "${SRC}" "${DEST}"
+          # Regenerate rather than copy: the .sha256 names the file it describes,
+          # and the release notes tell people to run `shasum -c` against it.
+          ( cd release && shasum -a 256 "${DEST##*/}" > "${DEST##*/}.sha256" )
+          echo "Staged ${DEST}"
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373  # v4.1.1
         with:
-          subject-path: ~/tmp/compile/MKVToolNix-${{ env.VERSION }}-macos-apple-silicon.dmg
+          subject-path: release/MKVToolNix-${{ env.VERSION }}-macos-apple-silicon.dmg
 
       - name: Determine CalVer tag
         id: calver
@@ -132,9 +135,13 @@ jobs:
           YEAR=$(date +%Y)
           MONTH=$(date +%m)
           # Find highest existing sequence number for this version+month
+          # sed, not `grep -oP`: this job runs on macOS, whose BSD grep has no
+          # -P and errors out, which silently left SEQ empty and every CI release
+          # at sequence 1. Dots in the version are escaped so they match literally.
+          VER_RE="${VERSION//./\\.}"
           SEQ=$(gh release list --repo "${{ github.repository }}" --limit 50 \
-            | grep -oP "v${VERSION}-b${YEAR}\.${MONTH}\.\K[0-9]+" \
-            | sort -rn | head -1 || echo "0")
+            | sed -nE "s/.*v${VER_RE}-b${YEAR}\.${MONTH}\.([0-9]+).*/\1/p" \
+            | sort -rn | head -1)
           SEQ=$((${SEQ:-0} + 1))
           TAG_NAME="v${VERSION}-b${YEAR}.${MONTH}.${SEQ}"
           echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
@@ -144,6 +151,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Re-check immediately before publishing. check-release ran before a
+          # build that can take up to three hours, and a release published by
+          # hand during that window would otherwise get a duplicate alongside it.
+          # A manual release always wins: this job exists to cover the case where
+          # nobody got to it, not to race someone who did.
+          if gh release list --repo "${{ github.repository }}" --limit 50 \
+               | grep -q "v${VERSION}"; then
+            echo "A release for v${VERSION} was published while this build ran."
+            echo "Leaving it alone — the manually published release stands."
+            exit 0
+          fi
+
           CALVER="${{ steps.calver.outputs.tag_name }}"
           gh release create "${CALVER}" \
             --repo "${{ github.repository }}" \
@@ -184,7 +203,8 @@ jobs:
           [Source](https://codeberg.org/mbunkus/mkvtoolnix/src/tag/${TAG})
           NOTES
           )" \
-            ~/tmp/compile/MKVToolNix-${VERSION}-macos-apple-silicon.dmg
+            release/MKVToolNix-${VERSION}-macos-apple-silicon.dmg \
+            release/MKVToolNix-${VERSION}-macos-apple-silicon.dmg.sha256
 
       - name: Create issue on build failure
         if: failure()
