@@ -26,9 +26,9 @@ _required_tools=(
   # POSIX core (every macOS install)
   awk grep sed find sort tr wc du xargs cat shasum file uname mktemp ls head
   # always present on macOS dev installs
-  date stat rsync perl
+  date rsync perl bc
   # macOS-specific (script is macOS-only by design; fail fast elsewhere)
-  sw_vers sysctl xcrun clang hdiutil codesign strings
+  sw_vers sysctl xcrun clang hdiutil codesign strings otool
 )
 for _t in "${_required_tools[@]}"; do
   if ! command -v "$_t" >/dev/null 2>&1; then
@@ -913,9 +913,24 @@ if [[ -d "${DMG_APP}" ]]; then
   fi
 
   # 5. Homebrew / external library leak detection
+  #
+  # This is the check that caught the v98 DYLD crash, so it must never report a
+  # clean result without having looked. Two ways that could happen, both closed
+  # here: an empty dylib list (NULL_GLOB makes an unmatched glob vanish) and an
+  # otool that produces no output. Either means "not scanned", not "clean".
   leak_found=false
-  for lib in "${DMG_APP}/Contents/MacOS/libs/"*.dylib "${DMG_APP}/Contents/MacOS/"mkvtoolnix-gui; do
-    leaks=$(otool -L "$lib" 2>/dev/null | grep -E "/opt/homebrew|/usr/local/opt" || true)
+  leak_scanned=0
+  local -a leak_targets=("${DMG_APP}/Contents/MacOS/libs/"*.dylib(N) "${DMG_APP}/Contents/MacOS/mkvtoolnix-gui")
+  for lib in "${leak_targets[@]}"; do
+    [[ -e "$lib" ]] || continue
+    otool_out=$(otool -L "$lib" 2>/dev/null || true)
+    if [[ -z "${otool_out}" ]]; then
+      echo "    FAIL: otool produced no output for $(basename $lib) — cannot verify linkage"
+      VERIFY_PASSED=false
+      continue
+    fi
+    leak_scanned=$((leak_scanned + 1))
+    leaks=$(print -r -- "${otool_out}" | grep -E "/opt/homebrew|/usr/local/opt" || true)
     if [[ -n "$leaks" ]]; then
       echo "    FAIL: External library reference in $(basename $lib):"
       echo "$leaks" | while read -r line; do echo "      $line"; done
@@ -923,8 +938,12 @@ if [[ -d "${DMG_APP}" ]]; then
       VERIFY_PASSED=false
     fi
   done
-  if [[ "$leak_found" == false ]]; then
-    echo "    PASS: No Homebrew/external library references"
+  if [[ ${leak_scanned} -lt 2 ]]; then
+    echo "    FAIL: Only ${leak_scanned} binaries scanned for external references"
+    echo "          (expected the bundled dylibs plus mkvtoolnix-gui)"
+    VERIFY_PASSED=false
+  elif [[ "$leak_found" == false ]]; then
+    echo "    PASS: No Homebrew/external library references (${leak_scanned} binaries scanned)"
   fi
 
   # 6. Bundle inventory
@@ -987,23 +1006,33 @@ if [[ -f "${DMG_PATH}" ]]; then
   command cp "${LOG_FILE}" "${LOG_DIR}/${LOG_NAME}"
   (cd "${BUILD_DIR}" && shasum -a 256 "${DMG_NAME}" > "${DMG_NAME}.sha256")
 
-  # Release-ready DMG (no branch suffix) — only emit on main. Other branches
-  # would produce a file that looks releasable but isn't; preventing the copy
-  # removes that footgun.
-  if [[ "${BRANCH}" == "main" ]]; then
+  # Release-ready DMG (no branch suffix). Two conditions gate it, because this
+  # is the only artifact whose name implies it is fit to publish:
+  #   - main only: another branch would produce a file that looks releasable
+  #     and isn't.
+  #   - verification passed: a bundle that failed the arch, size, dupe or leak
+  #     checks must not acquire a release name. The internal build/ copy is
+  #     still written so the failure can be examined.
+  release_emitted=false
+  if [[ "${BRANCH}" == "main" ]] && [[ "${VERIFY_PASSED}" == true ]]; then
     command cp "${DMG_PATH}" "${RELEASE_DIR}/${DMG_RELEASE_NAME}"
     (cd "${RELEASE_DIR}" && shasum -a 256 "${DMG_RELEASE_NAME}" > "${DMG_RELEASE_NAME}.sha256")
+    release_emitted=true
   fi
 
   echo "==> Done!"
   echo "    Build output: ${DMG_PATH}"
   echo "    Internal: ${BUILD_DIR}/${DMG_NAME}"
   echo "    SHA256:   ${BUILD_DIR}/${DMG_NAME}.sha256"
-  if [[ "${BRANCH}" == "main" ]]; then
+  if [[ "${release_emitted}" == true ]]; then
     echo "    Release:  ${RELEASE_DIR}/${DMG_RELEASE_NAME}"
     echo "    SHA256:   ${RELEASE_DIR}/${DMG_RELEASE_NAME}.sha256"
-  else
+  elif [[ "${BRANCH}" != "main" ]]; then
     echo "    Release:  (skipped — not on main)"
+  else
+    echo "    Release:  (WITHHELD — post-build verification did not pass)"
+    echo "              Review the FAIL lines above. The internal copy above is"
+    echo "              kept for diagnosis; it must not be published."
   fi
   echo "    Log:      ${LOG_DIR}/${LOG_NAME}"
 else
