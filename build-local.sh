@@ -39,19 +39,6 @@ for _t in "${_required_tools[@]}"; do
 done
 unset _t _required_tools
 
-# --- BSD-find probe ---
-# The script uses BSD-specific `find -perm +111` syntax (line ~872 — see
-# explicit BSD-vs-GNU comment there). GNU find errors out on that flag form.
-# If a user has homebrew gfind first on PATH and it shadows BSD find, this
-# catches it at startup.
-if ! command find /tmp -maxdepth 0 -perm +111 >/dev/null 2>&1; then
-  echo "ERROR: 'find' in PATH appears to be GNU find, not BSD find." >&2
-  echo "       This script uses BSD find flags (e.g. -perm +111)." >&2
-  echo "       Ensure /usr/bin precedes homebrew prefixes in PATH, or" >&2
-  echo "       resolve the conflict (e.g. 'brew unlink findutils')." >&2
-  exit 1
-fi
-
 TRAPZERR() {
   echo "ERROR: build-local.sh failed at ${funcfiletrace[1]:-line ${LINENO}} (exit code $?)" >&2
 }
@@ -949,8 +936,11 @@ if [[ -d "${DMG_APP}" ]]; then
         arch_errors=$((arch_errors + 1))
         VERIFY_PASSED=false
       fi
-    # Note: -perm +111 is BSD find syntax (deprecated but macOS command find doesn't support -perm /111)
-    done < <(command find "${DMG_APP}/Contents/MacOS" \( -name "*.dylib" -o -type f -perm +111 \) -not -type d -print0 2>/dev/null)
+    # -type f selects every regular file, excluding directories and the version
+    # symlinks that alias each dylib; the Mach-O test above is what narrows it
+    # to actual binaries. Nothing here depends on a permission bit, so a file
+    # that is Mach-O without the execute bit is still checked.
+    done < <(command find "${DMG_APP}/Contents/MacOS" -type f -print0 2>/dev/null)
   fi
   if [[ ${arch_checked} -eq 0 ]]; then
     echo "    FAIL: No binaries found to check architecture"
@@ -970,7 +960,10 @@ if [[ -d "${DMG_APP}" ]]; then
   fi
 
   # 4. Size sanity check (decimal MB to match Finder)
-  app_bytes=$(command find "${DMG_APP}" -type f -exec command stat -f '%z' {} + 2>/dev/null | awk '{s+=$1} END {print s}')
+  # Summing the bytes by reading them avoids asking stat for a size, which is
+  # spelled differently on BSD and GNU. Concatenating into wc also sidesteps
+  # parsing filenames out of per-file output.
+  app_bytes=$(command find "${DMG_APP}" -type f -exec cat {} + 2>/dev/null | command wc -c | command tr -d ' ')
   size_mb=$(echo "${app_bytes}" | awk '{printf "%.1f", $1/1000/1000}')
   min_size=60  # MB — below this something is missing
   max_size=95  # MB — above this something is duplicated

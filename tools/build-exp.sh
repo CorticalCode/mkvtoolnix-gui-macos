@@ -46,18 +46,6 @@ for _t in "${_required_tools[@]}"; do
 done
 unset _t _required_tools
 
-# --- BSD-find probe ---
-# The script uses BSD-specific `find -perm +111` syntax. GNU find errors out
-# on that flag form. If the user has homebrew gfind first on PATH and it
-# shadows BSD find, this catches it at startup.
-if ! command find /tmp -maxdepth 0 -perm +111 >/dev/null 2>&1; then
-  echo "ERROR: 'find' in PATH appears to be GNU find, not BSD find." >&2
-  echo "       This script uses BSD find flags (e.g. -perm +111)." >&2
-  echo "       Ensure /usr/bin precedes homebrew prefixes in PATH, or" >&2
-  echo "       resolve the conflict (e.g. 'brew unlink findutils')." >&2
-  exit 1
-fi
-
 TRAPZERR() {
   echo "ERROR: build-exp.sh failed at ${funcfiletrace[1]:-line ${LINENO}} (exit code $?)" >&2
 }
@@ -928,7 +916,10 @@ while IFS= read -r -d '' b; do
     echo "    FAIL: wrong arch in ${b:t}"
     arch_errors=$((arch_errors + 1))
   fi
-done < <(command find "${APP_BUNDLE}/Contents/MacOS" \( -name "*.dylib" -o -type f -perm +111 \) -not -type d -print0 2>/dev/null)
+# -type f selects every regular file, excluding directories and the version
+# symlinks that alias each dylib; the Mach-O test above narrows it to actual
+# binaries, so no permission bit is consulted.
+done < <(command find "${APP_BUNDLE}/Contents/MacOS" -type f -print0 2>/dev/null)
 if [[ ${arch_errors} -eq 0 ]] && [[ ${arch_checked} -gt 0 ]]; then
   echo "    PASS: all ${arch_checked} binaries/dylibs are ${MACHINE_ARCH}"
 elif [[ ${arch_errors} -gt 0 ]]; then
@@ -936,7 +927,9 @@ elif [[ ${arch_errors} -gt 0 ]]; then
 fi
 
 # 2. Size sanity (fork builds may differ from production, so wider range)
-app_bytes=$(command find "${APP_BUNDLE}" -type f -exec command stat -f '%z' {} + 2>/dev/null | awk '{s+=$1} END {print s}')
+# Summing bytes by reading them avoids asking stat for a size, which is spelled
+# differently on BSD and GNU.
+app_bytes=$(command find "${APP_BUNDLE}" -type f -exec cat {} + 2>/dev/null | command wc -c | command tr -d ' ')
 size_mb=$(echo "${app_bytes:-0}" | awk '{printf "%.1f", $1/1000/1000}')
 if (( $(echo "${size_mb} < 50" | bc -l) )) || (( $(echo "${size_mb} > 150" | bc -l) )); then
   echo "    WARN: App size ${size_mb} MB outside typical 50-150 MB range"
@@ -1089,7 +1082,7 @@ for d in "${DEPS_JSON_PARTS[@]}"; do
 done
 _DEPS_JSON+="]"
 
-_dmg_size_bytes=$(command stat -f %z "${DMG_FINAL_PATH}")
+_dmg_size_bytes=$(command wc -c < "${DMG_FINAL_PATH}" | command tr -d ' ')
 _dmg_sha=$(command shasum -a 256 "${DMG_FINAL_PATH}" | command awk '{print $1}')
 _app_kb=$(command du -sk "${APP_BUNDLE}" | command awk '{print $1}')
 _app_bytes=$(( _app_kb * 1024 ))
