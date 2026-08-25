@@ -145,6 +145,277 @@ function verify_pkg_sha256 {
   fi
 }
 
+# --- Manifest helpers ---
+# Ported from tools/build-exp.sh, which has written provenance manifests for
+# experimental builds since 2026-05-06. Duplicated rather than sourced: the two
+# scripts stay self-contained by design, same as the tool probe above.
+
+# JSON string escaper. Handles backslash, quote, newline, tab, CR.
+#
+# Replacement strings use `\\<char>` (2-char sequence) not `\\\<char>` (3-char).
+# Both forms produce syntactically valid JSON, but they round-trip differently:
+#
+#   Form `\\n`  : real newline → JSON `\n` (2 bytes 5c 6e) → parses back to NL
+#   Form `\\\n` : real newline → JSON `\\n` (3 bytes 5c 5c 6e) → parses back
+#                to literal "\n" (backslash + letter), losing the control char
+#
+# `python3 -m json.tool` accepts both. Correctness requires a full
+# `json.loads()` round-trip, not just a JSON-syntax check.
+_json_str() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '"%s"' "$s"
+}
+
+# ISO 8601 UTC "Z" timestamp.
+_iso_utc() { command date -u +"%Y-%m-%dT%H:%M:%SZ"; }
+
+# Non-identifying host info as a single-line JSON object.
+_host_json() {
+  local cpu_brand arch cores ram_bytes ram_gb macos clang_ver sdk_ver
+  cpu_brand=$(command sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "unknown")
+  arch=$(command uname -m)
+  cores=$(command sysctl -n hw.physicalcpu 2>/dev/null || echo 0)
+  ram_bytes=$(command sysctl -n hw.memsize 2>/dev/null || echo 0)
+  ram_gb=$(( ram_bytes / 1073741824 ))
+  macos=$(command sw_vers -productVersion 2>/dev/null || echo "unknown")
+  clang_ver=$(command clang --version 2>/dev/null | command head -1 | command sed -E 's/.*version ([0-9.]+).*/\1/')
+  [[ -z "$clang_ver" ]] && clang_ver="unknown"
+  sdk_ver=$(command xcrun --show-sdk-version 2>/dev/null || echo "unknown")
+  printf '{"cpu_brand":%s,"arch":%s,"cores_total":%d,"ram_gb":%d,"macos_version":%s,"clang_version":%s,"sdk_version":%s}' \
+    "$(_json_str "$cpu_brand")" "$(_json_str "$arch")" "$cores" "$ram_gb" \
+    "$(_json_str "$macos")" "$(_json_str "$clang_ver")" "$(_json_str "$sdk_ver")"
+}
+
+# 12-char hash of the staged build_qt configure args (only the lines inside
+# the `args=(...)` array assignment in build_qt). Whitespace-normalized then
+# sorted, so reformatting indent or line order doesn't perturb the hash.
+#
+# Source-level (not closure-level): variable references like ${TARGET} are
+# hashed literally; their RUNTIME values aren't part of this fingerprint.
+# That means MACOSX_DEPLOYMENT_TARGET, compiler version, SDK version are
+# NOT captured here.
+#
+# Earlier versions captured everything in build_qt that started with `-`,
+# which included `time $DEBUG cmake --build .` and `--parallel
+# $DRAKETHREADS` from the cmake invocation — unstable and not actually
+# configure args.
+_qt_args_hash() {
+  local build_sh="$1"
+  command awk '
+    /^function build_qt/ { in_qt = 1 }
+    in_qt && /^[[:space:]]*args=\(/ { in_args = 1; next }
+    in_args && /^[[:space:]]*\)/ { in_args = 0; in_qt = 0; next }
+    in_args { print }
+  ' "$build_sh" \
+    | command sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
+    | command grep -v '^$' \
+    | command sort \
+    | command shasum -a 256 \
+    | command awk '{print substr($1, 1, 12)}'
+}
+
+# 12-char hash of patches relevant to this dep. For Qt, hashes the contents
+# of patches/qt-patches/*.patch (concatenated in sorted order so filename
+# order is deterministic). For other deps, returns "none" — there are no
+# per-dep patches outside Qt currently. Returns "none" if no patches apply.
+#
+# This complements _qt_args_hash to give a more complete cache identity:
+# args_hash captures the configure-args structure; patch_state_hash
+# captures the source-modification state. Restore-time validation can
+# refuse caches whose patch_state_hash doesn't match current state.
+_patch_state_hash() {
+  local spec_name="$1"
+  case "$spec_name" in
+    qt)
+      local patches_dir="${SCRIPT_DIR}/patches/qt-patches"
+      if [[ -d "$patches_dir" ]]; then
+        local files
+        files=$(command find "$patches_dir" -name '*.patch' -type f 2>/dev/null | command sort)
+        if [[ -n "$files" ]]; then
+          # No `2>/dev/null` here: loud failure is preferable. The original
+          # implementation used `/usr/bin/cat` (which does not exist on
+          # macOS — cat is at /bin/cat) plus `2>/dev/null`, producing the
+          # empty-input SHA-256 prefix `e3b0c44298fc...` for every patch set
+          # and masking patch-state changes (commit 37683b1 fixed it).
+          # Subsequent portability pass replaced absolute paths with
+          # `command <tool>` to remove the path-drift bug class entirely.
+          print "$files" | command xargs command cat \
+            | command shasum -a 256 \
+            | command awk '{print substr($1, 1, 12)}'
+          return
+        fi
+      fi
+      print "none"
+      ;;
+    *)
+      # No per-dep patches outside Qt currently. If you add patch directories
+      # for other deps, extend this case statement.
+      print "none"
+      ;;
+  esac
+}
+
+# Reads a single field from a manifest sidecar via grep+sed. Returns empty
+# if the field is missing.
+_manifest_field() {
+  local sidecar="$1" field="$2"
+  command grep -oE "\"${field}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$sidecar" 2>/dev/null \
+    | command sed -E 's/.*"([^"]*)"$/\1/'
+}
+_manifest_int_field() {
+  local sidecar="$1" field="$2"
+  command grep -oE "\"${field}\"[[:space:]]*:[[:space:]]*[0-9]+" "$sidecar" 2>/dev/null \
+    | command awk '{print $NF}'
+}
+
+# Index of a package in the parallel spec arrays; returns 1 if absent.
+_spec_index_for_package() {
+  local want="$1" i
+  [[ ${#EXPECTED_PACKAGES[@]} -eq 0 ]] && return 1
+  for i in {1..${#EXPECTED_PACKAGES[@]}}; do
+    if [[ "${EXPECTED_PACKAGES[$i]}" == "${want}" ]]; then
+      print "$i"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Writes a provenance manifest beside a promoted package. The schema mirrors the
+# dep_cache manifests tools/build-exp.sh writes so one reader handles both; what
+# differs is the kind and the tool that produced it. dylib_count is deliberately
+# not recorded — in the experimental writer it counts ${TARGET}/lib rather than
+# the tarball, which is not what the field name suggests.
+_write_proven_manifest() {
+  local spec_name="$1" package="$2" tarball="$3" source_sha="$4" out="$5"
+  local args_hash="" patch_hash wrapper_branch wrapper_sha
+  # configure_args_hash exists for Qt only: build.sh has no comparable structured
+  # args list for the other deps, and recording Qt's hash for zlib would misstate
+  # zlib's identity. Empty means "no fingerprint", not "no drift".
+  if [[ "${spec_name}" == "qt" && -f "${CLONE_DIR}/packaging/macos/build.sh" ]]; then
+    args_hash=$(_qt_args_hash "${CLONE_DIR}/packaging/macos/build.sh")
+  fi
+  patch_hash=$(_patch_state_hash "${spec_name}")
+  wrapper_branch=$(git -C "${SCRIPT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  wrapper_sha=$(git -C "${SCRIPT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  cat > "${out}" <<EOF
+{
+  "schema_version": 1,
+  "kind": "proven_cache",
+  "spec_name": $(_json_str "${spec_name}"),
+  "package": $(_json_str "${package}"),
+  "spec_tarball": $(_json_str "${tarball}"),
+  "source_sha256": $(_json_str "${source_sha}"),
+  "configure_args_hash": $(_json_str "${args_hash}"),
+  "patch_state_hash": $(_json_str "${patch_hash}"),
+  "built_at": $(_json_str "$(_iso_utc)"),
+  "built_by": {
+    "tool": "build-local.sh",
+    "upstream_tag": $(_json_str "${TAG}"),
+    "wrapper_branch": $(_json_str "${wrapper_branch}"),
+    "wrapper_sha": $(_json_str "${wrapper_sha}")
+  },
+  "host": $(_host_json)
+}
+EOF
+}
+
+# Emit a manifest beside every package in a cache directory.
+_write_cache_manifests() {
+  local dir="$1" f pkg idx
+  for f in "${dir}"/*.tar.gz(N); do
+    pkg="${f:t:r:r}"
+    # docbook-xsl is cached under an unversioned filename and carries no
+    # spec-derived identity, so there is nothing for a manifest to bind to.
+    [[ "${pkg}" == "docbook-xsl" ]] && continue
+    if idx=$(_spec_index_for_package "${pkg}"); then
+      _write_proven_manifest "${EXPECTED_TARGETS[$idx]}" "${pkg}" \
+        "${EXPECTED_TARBALLS[$idx]}" "${EXPECTED_SHAS[$idx]}" "${f}.manifest.json"
+    else
+      echo "    WARNING: ${pkg} is not in this tag's spec set — no manifest written"
+    fi
+  done
+}
+
+# Validates a proven-cache manifest against the tag currently being built.
+# Args:   $1=manifest path, $2=expected spec_name, $3=expected package,
+#         $4=expected source sha256 (empty disables that check)
+# Stdout: one-line human-readable result
+# Exit:   0 valid · 1 refuse (critical mismatch) · 2 advisory drift
+#
+# source_sha256 is the load-bearing check: it is upstream's own declared hash,
+# read from this tag's specs.sh, so it inherits the tag signature's trust root.
+# configure_args_hash and patch_state_hash are advisory only — the first is
+# source-level and blind to CXXFLAGS, deployment target, clang and SDK version,
+# and exists for Qt alone. Neither is strong enough to refuse on.
+_validate_proven_manifest() {
+  local manifest="$1" exp_spec="$2" exp_pkg="$3" exp_src_sha="$4"
+  local schema kind spec pkg src_sha
+
+  if [[ ! -f "${manifest}" ]]; then
+    print "no provenance manifest"
+    return 1
+  fi
+
+  schema=$(_manifest_int_field "${manifest}" "schema_version")
+  kind=$(_manifest_field "${manifest}" "kind")
+  spec=$(_manifest_field "${manifest}" "spec_name")
+  pkg=$(_manifest_field "${manifest}" "package")
+  src_sha=$(_manifest_field "${manifest}" "source_sha256")
+
+  if [[ -z "${schema}" ]]; then
+    print "REFUSE: malformed manifest (no schema_version)"
+    return 1
+  fi
+  if [[ "${schema}" != "1" ]]; then
+    print "REFUSE: schema_version=${schema} (this build-local.sh handles only v1)"
+    return 1
+  fi
+  if [[ "${kind}" != "proven_cache" ]]; then
+    print "REFUSE: kind=${kind:-<none>} (expected proven_cache — not promoted by build-local.sh)"
+    return 1
+  fi
+  if [[ "${spec}" != "${exp_spec}" ]]; then
+    print "REFUSE: spec_name=${spec} (expected ${exp_spec})"
+    return 1
+  fi
+  if [[ "${pkg}" != "${exp_pkg}" ]]; then
+    print "REFUSE: package=${pkg} (expected ${exp_pkg})"
+    return 1
+  fi
+  if [[ -n "${exp_src_sha}" && "${src_sha}" != "${exp_src_sha}" ]]; then
+    print "REFUSE: built from a different source tarball than this tag declares"
+    return 1
+  fi
+
+  local cur_args="" manifest_args cur_patch manifest_patch
+  local -a drift=()
+  if [[ "${exp_spec}" == "qt" && -f "${CLONE_DIR}/packaging/macos/build.sh" ]]; then
+    cur_args=$(_qt_args_hash "${CLONE_DIR}/packaging/macos/build.sh")
+  fi
+  manifest_args=$(_manifest_field "${manifest}" "configure_args_hash")
+  if [[ -n "${cur_args}" && -n "${manifest_args}" && "${cur_args}" != "${manifest_args}" ]]; then
+    drift+=("configure_args:${manifest_args}→${cur_args}")
+  fi
+  cur_patch=$(_patch_state_hash "${exp_spec}")
+  manifest_patch=$(_manifest_field "${manifest}" "patch_state_hash")
+  if [[ -n "${cur_patch}" && -n "${manifest_patch}" && "${cur_patch}" != "${manifest_patch}" ]]; then
+    drift+=("patch_state:${manifest_patch}→${cur_patch}")
+  fi
+
+  if [[ ${#drift[@]} -gt 0 ]]; then
+    print "DRIFT: ${(j:, :)drift}"
+    return 2
+  fi
+  print "ok"
+  return 0
+}
+
 function cleanup_repo_lfs {
   local cleaned=false
   local -a arch_dirs=()
@@ -259,16 +530,34 @@ function run_restore_cache_mode {
   # Copy to local cache. The sidecars travel with the packages: they are the
   # hashes committed to the repo, so a package restored here is checkable
   # against signed history rather than against itself.
-  local -a repo_sidecars=("${repo_proven}"/*.tar.gz.sha256(N))
-  if [[ ${#repo_sidecars[@]} -ne ${#pointer_files[@]} ]]; then
-    echo "ERROR: proven/${ARCH_LABEL}/ holds ${#pointer_files[@]} packages but ${#repo_sidecars[@]} sidecars."
-    echo "  A cache without one hash per package cannot be verified at restore time."
+  # Check per package rather than by count: docbook-xsl legitimately has no
+  # manifest (unversioned filename, no spec-derived identity), so a bare count
+  # comparison would either reject a correct cache or accept an incomplete one.
+  local -a incomplete=()
+  local tgz stem
+  for tgz in "${pointer_files[@]}"; do
+    stem="${tgz:t:r:r}"
+    [[ -f "${tgz}.sha256" ]] || incomplete+=("${stem}: no .sha256")
+    if [[ "${stem}" != "docbook-xsl" ]] && [[ ! -f "${tgz}.manifest.json" ]]; then
+      incomplete+=("${stem}: no .manifest.json")
+    fi
+  done
+  if [[ ${#incomplete[@]} -gt 0 ]]; then
+    echo "ERROR: proven/${ARCH_LABEL}/ is missing sidecars:"
+    for stem in "${incomplete[@]}"; do
+      echo "    ${stem}"
+    done
+    echo "  A package that cannot be verified or attributed will be refused at"
+    echo "  restore time, so populating the cache from it would not help."
     return 1
   fi
+
   mkdir -p "${local_proven}"
   echo "    Copying ${#pointer_files[@]} packages + sidecars to ${local_proven}..."
   command cp "${repo_proven}"/*.tar.gz "${local_proven}/"
-  command cp "${repo_sidecars[@]}" "${local_proven}/"
+  command cp "${repo_proven}"/*.tar.gz.sha256 "${local_proven}/"
+  local -a repo_manifests=("${repo_proven}"/*.tar.gz.manifest.json(N))
+  [[ ${#repo_manifests[@]} -gt 0 ]] && command cp "${repo_manifests[@]}" "${local_proven}/"
 
   # Clean up repo working copy
   cleanup_repo_lfs "${ARCH_LABEL}"
@@ -278,6 +567,9 @@ function run_restore_cache_mode {
 }
 
 function restore_from_proven {
+  # Exit: 0 restored · 1 cache incomplete (caller may demote to a full build)
+  #       2 cache contradicts the tag (caller must stop)
+  #
   # Release builds read the proven cache only. The experimental tier is owned by
   # tools/build-exp.sh, which both populates and consumes it; a release artifact
   # must be reproducible from what the repository ships in proven/.
@@ -301,6 +593,54 @@ function restore_from_proven {
     return 1
   fi
 
+  # Validation pass. Every refusal is collected so one run names every offender
+  # rather than stopping at the first, and nothing is extracted if any refuse.
+  local -a refused=() drifted=()
+  local idx vmsg vrc
+  for pkg in "${EXPECTED_PACKAGES[@]}"; do
+    if ! idx=$(_spec_index_for_package "${pkg}"); then
+      refused+=("${pkg}: not present in this tag's spec set")
+      continue
+    fi
+    # A bare `vmsg=$(...)` would trip errexit on the validator's deliberate
+    # non-zero returns, so capture the status through an if/else.
+    if vmsg=$(_validate_proven_manifest "${proven_dir}/${pkg}.tar.gz.manifest.json" \
+                "${EXPECTED_TARGETS[$idx]}" "${pkg}" "${EXPECTED_SHAS[$idx]}"); then
+      vrc=0
+    else
+      vrc=$?
+    fi
+    case ${vrc} in
+      1) refused+=("${pkg}: ${vmsg}") ;;
+      2) drifted+=("${pkg}: ${vmsg}") ;;
+    esac
+  done
+
+  if [[ ${#refused[@]} -gt 0 ]]; then
+    echo ""
+    echo "ERROR: the proven cache does not match ${TAG}."
+    for pkg in "${refused[@]}"; do
+      echo "    ${pkg}"
+    done
+    echo ""
+    echo "  Nothing was extracted. Rebuild just the affected dependencies:"
+    echo "    ./tools/refresh-deps.sh ${TAG}"
+    echo "  Or rebuild everything from source:"
+    echo "    ./build-local.sh --full ${TAG}"
+    # 2, not 1: an incomplete cache legitimately demotes to a full build, but a
+    # cache that contradicts the tag is a decision for a human, not a fallback.
+    return 2
+  fi
+
+  if [[ ${#drifted[@]} -gt 0 ]]; then
+    echo "    Advisory drift (build continues; these fields are approximations):"
+    for pkg in "${drifted[@]}"; do
+      echo "      ${pkg}"
+    done
+  fi
+
+  # docbook-xsl is restored but not validated: it is cached under an unversioned
+  # filename and carries no spec-derived identity to check against.
   for pkg in "${EXPECTED_PACKAGES[@]}" docbook-xsl; do
     pkg_file="${proven_dir}/${pkg}.tar.gz"
     echo "    Restoring ${pkg}..."
@@ -370,6 +710,11 @@ function do_promote {
     echo "    Archiving current ${ARCH_LABEL} proven to LFS..."
     mkdir -p "${repo_proven}"
     command cp "${proven_dir}"/*.tar.gz "${repo_proven}/"
+    # Copy the outgoing manifests rather than regenerating them: a regenerated
+    # manifest would stamp the current tag's specs onto packages built earlier,
+    # which is provenance the script does not actually have.
+    local -a old_manifests=("${proven_dir}"/*.tar.gz.manifest.json(N))
+    [[ ${#old_manifests[@]} -gt 0 ]] && command cp "${old_manifests[@]}" "${repo_proven}/"
     (cd "${repo_proven}" && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
     (cd "${SCRIPT_DIR}" && git add "proven/${ARCH_LABEL}/"*.tar.gz "proven/${ARCH_LABEL}/"*.sha256 && git diff --cached --quiet || git commit -m "archive: ${ARCH_LABEL} proven deps before promotion $(date +%Y-%m-%d)" -- "proven/${ARCH_LABEL}/")
   fi
@@ -388,6 +733,7 @@ function do_promote {
   # the copy committed to the repo in step 5 is what anchors it for anyone
   # restoring from LFS.
   (cd "${proven_new}" && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
+  _write_cache_manifests "${proven_new}"
 
   # Step 3: Atomic swap — clean up stale old dir first to prevent nesting
   command rm -rf "${TARGET}/proven-${ARCH_LABEL}-old"
@@ -411,10 +757,12 @@ function do_promote {
   for existing in "${repo_proven}"/*.tar.gz; do
     if [[ ! -f "${proven_dir}/${existing:t}" ]]; then
       echo "    Pruning stale proven package: ${existing:t}"
-      command rm -f "${existing}" "${existing}.sha256"
+      command rm -f "${existing}" "${existing}.sha256" "${existing}.manifest.json"
     fi
   done
   command cp "${proven_dir}"/*.tar.gz "${repo_proven}/"
+  local -a new_manifests=("${proven_dir}"/*.tar.gz.manifest.json(N))
+  [[ ${#new_manifests[@]} -gt 0 ]] && command cp "${new_manifests[@]}" "${repo_proven}/"
   (cd "${repo_proven}" && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
   # git add -A so pruned packages are staged as deletions, not just the new adds.
   (cd "${SCRIPT_DIR}" && git add -A "proven/${ARCH_LABEL}/" && git diff --cached --quiet || git commit -m "promote: ${ARCH_LABEL} proven deps $(date +%Y-%m-%d)" -- "proven/${ARCH_LABEL}/")
@@ -709,7 +1057,15 @@ EXPECTED_SPEC_VARS=(
   spec_cmake spec_ogg spec_vorbis spec_flac spec_zlib spec_gettext
   spec_cmark spec_gmp spec_boost spec_qt spec_gpg
 )
+# Four index-parallel arrays. EXPECTED_SPEC_VARS is declared in upstream's own
+# build order (see build.sh's no-argument sequence), which is what lets a
+# partial rebuild pass a filtered target list without modelling dependencies.
+#   PACKAGES  cache filename stem        TARGETS   build.sh's build_<name>
+#   TARBALLS  upstream source filename   SHAS      upstream's declared source hash
 EXPECTED_PACKAGES=()
+EXPECTED_TARGETS=()
+EXPECTED_TARBALLS=()
+EXPECTED_SHAS=()
 for spec_var in "${EXPECTED_SPEC_VARS[@]}"; do
   filename="${${(P)spec_var}[1]}"
   if [[ -z "${filename}" ]]; then
@@ -719,6 +1075,11 @@ for spec_var in "${EXPECTED_SPEC_VARS[@]}"; do
   fi
   pkg="${filename%%.tar.*}"
   EXPECTED_PACKAGES+=("${pkg}")
+  EXPECTED_TARGETS+=("${spec_var#spec_}")
+  EXPECTED_TARBALLS+=("${filename}")
+  # spec arrays are (filename url sha256); index 3 is empty if upstream omits it,
+  # which disables the source-hash check for that dep rather than failing it.
+  EXPECTED_SHAS+=("${${(P)spec_var}[3]:-}")
 done
 # Fix zlib naming (spec has zlib-v1.3.1, package is zlib-1.3.1)
 EXPECTED_PACKAGES=("${EXPECTED_PACKAGES[@]/zlib-v/zlib-}")
@@ -760,6 +1121,15 @@ case "${BUILD_MODE}" in
   auto|"")
     wipe_workspace
     if restore_from_proven; then
+      restore_rc=0
+    else
+      restore_rc=$?
+    fi
+    if [[ ${restore_rc} -eq 2 ]]; then
+      # Refusal, not absence. Demoting to a full build here would paper over a
+      # cache that disagrees with the tag; the message above says what to run.
+      exit 1
+    elif [[ ${restore_rc} -eq 0 ]]; then
       BUILD_SUMMARY="Restored from proven, built mkvtoolnix only"
       echo "==> All dependencies restored from proven. Building mkvtoolnix only..."
       # shared-mime-info produces no cacheable package (NO_CONFIGURE installs the
