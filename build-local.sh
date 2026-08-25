@@ -127,13 +127,16 @@ function is_lfs_pointer_file {
 }
 
 function verify_pkg_sha256 {
-  # Fail-open if no sidecar exists (legacy cache); fail-closed on mismatch.
+  # Fail closed both ways. A package with no sidecar is unverifiable, which is
+  # not the same as verified; every writer into a cache directory emits one.
   local pkg_file="$1"
   local sha_file="${pkg_file}.sha256"
 
   if [[ ! -f "${sha_file}" ]]; then
-    echo "    WARNING: no .sha256 sidecar for ${pkg_file:t} — accepting (legacy cache)"
-    return 0
+    echo "    ERROR: no .sha256 sidecar for ${pkg_file:t}"
+    echo "      A cached package without its hash cannot be verified."
+    echo "      Repopulate the cache: ./build-local.sh --restore-cache"
+    return 1
   fi
 
   if (cd "${pkg_file:h}" && shasum -a 256 -c "${sha_file:t}" >/dev/null 2>&1); then
@@ -257,10 +260,19 @@ function run_restore_cache_mode {
     return 1
   fi
 
-  # Copy to local cache
+  # Copy to local cache. The sidecars travel with the packages: they are the
+  # hashes committed to the repo, so a package restored here is checkable
+  # against signed history rather than against itself.
+  local -a repo_sidecars=("${repo_proven}"/*.tar.gz.sha256(N))
+  if [[ ${#repo_sidecars[@]} -ne ${#pointer_files[@]} ]]; then
+    echo "ERROR: proven/${ARCH_LABEL}/ holds ${#pointer_files[@]} packages but ${#repo_sidecars[@]} sidecars."
+    echo "  A cache without one hash per package cannot be verified at restore time."
+    return 1
+  fi
   mkdir -p "${local_proven}"
-  echo "    Copying ${#pointer_files[@]} packages to ${local_proven}..."
+  echo "    Copying ${#pointer_files[@]} packages + sidecars to ${local_proven}..."
   command cp "${repo_proven}"/*.tar.gz "${local_proven}/"
+  command cp "${repo_sidecars[@]}" "${local_proven}/"
 
   # Clean up repo working copy
   cleanup_repo_lfs "${ARCH_LABEL}"
@@ -440,6 +452,11 @@ function do_promote {
   local proven_new="${TARGET}/proven-${ARCH_LABEL}-new"
   mkdir -p "${proven_new}"
   command cp "${pkg_files[@]}" "${proven_new}/"
+  # A sidecar per package, so restore_from_proven can verify this cache. Here
+  # the hash is generated from the package beside it and catches corruption;
+  # the copy committed to the repo in step 5 is what anchors it for anyone
+  # restoring from LFS.
+  (cd "${proven_new}" && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
 
   # Step 3: Atomic swap — clean up stale old dir first to prevent nesting
   command rm -rf "${TARGET}/proven-${ARCH_LABEL}-old"

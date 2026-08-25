@@ -80,7 +80,14 @@ These don't prove the binary is malware-free, but they do catch a wide range of 
 
 ### 6. Proven cache integrity
 
-When restoring pre-built dependencies from the proven cache (the `--restore-cache` workflow), each tarball is verified against a committed `.sha256` sidecar before extraction. The sidecars are generated and committed by `do_promote` and travel with the cache in Git LFS.
+When restoring pre-built dependencies from the proven cache, each tarball is verified against a `.sha256` sidecar before extraction. A mismatch aborts the build, and so does a missing sidecar — a package whose hash is absent is unverifiable, which is not the same as verified.
+
+How much that check is worth depends on where the sidecar came from, and the two cases differ:
+
+- **On the machine that built the dependencies,** `do_promote` generates each sidecar from the package beside it. The hash and the file share a directory and permissions, so anything able to alter one can alter the other. This is a **corruption** check: truncated copies, interrupted writes, bit rot.
+- **On any machine restoring from Git LFS,** `--restore-cache` copies the sidecars committed alongside the packages. Those hashes live in signed git history, so altering one means rewriting that history. This is an **integrity** check with an anchor.
+
+Both paths populate the local cache with sidecars, so the restore check runs either way; only the strength of what it proves differs.
 
 ### 7. Build provenance (CI builds only)
 

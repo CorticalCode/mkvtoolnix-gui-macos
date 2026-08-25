@@ -7,7 +7,7 @@ The build system caches compiled dependencies so that subsequent builds only nee
 When you run `./build-local.sh release-XX.0`:
 
 1. The workspace (`~/opt/`) is wiped clean (except the cache and source tarballs)
-2. Compiled dependencies are restored from `~/opt/proven/{arch}/`. Each restored package is **SHA256-verified against its `.sha256` sidecar** before being trusted; mismatches abort the build (see [trust-model.md §6](trust-model.md) for context).
+2. Compiled dependencies are restored from `~/opt/proven/{arch}/`. Each restored package is **SHA256-verified against its `.sha256` sidecar** before being trusted; a mismatch **or a missing sidecar** aborts the build (see [trust-model.md §6](trust-model.md) for context).
 3. If all dependencies are found, only MKVToolNix is built from source
 4. If any are missing, a full build from source runs automatically
 
@@ -37,6 +37,10 @@ After a successful `--full` build:
 # Copy the built packages to your local proven cache
 mkdir -p ~/opt/proven/arm    # or ~/opt/proven/intel
 cp ~/opt/packages/*.tar.gz ~/opt/proven/arm/
+
+# Write a .sha256 sidecar beside each one — a package without its hash is
+# unverifiable, and the restore step refuses it
+(cd ~/opt/proven/arm && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
 ```
 
 Future builds will restore from this cache automatically.
