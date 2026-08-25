@@ -4,7 +4,9 @@ Living document tracking every modification made to build MKVToolNix on macOS (A
 
 ## Build status
 
-**v100.0** built and verified (Apple Silicon + Intel). Only dependency change from v99: **Qt 6.11.0 → 6.11.1** (upstream #6277). The single active wrapper patch (**`mkvtoolnix-size-opt`**) still applies cleanly; zero Qt source patches. Full from-source rebuild — all deps + Qt 6.11.1 verified. Proven cache (arm) promoted to v100 deps.
+**v101.0** built and verified (Apple Silicon + Intel). No dependency changes from v100 — upstream's `packaging/macos/specs.sh` is byte-identical between `release-100.0` and `release-101.0`, so Qt stays 6.11.1. The single active wrapper patch (**`mkvtoolnix-size-opt`**) still applies cleanly; zero Qt source patches. Restored from the proven cache; no promotion needed.
+
+v100.0 built and verified (Apple Silicon + Intel). Only dependency change from v99: **Qt 6.11.0 → 6.11.1** (upstream #6277). The single active wrapper patch (**`mkvtoolnix-size-opt`**) still applies cleanly; zero Qt source patches. Full from-source rebuild — all deps + Qt 6.11.1 verified. Proven cache (arm) promoted to v100 deps.
 
 v99.0 built and verified (Apple Silicon). Upstream `release-99.0` merged or superseded **7 of the 8** wrapper patches; only **`mkvtoolnix-size-opt`** (our ThinLTO/`-Os` optimization, no upstream equivalent) remains active, re-added after measuring it against the pure baseline (see "Active patch" + "Size progression"). release-99.0 also adds two macOS build dependencies the wrapper now tracks: `gnupg` (source-signature verification) and `shared-mime-info` (FreeDesktop MIME database, upstream #6248).
 
@@ -27,6 +29,7 @@ Previous release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build proces
 | **v99 rel001 (pure baseline)** | 28.57 MB | 79.15 MB | 6.11.0 | ARM, verified, zero wrapper patches (APFS+ULMO DMG now upstream) |
 | **v99 rel002 (+ LTO/-Os)** | 27.49 MB | 76.50 MB | 6.11.0 | ARM, verified, −1.08 MB DMG / −2.65 MB app vs rel001 |
 | **v100 rel003 (Qt 6.11.1)** | 24.8 MB | 74.8 MB | **6.11.1** | ARM, verified, full rebuild from source; Qt bumped to 6.11.1 |
+| **v101 rel004 (source bump)** | 24.8 MB | 74.9 MB | 6.11.1 | ARM, verified, restored from proven cache; deps unchanged from v100 |
 
 ---
 
