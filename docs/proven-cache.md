@@ -56,7 +56,10 @@ The `--promote` flag is a maintainer operation that archives the proven cache to
 
 ## What's in the cache
 
-15 files per architecture — one `.tar.gz` per dependency:
+16 packages per architecture, one `.tar.gz` per dependency. Each carries a `.sha256`,
+and each except `docbook-xsl` also carries a `.manifest.json` recording the source
+tarball it was built from — `docbook-xsl` is cached under an unversioned filename and
+has no spec-derived identity to record.
 
 | Package | Description |
 |---------|-------------|
@@ -69,6 +72,7 @@ The `--promote` flag is a maintainer operation that archives the proven cache to
 | gmp | Arbitrary precision math |
 | boost | C++ libraries |
 | qt-everywhere-src | Qt 6 framework |
+| gnupg | Verifies the upstream source tarball's signature during the build (99.0+) |
 | docbook-xsl | Documentation stylesheets |
 
 ## Restoring from Git LFS

@@ -182,7 +182,7 @@ This removes me from the trust chain. You're now trusting:
 - mbunkus's GPG key (which `tools/mbunkus-fingerprint.txt` pins, and which you can independently verify against bunkus.org or keys.openpgp.org)
 - Codeberg's git infrastructure
 - Upstream MKVToolNix source code
-- The 14 dependency upstreams
+- Every dependency upstream — currently 17, enumerated in upstream's `packaging/macos/specs.sh`
 - Your own build environment
 
 You're no longer trusting:

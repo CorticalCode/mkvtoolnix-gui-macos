@@ -2,6 +2,22 @@
 
 Helper scripts and trust artifacts for the wrapper build pipeline.
 
+## Scripts
+
+- **`build-exp.sh`** — experimental build entry point. Compiles a source tree you
+  point it at (a worktree, a detached upstream snapshot) and owns the
+  `~/opt/proven-experimental/` dep cache: it fills that cache after building
+  missing deps and empties it with `--clear-cache`. Does not apply wrapper
+  patches, and never writes to `release/`.
+- **`refresh-deps.sh <tag>`** — rebuilds only the cached dependencies whose
+  recorded source no longer matches a release tag, in upstream's build order,
+  and repromotes just those. Run it when `build-local.sh` refuses a cache;
+  `--dry-run` reports what would be rebuilt without building.
+- **`check-upstream-tag-signing.sh`** — see "Periodically validating upstream
+  tag-signing" below.
+- **`backfill-sha256.sh`** — regenerates missing `.sha256` sidecars in the local
+  caches and in `build/` / `release/`. Does not touch the repo's `proven/`.
+
 ## GPG verification of upstream artifacts
 
 `build-local.sh` uses the pinned mbunkus key for two checks before running

@@ -53,14 +53,14 @@ cd mkvtoolnix-gui-macos
 ./build-local.sh release-XX.0
 ```
 
-The DMG will be at `~/tmp/compile/MKVToolNix-XX.0.dmg`. See [docs/proven-cache.md](docs/proven-cache.md) for the cache architecture and `--full` for forced full rebuild.
+The DMG will be at `release/MKVToolNix-XX.0-macos-arm.dmg`, with a build-numbered copy in `build/`. See [docs/proven-cache.md](docs/proven-cache.md) for the cache architecture and `--full` for a forced full rebuild.
 
 ## What this repo contains
 
 - `build-local.sh` — clones upstream, applies patches, runs the build, verifies
 - `config/config.local.sh` — config overlay (ad-hoc signing, optimization flags)
 - `patches/` — fixes for the upstream build scripts ([details](PATCHES.md))
-- `tools/` — pinned mbunkus public key and fingerprint for tarball + tag verification, plus `check-upstream-tag-signing.sh` for periodic validation that upstream is still GPG-signing release tags
+- `tools/` — pinned mbunkus public key and fingerprint for tarball + tag verification, plus helper scripts: `check-upstream-tag-signing.sh` (periodic validation that upstream is still GPG-signing release tags), `refresh-deps.sh` (rebuild only the cached dependencies that no longer match a release tag), and `build-exp.sh` (experimental builds from an arbitrary source tree)
 - `.github/workflows/build.yml` — CI builds and publishes Apple Silicon DMGs
 - `.github/workflows/verify-mbunkus-key.yml` — monthly cross-check of the pinned key against three independent sources
 
