@@ -416,6 +416,120 @@ _validate_proven_manifest() {
   return 0
 }
 
+# Records every expected dep as built from source, for the build manifest. The
+# restore path fills this array itself with per-package cache provenance.
+_record_deps_from_source() {
+  local pkg idx
+  RESTORED_DEPS_JSON=()
+  for pkg in "${EXPECTED_PACKAGES[@]}"; do
+    idx=$(_spec_index_for_package "${pkg}") || continue
+    RESTORED_DEPS_JSON+=("{\"package\":$(_json_str "${pkg}"),\"from\":\"built_from_source\",\"source_sha256\":$(_json_str "${EXPECTED_SHAS[$idx]}")}")
+  done
+  RESTORED_DEPS_JSON+=("{\"package\":\"docbook-xsl\",\"from\":\"built_from_source\",\"source_sha256\":\"\"}")
+}
+
+# Writes a provenance manifest beside the internal DMG in build/. Maintainer
+# diagnostic, not a published artifact: its value is that diffing two manifests
+# shows what changed between builds, where a substituted dependency would
+# otherwise surface only as an unexplained size delta.
+_write_build_manifest() {
+  local out="$1" dmg_path="$2"
+  local dmg_bytes dmg_sha app_bytes_m patches_json libs_json deps_json
+  local wrapper_branch wrapper_sha src_tarball_sha
+
+  dmg_bytes=$(command wc -c < "${dmg_path}" | command tr -d ' ')
+  dmg_sha=$(shasum -a 256 "${dmg_path}" | command awk '{print $1}')
+  app_bytes_m="${app_bytes:-0}"
+  src_tarball_sha=""
+  [[ -f "${TARBALL}" ]] && src_tarball_sha=$(shasum -a 256 "${TARBALL}" | command awk '{print $1}')
+  wrapper_branch=$(git -C "${SCRIPT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  wrapper_sha=$(git -C "${SCRIPT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+  local first=1 f
+  patches_json="["
+  for f in "${SCRIPT_DIR}"/patches/*.patch(N) "${SCRIPT_DIR}"/patches/qt-patches/*.patch(N); do
+    [[ ${first} -eq 1 ]] && first=0 || patches_json+=", "
+    patches_json+="{\"name\":$(_json_str "${f#${SCRIPT_DIR}/}"),\"sha256\":$(_json_str "$(shasum -a 256 "$f" | command awk '{print $1}')")}"
+  done
+  patches_json+="]"
+
+  first=1
+  libs_json="["
+  for f in "${DMG_APP}/Contents/MacOS/libs"/*.dylib(N); do
+    [[ -L "$f" ]] && continue
+    [[ ${first} -eq 1 ]] && first=0 || libs_json+=", "
+    libs_json+="$(_json_str "${f:t}")"
+  done
+  libs_json+="]"
+
+  first=1
+  deps_json="["
+  for f in "${RESTORED_DEPS_JSON[@]}"; do
+    [[ ${first} -eq 1 ]] && first=0 || deps_json+=", "
+    deps_json+="${f}"
+  done
+  deps_json+="]"
+
+  cat > "${out}" <<EOF
+{
+  "schema_version": 1,
+  "kind": "release_build",
+  "dmg": {
+    "filename": $(_json_str "${dmg_path:t}"),
+    "size_bytes": ${dmg_bytes},
+    "sha256": $(_json_str "${dmg_sha}")
+  },
+  "app": {
+    "size_bytes": ${app_bytes_m},
+    "bundle_name": $(_json_str "${APP_BUNDLE_NAME:-unknown}"),
+    "qt_version_in_binary": $(_json_str "${BUILT_QT_VERSION:-unknown}"),
+    "bundled_libs": ${libs_json}
+  },
+  "build_meta": {
+    "upstream_tag": $(_json_str "${TAG}"),
+    "version": $(_json_str "${VERSION}"),
+    "build_label": $(_json_str "${BUILD_LABEL:-unknown}"),
+    "branch": $(_json_str "${BRANCH:-unknown}"),
+    "mode": $(_json_str "${BUILD_MODE}"),
+    "summary": $(_json_str "${BUILD_SUMMARY:-unknown}")
+  },
+  "source": {
+    "wrapper_branch": $(_json_str "${wrapper_branch}"),
+    "wrapper_sha": $(_json_str "${wrapper_sha}"),
+    "tarball_sha256": $(_json_str "${src_tarball_sha}"),
+    "qt_version_expected": $(_json_str "${QTVER:-unknown}")
+  },
+  "patches": ${patches_json},
+  "deps": ${deps_json},
+  "host": $(_host_json),
+  "build_timing": {
+    "started_at": $(_json_str "${BUILD_START_TIME}"),
+    "finished_at": $(_json_str "$(_iso_utc)"),
+    "duration_seconds": ${SECONDS}
+  },
+  "verification": {
+    "passed": $(if [[ "${VERIFY_PASSED}" == true ]]; then print true; else print false; fi),
+    "binaries_checked": ${arch_checked:-0},
+    "arch_errors": ${arch_errors:-0},
+    "app_size_mb": $(_json_str "${size_mb:-unknown}"),
+    "leak_binaries_scanned": ${leak_scanned:-0}
+  }
+}
+EOF
+
+  # A manifest that does not parse is worse than none: it looks like provenance
+  # and cannot be read. _json_str escapes five characters, and git subjects and
+  # CPU brand strings are the realistic sources of anything else.
+  if command -v python3 >/dev/null 2>&1; then
+    if ! python3 -m json.tool "${out}" >/dev/null 2>&1; then
+      echo "    WARNING: build manifest is not valid JSON — removing ${out:t}"
+      command rm -f "${out}"
+      return 1
+    fi
+  fi
+  return 0
+}
+
 function cleanup_repo_lfs {
   local cleaned=false
   local -a arch_dirs=()
@@ -647,6 +761,12 @@ function restore_from_proven {
     verify_pkg_sha256 "${pkg_file}" || return 1
     (cd "${TARGET}" && tar xzf "${pkg_file}")
     restored=$((restored + 1))
+    if [[ "${pkg}" == "docbook-xsl" ]]; then
+      RESTORED_DEPS_JSON+=("{\"package\":$(_json_str "${pkg}"),\"from\":\"proven_cache\",\"source_sha256\":\"\"}")
+    else
+      idx=$(_spec_index_for_package "${pkg}")
+      RESTORED_DEPS_JSON+=("{\"package\":$(_json_str "${pkg}"),\"from\":\"proven_cache\",\"source_sha256\":$(_json_str "${EXPECTED_SHAS[$idx]}")}")
+    fi
   done
 
   echo "==> Restored ${restored} packages. Missing: 0."
@@ -786,6 +906,9 @@ PACKAGE_DIR="${TARGET}/packages"
 BUILD_DIR="${SCRIPT_DIR}/build"
 RELEASE_DIR="${SCRIPT_DIR}/release"
 VERIFY_PASSED=false
+# Per-dependency provenance for the build manifest, filled by whichever path
+# supplied the deps.
+RESTORED_DEPS_JSON=()
 
 # Parse arguments
 while [[ -n $1 ]]; do
@@ -1107,6 +1230,7 @@ case "${BUILD_MODE}" in
     echo "==> Full build (all dependencies + mkvtoolnix from source)..."
     BUILD_SUMMARY="Full build from source"
     wipe_workspace
+    _record_deps_from_source
     ./build.sh
     ;;
   promote)
@@ -1142,6 +1266,7 @@ case "${BUILD_MODE}" in
       BUILD_SUMMARY="No proven cache, full build from source"
       echo "==> Some dependencies missing from proven. Doing full build..."
       echo "    Hint: run './build-local.sh --restore-cache' to pull updated deps from LFS."
+      _record_deps_from_source
       ./build.sh
     fi
     ;;
@@ -1375,6 +1500,9 @@ if [[ -f "${DMG_PATH}" ]]; then
   command cp "${DMG_PATH}" "${BUILD_DIR}/${DMG_NAME}"
   command cp "${LOG_FILE}" "${LOG_DIR}/${LOG_NAME}"
   (cd "${BUILD_DIR}" && shasum -a 256 "${DMG_NAME}" > "${DMG_NAME}.sha256")
+  if _write_build_manifest "${BUILD_DIR}/${DMG_NAME}.manifest.json" "${BUILD_DIR}/${DMG_NAME}"; then
+    MANIFEST_WRITTEN="${BUILD_DIR}/${DMG_NAME}.manifest.json"
+  fi
 
   # Release-ready DMG (no branch suffix). Two conditions gate it, because this
   # is the only artifact whose name implies it is fit to publish:
@@ -1394,6 +1522,7 @@ if [[ -f "${DMG_PATH}" ]]; then
   echo "    Build output: ${DMG_PATH}"
   echo "    Internal: ${BUILD_DIR}/${DMG_NAME}"
   echo "    SHA256:   ${BUILD_DIR}/${DMG_NAME}.sha256"
+  [[ -n "${MANIFEST_WRITTEN}" ]] && echo "    Manifest: ${MANIFEST_WRITTEN}"
   if [[ "${release_emitted}" == true ]]; then
     echo "    Release:  ${RELEASE_DIR}/${DMG_RELEASE_NAME}"
     echo "    SHA256:   ${RELEASE_DIR}/${DMG_RELEASE_NAME}.sha256"
