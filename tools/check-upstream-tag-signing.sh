@@ -11,7 +11,8 @@
 # being used to sign tags before build-local.sh starts trusting it.
 #
 # Usage:
-#   ./tools/check-upstream-tag-signing.sh
+#   ./tools/check-upstream-tag-signing.sh                     # newest 3 release tags
+#   ./tools/check-upstream-tag-signing.sh release-99.0 ...    # a specific set
 #
 # Reads from the same directory the script lives in:
 #   - mbunkus-pubkey.asc
@@ -31,9 +32,11 @@ UPSTREAM_URL="https://codeberg.org/mbunkus/mkvtoolnix.git"
 PUBKEY="${SCRIPT_DIR}/mbunkus-pubkey.asc"
 PINNED_FP_FILE="${SCRIPT_DIR}/mbunkus-fingerprint.txt"
 
-# Tags to check — recent releases plus the one we currently build against.
-# Adjust as needed; checking 3-5 recent tags gives a reasonable sample.
-TAGS_TO_CHECK=(release-100.0 release-99.0 release-98.0)
+# Tags to check. With no arguments the newest few are read from the clone
+# below, so no release number lives in this file; pass tags explicitly to
+# check a specific set. Three recent tags are a reasonable sample.
+TAG_SAMPLE_COUNT=3
+TAGS_TO_CHECK=("$@")
 
 # --- Preconditions ---
 if [[ ! -f "${PUBKEY}" ]] || [[ ! -f "${PINNED_FP_FILE}" ]]; then
@@ -68,6 +71,19 @@ echo "==> Cloning ${UPSTREAM_URL} (shallow, with tags)..."
 if ! git clone --filter=blob:none --no-checkout "${UPSTREAM_URL}" "${CLONE_DIR}" 2>&1 | tail -5; then
     echo "ERROR: Clone failed" >&2
     exit 2
+fi
+
+# Read the sample from the clone that was just made, rather than a second
+# network call. ${(f)...} splits on newlines only; a bare $(...) would split
+# on IFS.
+if [[ ${#TAGS_TO_CHECK[@]} -eq 0 ]]; then
+    TAGS_TO_CHECK=(${(f)"$(git -C "${CLONE_DIR}" tag --list 'release-*' \
+        --sort=-v:refname | head -n ${TAG_SAMPLE_COUNT})"})
+    if [[ ${#TAGS_TO_CHECK[@]} -eq 0 ]]; then
+        echo "ERROR: No release-* tags found in ${UPSTREAM_URL}" >&2
+        exit 2
+    fi
+    echo "==> Newest ${#TAGS_TO_CHECK[@]} release tags: ${TAGS_TO_CHECK[*]}"
 fi
 
 # --- Check each tag ---
