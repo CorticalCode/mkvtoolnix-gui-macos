@@ -44,12 +44,15 @@ If this trust model isn't right for you, build from source (next section) or use
 
 ## Build from source
 
-Requirements: Xcode CLI tools, ~10 GB disk space, 1–3 hours first build.
+Requirements: Xcode CLI tools, **GnuPG** (`brew install gnupg` — the build verifies upstream's
+signed tag and source tarball before compiling anything, and refuses to start without it),
+**Git LFS** (`brew install git-lfs` — only if you want the pre-built dependency cache),
+~10 GB disk space, 1–3 hours first build.
 
 ```sh
 git clone https://github.com/CorticalCode/mkvtoolnix-gui-macos.git
 cd mkvtoolnix-gui-macos
-./build-local.sh --restore-cache    # optional, pulls pre-built deps from LFS
+./build-local.sh --restore-cache    # optional, pulls pre-built deps from LFS (needs git-lfs)
 ./build-local.sh release-XX.0
 ```
 
