@@ -79,7 +79,7 @@ jobs:
           path: |
             ~/opt/packages
             ~/opt/source
-          key: deps-${{ needs.check-release.outputs.version }}-${{ hashFiles('patches/*.patch', 'config/config.local.sh') }}
+          key: deps-${{ needs.check-release.outputs.version }}-${{ hashFiles('patches/*.patch', 'patches/qt-patches/*.patch', 'config/config.local.sh') }}
           restore-keys: |
             deps-${{ needs.check-release.outputs.version }}-
             deps-
