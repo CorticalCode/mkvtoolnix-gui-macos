@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "kind": "proven_cache",
+  "spec_name": "autoconf",
+  "package": "autoconf-2.69",
+  "spec_tarball": "autoconf-2.69.tar.xz",
+  "source_sha256": "64ebcec9f8ac5b2487125a86a7760d2591ac9e1d3dbd59489633f9de62a57684",
+  "configure_args_hash": "",
+  "patch_state_hash": "none",
+  "built_at": "2026-08-26T12:51:41Z",
+  "built_by": {
+    "tool": "build-local.sh",
+    "upstream_tag": "release-101.0",
+    "wrapper_branch": "main",
+    "wrapper_sha": "9bb8570"
+  },
+  "host": {"cpu_brand":"Apple M4 Pro","arch":"arm64","cores_total":14,"ram_gb":64,"macos_version":"26.6.2","clang_version":"21.0.0","sdk_version":"26.5"}
+}

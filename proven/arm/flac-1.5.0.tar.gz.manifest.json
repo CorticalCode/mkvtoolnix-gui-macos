@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "kind": "proven_cache",
+  "spec_name": "flac",
+  "package": "flac-1.5.0",
+  "spec_tarball": "flac-1.5.0.tar.xz",
+  "source_sha256": "f2c1c76592a82ffff8413ba3c4a1299b6c7ab06c734dee03fd88630485c2b920",
+  "configure_args_hash": "",
+  "patch_state_hash": "none",
+  "built_at": "2026-08-26T12:51:41Z",
+  "built_by": {
+    "tool": "build-local.sh",
+    "upstream_tag": "release-101.0",
+    "wrapper_branch": "main",
+    "wrapper_sha": "9bb8570"
+  },
+  "host": {"cpu_brand":"Apple M4 Pro","arch":"arm64","cores_total":14,"ram_gb":64,"macos_version":"26.6.2","clang_version":"21.0.0","sdk_version":"26.5"}
+}

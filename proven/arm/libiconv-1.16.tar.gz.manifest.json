@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "kind": "proven_cache",
+  "spec_name": "libiconv",
+  "package": "libiconv-1.16",
+  "spec_tarball": "libiconv-1.16.tar.gz",
+  "source_sha256": "e6a1b1b589654277ee790cce3734f07876ac4ccfaecbee8afa0b649cf529cc04",
+  "configure_args_hash": "",
+  "patch_state_hash": "none",
+  "built_at": "2026-08-26T12:51:41Z",
+  "built_by": {
+    "tool": "build-local.sh",
+    "upstream_tag": "release-101.0",
+    "wrapper_branch": "main",
+    "wrapper_sha": "9bb8570"
+  },
+  "host": {"cpu_brand":"Apple M4 Pro","arch":"arm64","cores_total":14,"ram_gb":64,"macos_version":"26.6.2","clang_version":"21.0.0","sdk_version":"26.5"}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "kind": "proven_cache",
+  "spec_name": "cmark",
+  "package": "cmark-0.30.3",
+  "spec_tarball": "cmark-0.30.3.tar.gz",
+  "source_sha256": "85e9fb515531cc2c9ae176d693f9871774830cf1f323a6758fb187a5148d7b16",
+  "configure_args_hash": "",
+  "patch_state_hash": "none",
+  "built_at": "2026-08-26T12:51:41Z",
+  "built_by": {
+    "tool": "build-local.sh",
+    "upstream_tag": "release-101.0",
+    "wrapper_branch": "main",
+    "wrapper_sha": "9bb8570"
+  },
+  "host": {"cpu_brand":"Apple M4 Pro","arch":"arm64","cores_total":14,"ram_gb":64,"macos_version":"26.6.2","clang_version":"21.0.0","sdk_version":"26.5"}
+}
