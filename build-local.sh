@@ -710,37 +710,39 @@ function validate_proven_cache {
   # Reads only, and runs before wipe_workspace: a refusal is a question for a
   # person, and handing them a wiped tree costs them the workspace they had.
   local proven_dir="${TARGET}/proven/${ARCH_LABEL}"
-  local missing=()
-  local pkg idx vmsg vrc
-  local -a refused=() drifted=()
+  local pkg idx spec sha vmsg vrc
+  local -a missing=() present=() refused=() drifted=()
 
   echo "==> Validating proven cache against ${TAG}..."
 
   for pkg in "${EXPECTED_PACKAGES[@]}" docbook-xsl; do
-    if [[ ! -f "${proven_dir}/${pkg}.tar.gz" ]]; then
+    if [[ -f "${proven_dir}/${pkg}.tar.gz" ]]; then
+      present+=("${pkg}")
+    else
       echo "    Missing: ${pkg}"
       missing+=("${pkg}")
     fi
   done
 
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    echo "==> Proven cache incomplete: ${#missing[@]} package(s) missing."
-    return 1
-  fi
-
   # Every refusal is collected so one run names every offender rather than
-  # stopping at the first. Identity is spec-derived, so docbook-xsl is out of
-  # scope here: it is cached under an unversioned filename with nothing to
-  # check against.
-  for pkg in "${EXPECTED_PACKAGES[@]}"; do
-    if ! idx=$(_spec_index_for_package "${pkg}"); then
+  # stopping at the first. Only packages that are actually here can be judged;
+  # the absent ones are counted separately and weighed below.
+  for pkg in "${present[@]}"; do
+    if [[ "${pkg}" == "docbook-xsl" ]]; then
+      # Cached under an unversioned filename, so it is not in EXPECTED_PACKAGES
+      # and has no spec-derived identity to bind a manifest to.
+      continue
+    elif idx=$(_spec_index_for_package "${pkg}"); then
+      spec="${EXPECTED_TARGETS[$idx]}"
+      sha="${EXPECTED_SHAS[$idx]}"
+    else
       refused+=("${pkg}: not present in this tag's spec set")
       continue
     fi
     # A bare `vmsg=$(...)` would trip errexit on the validator's deliberate
     # non-zero returns, so capture the status through an if/else.
     if vmsg=$(_validate_proven_manifest "${proven_dir}/${pkg}.tar.gz.manifest.json" \
-                "${EXPECTED_TARGETS[$idx]}" "${pkg}" "${EXPECTED_SHAS[$idx]}"); then
+                "${spec}" "${pkg}" "${sha}"); then
       vrc=0
     else
       vrc=$?
@@ -751,24 +753,33 @@ function validate_proven_cache {
     esac
   done
 
-  # Hashes cover everything that gets extracted, docbook-xsl included. An
-  # unverifiable package is refused rather than counted absent: a package that
-  # is present but cannot be checked is a question about the cache, not a
-  # reason to spend hours recompiling deps that are probably fine.
-  for pkg in "${EXPECTED_PACKAGES[@]}" docbook-xsl; do
+  # Hashes cover everything that gets extracted. An unverifiable package is
+  # refused rather than counted absent: a package that is present but cannot be
+  # checked is a question about the cache, not a reason to spend hours
+  # recompiling deps that are probably fine.
+  for pkg in "${present[@]}"; do
     if ! vmsg=$(verify_pkg_sha256 "${proven_dir}/${pkg}.tar.gz"); then
       refused+=("${pkg}: ${vmsg}")
     fi
   done
 
+  # A refusal outranks an incomplete cache, so this is weighed before the
+  # missing count. The other order lets one absent package hide a present one
+  # that contradicts the tag: the caller sees 1, wipes, and rebuilds from source
+  # instead of stopping to ask.
   if [[ ${#refused[@]} -gt 0 ]]; then
     echo ""
     echo "ERROR: the proven cache does not match ${TAG}."
     for pkg in "${refused[@]}"; do
       echo "    ${pkg}"
     done
+    if [[ ${#missing[@]} -gt 0 ]]; then
+      echo "    (plus ${#missing[@]} package(s) absent, listed above)"
+    fi
     echo ""
-    echo "  Nothing was extracted and the workspace is untouched."
+    echo "  Nothing was extracted, and the dependency prefix and proven/ are"
+    echo "  intact. The upstream clone and the per-package build directories"
+    echo "  were already reset earlier in this run."
     echo "  Repopulate packages and hashes from LFS:"
     echo "    ./build-local.sh --restore-cache"
     echo "  Rebuild just the affected dependencies:"
@@ -778,6 +789,11 @@ function validate_proven_cache {
     # 2, not 1: an incomplete cache legitimately demotes to a full build, but a
     # cache that contradicts the tag is a decision for a human, not a fallback.
     return 2
+  fi
+
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "==> Proven cache incomplete: ${#missing[@]} package(s) missing."
+    return 1
   fi
 
   if [[ ${#drifted[@]} -gt 0 ]]; then
