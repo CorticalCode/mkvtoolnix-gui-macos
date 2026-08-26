@@ -63,13 +63,20 @@ CLONE_PARENT=$(mktemp -d)
 # shellcheck disable=SC2064
 trap "command rm -rf '${GPG_HOME}' '${CLONE_PARENT}'" EXIT INT TERM
 
-gpg --homedir "${GPG_HOME}" --batch --quiet --import "${PUBKEY}" 2>/dev/null
+if ! gpg_log=$(gpg --homedir "${GPG_HOME}" --batch --quiet \
+        --import "${PUBKEY}" 2>&1); then
+    echo "ERROR: Could not import ${PUBKEY:t} into a temporary keyring" >&2
+    echo "${gpg_log}" | sed 's/^/  /' >&2
+    exit 2
+fi
 
 # --- Clone upstream (shallow, all tags) ---
 CLONE_DIR="${CLONE_PARENT}/mkvtoolnix-tag-check"
 echo "==> Cloning ${UPSTREAM_URL} (shallow, with tags)..."
-if ! git clone --filter=blob:none --no-checkout "${UPSTREAM_URL}" "${CLONE_DIR}" 2>&1 | tail -5; then
+if ! clone_log=$(git clone --filter=blob:none --no-checkout \
+        "${UPSTREAM_URL}" "${CLONE_DIR}" 2>&1); then
     echo "ERROR: Clone failed" >&2
+    echo "${clone_log}" | tail -5 | sed 's/^/  /' >&2
     exit 2
 fi
 
