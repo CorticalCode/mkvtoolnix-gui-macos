@@ -364,7 +364,13 @@ _write_cache_manifests() {
       _write_proven_manifest "${EXPECTED_TARGETS[$idx]}" "${pkg}" \
         "${EXPECTED_TARBALLS[$idx]}" "${EXPECTED_SHAS[$idx]}" "${f}.manifest.json"
     else
-      echo "    WARNING: ${pkg} is not in this tag's spec set — no manifest written"
+      # Fatal, not a warning. A package with no manifest is refused by every
+      # consumer, so warning here and continuing publishes a cache that cannot
+      # be used — and says so only in scrollback nobody re-reads.
+      echo "ERROR: ${pkg} is in the cache but not in this tag's spec set." >&2
+      echo "       No manifest can be written for it, and a package without one" >&2
+      echo "       is refused at restore. Remove it, or correct the spec set." >&2
+      return 1
     fi
   done
 }
@@ -884,6 +890,29 @@ function do_promote {
   done
   if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
     if [[ ${#absent_from_proven[@]} -eq 0 ]]; then
+      # "Holds every package" is not "is usable". A set whose sidecars are
+      # missing is refused wholesale by every consumer, and returning success
+      # here is exactly how an unpublishable cache goes unnoticed: promote
+      # reports nothing to do, and the next person to restore it finds out.
+      local -a unusable=()
+      for pkg in "${EXPECTED_PACKAGES[@]}" docbook-xsl; do
+        [[ -f "${proven_dir}/${pkg}.tar.gz.sha256" ]] \
+          || unusable+=("${pkg}: no .sha256")
+        [[ -f "${proven_dir}/${pkg}.tar.gz.manifest.json" ]] \
+          || unusable+=("${pkg}: no .manifest.json")
+      done
+      if [[ ${#unusable[@]} -gt 0 ]]; then
+        echo "ERROR: there is nothing new to promote, but the cache that would"
+        echo "       stand is not usable:"
+        for pkg in "${unusable[@]}"; do
+          echo "    ${pkg}"
+        done
+        echo ""
+        echo "  Run './build-local.sh --full ${TAG}' and promote that. The manifests"
+        echo "  have to come from a build that actually happened — writing them now"
+        echo "  would record what specs.sh says today, not what these were built from."
+        exit 1
+      fi
       echo "==> Nothing to promote — the proven cache already holds every package"
       echo "    this tag expects, and this build rebuilt only mkvtoolnix."
       echo "    Dependencies are unchanged; the cache stands as-is."
@@ -959,6 +988,25 @@ function do_promote {
   local -a new_manifests=("${proven_dir}"/*.tar.gz.manifest.json(N))
   [[ ${#new_manifests[@]} -gt 0 ]] && command cp "${new_manifests[@]}" "${repo_proven}/"
   (cd "${repo_proven}" && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
+  # Publisher gate. The equivalent check lives in --restore-cache, which means
+  # it fires on whoever tries to use this rather than on whoever published it.
+  # Ask the same question here, before it becomes someone else's problem.
+  local -a unpublishable=()
+  local pf
+  for pf in "${repo_proven}"/*.tar.gz(N); do
+    [[ -f "${pf}.sha256" ]]        || unpublishable+=("${pf:t:r:r}: no .sha256")
+    [[ -f "${pf}.manifest.json" ]] || unpublishable+=("${pf:t:r:r}: no .manifest.json")
+  done
+  if [[ ${#unpublishable[@]} -gt 0 ]]; then
+    echo "ERROR: refusing to publish a cache that would be refused on restore:"
+    for pf in "${unpublishable[@]}"; do
+      echo "    ${pf}"
+    done
+    echo "  Nothing was committed. proven/${ARCH_LABEL}/ in the working tree now holds"
+    echo "  the promoted set; reconcile it before committing by hand."
+    exit 1
+  fi
+
   # git add -A so pruned packages are staged as deletions, not just the new adds.
   (cd "${SCRIPT_DIR}" && git add -A "proven/${ARCH_LABEL}/" && git diff --cached --quiet || git commit -m "promote: ${ARCH_LABEL} proven deps $(date +%Y-%m-%d)" -- "proven/${ARCH_LABEL}/")
 
