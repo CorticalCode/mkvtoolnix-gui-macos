@@ -29,6 +29,12 @@ _required_tools=(
   date rsync perl bc
   # macOS-specific (script is macOS-only by design; fail fast elsewhere)
   sw_vers sysctl xcrun clang hdiutil codesign strings otool
+  # not shipped with macOS. The pre-flight checks upstream's release tag and
+  # source tarball against mbunkus's key before any dependency is built, so this
+  # is the host's gpg — not the gnupg the build later compiles for upstream's
+  # own retrieve_verified_source_tarball. Undeclared, an absent gpg empties the
+  # fingerprint comparison and the tarball check reports tampering.
+  gpg
 )
 for _t in "${_required_tools[@]}"; do
   if ! command -v "$_t" >/dev/null 2>&1; then
