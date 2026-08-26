@@ -389,16 +389,39 @@ echo ""
 echo "==> Rebuilding: ${REBUILD_TARGETS[*]}"
 (cd "${CLONE_DIR}/packaging/macos" && ./build.sh "${REBUILD_TARGETS[@]}")
 
+# upstream builds cmark in an `mtx-build` directory and build_tarball names the
+# archive after ${PWD:t}, so it lands as mtx-build.tar.gz rather than under
+# cmark's versioned name. build-local.sh renames it after a full build; a
+# partial rebuild that reaches cmark needs the same.
+if [[ -f "${TARGET}/packages/mtx-build.tar.gz" ]]; then
+  cmark_pkg="${REBUILD_PACKAGES[(r)cmark-*]}"
+  if [[ -n "${cmark_pkg}" ]]; then
+    echo "==> Renaming mtx-build.tar.gz to ${cmark_pkg}.tar.gz"
+    command mv "${TARGET}/packages/mtx-build.tar.gz" "${TARGET}/packages/${cmark_pkg}.tar.gz"
+  fi
+fi
+
 # --- Repromote just the rebuilt packages -------------------------------------
+# Every package is checked before any is copied. The loop below writes into the
+# cache as it goes, so exiting part-way would leave it half updated — a state
+# that then validates clean, because each package it did write is self-consistent.
+missing_built=()
+for pkg in "${REBUILD_PACKAGES[@]}"; do
+  [[ -f "${TARGET}/packages/${pkg}.tar.gz" ]] || missing_built+=("${pkg}")
+done
+if [[ ${#missing_built[@]} -gt 0 ]]; then
+  echo "ERROR: the rebuild produced no package for:" >&2
+  for pkg in "${missing_built[@]}"; do
+    echo "    ${pkg}" >&2
+  done
+  echo "       The cache was NOT updated." >&2
+  exit 1
+fi
+
 echo ""
 echo "==> Repromoting ${#REBUILD_PACKAGES[@]} rebuilt package(s)..."
 for pkg in "${REBUILD_PACKAGES[@]}"; do
   built="${TARGET}/packages/${pkg}.tar.gz"
-  if [[ ! -f "${built}" ]]; then
-    echo "ERROR: ${pkg} was rebuilt but ${built} is missing." >&2
-    echo "       The cache was NOT updated for this package." >&2
-    exit 1
-  fi
   command cp "${built}" "${PROVEN_DIR}/${pkg}.tar.gz"
   (cd "${PROVEN_DIR}" && shasum -a 256 "${pkg}.tar.gz" > "${pkg}.tar.gz.sha256")
   _refresh_write_manifest "${pkg}" "${PROVEN_DIR}/${pkg}.tar.gz.manifest.json"
