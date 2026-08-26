@@ -129,27 +129,43 @@ function is_lfs_pointer_file {
 }
 
 function verify_pkg_sha256 {
-  # Fail closed both ways. A package with no sidecar is unverifiable, which is
+  # Fail closed three ways. A package with no sidecar is unverifiable, which is
   # not the same as verified; every writer into a cache directory emits one.
+  # And `shasum -c` resolves the filename recorded *inside* the sidecar rather
+  # than the path it was handed, so a sidecar naming a different package would
+  # hash that one and report success for this one — hence the name is compared
+  # before the hash is trusted, and the comparison is done here rather than
+  # delegated to `-c`.
   # Prints a one-line reason, so a caller can collect every offender into one
   # report rather than stopping at the first.
   local pkg_file="$1"
   local sha_file="${pkg_file}.sha256"
-  local expected actual
+  local record expected named actual
+  local -a fields
 
   if [[ ! -f "${sha_file}" ]]; then
     print "no .sha256 sidecar"
     return 1
   fi
 
-  if (cd "${pkg_file:h}" && shasum -a 256 -c "${sha_file:t}" >/dev/null 2>&1); then
-    return 0
+  record=$(head -1 "${sha_file}")
+  fields=(${=record})   # deliberate split; shasum emits "<hash>  <filename>"
+  expected="${fields[1]}"
+  named="${fields[2]}"
+
+  if [[ "${named}" != "${pkg_file:t}" ]]; then
+    print "sidecar describes ${named:-<nothing>}, not ${pkg_file:t}"
+    return 1
   fi
 
-  expected=$(<"${sha_file}")
   actual=$(shasum -a 256 "${pkg_file}")
-  print "SHA256 mismatch (sidecar ${expected%% *}, actual ${actual%% *})"
-  return 1
+  actual="${actual%% *}"
+
+  if [[ "${expected}" != "${actual}" ]]; then
+    print "SHA256 mismatch (sidecar ${expected}, actual ${actual})"
+    return 1
+  fi
+  return 0
 }
 
 # --- Manifest helpers ---
