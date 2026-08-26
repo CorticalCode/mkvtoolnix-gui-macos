@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Upstream release tag (e.g. release-100.0)'
-        required: true
-        default: 'release-100.0'
+        description: 'Upstream release tag (blank = newest on Codeberg)'
+        required: false
+        default: ''
       force:
         description: 'Force rebuild even if release exists'
         required: false
@@ -35,13 +35,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            TAG="${{ github.event.inputs.tag }}"
-          else
-            # Find latest upstream release tag (filter ^{} peeled refs)
+          # Empty on every scheduled run, and on a manual run unless a tag was
+          # typed, so both triggers reach the same discovery and no release
+          # number has to live in this file.
+          TAG="${{ github.event.inputs.tag }}"
+          if [[ -z "${TAG}" ]]; then
+            # Latest upstream release tag (--refs filters ^{} peeled refs)
             TAG=$(git ls-remote --tags --refs --sort=-v:refname \
               https://codeberg.org/mbunkus/mkvtoolnix.git \
               'refs/tags/release-*' | head -1 | sed 's|.*refs/tags/||')
+          fi
+          if [[ -z "${TAG}" ]]; then
+            echo "::error::Could not resolve an upstream release tag."
+            exit 1
           fi
           VERSION=${TAG#release-}
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
