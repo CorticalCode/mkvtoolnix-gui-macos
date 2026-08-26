@@ -285,7 +285,7 @@ EOF
 
 # --- Detect drift ------------------------------------------------------------
 echo "==> Checking the cache against ${TAG}..."
-STALE_TARGETS=(); STALE_PACKAGES=()
+STALE_PACKAGES=(); FIRST_STALE=0
 for i in {1..${#EXPECTED_PACKAGES[@]}}; do
   pkg="${EXPECTED_PACKAGES[$i]}"
   tgz="${PROVEN_DIR}/${pkg}.tar.gz"
@@ -309,20 +309,35 @@ for i in {1..${#EXPECTED_PACKAGES[@]}}; do
   fi
   if [[ -n "${reason}" ]]; then
     echo "    STALE  ${pkg} — ${reason}"
-    STALE_TARGETS+=("${EXPECTED_TARGETS[$i]}")
     STALE_PACKAGES+=("${pkg}")
+    if [[ ${FIRST_STALE} -eq 0 ]]; then
+      FIRST_STALE=$i
+    fi
   fi
 done
 
-if [[ ${#STALE_TARGETS[@]} -eq 0 ]]; then
+if [[ ${FIRST_STALE} -eq 0 ]]; then
   echo "==> Cache matches ${TAG}. Nothing to rebuild."
   exit 0
 fi
 
+# Rebuild from the earliest drifted dependency onward, not just the ones whose
+# own source changed. upstream's build_package compiles every dep with
+# -I${TARGET}/include -L${TARGET}/lib and puts ${TARGET}/bin on PATH, so the
+# contract it states is "anything built before me may be linked into me" — the
+# sequence is the whole of it, and most deps name no dependency at all.
+# Rebuilding ogg alone would leave the cached vorbis and flac linked against the
+# ogg they replaced, with every hash still matching.
+REBUILD_TARGETS=(); REBUILD_PACKAGES=()
+for i in {${FIRST_STALE}..${#EXPECTED_PACKAGES[@]}}; do
+  REBUILD_TARGETS+=("${EXPECTED_TARGETS[$i]}")
+  REBUILD_PACKAGES+=("${EXPECTED_PACKAGES[$i]}")
+done
+
 echo ""
-echo "==> ${#STALE_TARGETS[@]} of ${#EXPECTED_PACKAGES[@]} dependencies need rebuilding:"
-echo "    ${STALE_TARGETS[*]}"
-echo "    (build order preserved from upstream's own sequence)"
+echo "==> ${#STALE_PACKAGES[@]} drifted; rebuilding ${#REBUILD_TARGETS[@]} of ${#EXPECTED_PACKAGES[@]},"
+echo "    from ${EXPECTED_PACKAGES[$FIRST_STALE]} onward in upstream's own build order:"
+echo "    ${REBUILD_TARGETS[*]}"
 
 if [[ ${DRY_RUN} -eq 1 ]]; then
   echo "==> Dry run — nothing built."
@@ -342,16 +357,18 @@ for item in "${TARGET}"/*; do
 done
 mkdir -p "${TARGET}/include" "${TARGET}/lib" "${TARGET}/bin" "${TARGET}/packages"
 
-echo "==> Restoring the ${#EXPECTED_PACKAGES[@]} cached dependencies that are still current..."
+echo "==> Restoring the cached dependencies built before ${EXPECTED_PACKAGES[$FIRST_STALE]}..."
 for i in {1..${#EXPECTED_PACKAGES[@]}}; do
   pkg="${EXPECTED_PACKAGES[$i]}"
-  if (( ${STALE_PACKAGES[(Ie)${pkg}]} )); then
+  if (( i >= FIRST_STALE )); then
     echo "    skip ${pkg} (being rebuilt)"
     continue
   fi
   (cd "${TARGET}" && tar xzf "${PROVEN_DIR}/${pkg}.tar.gz")
 done
-[[ -f "${PROVEN_DIR}/docbook-xsl.tar.gz" ]] && (cd "${TARGET}" && tar xzf "${PROVEN_DIR}/docbook-xsl.tar.gz")
+if [[ -f "${PROVEN_DIR}/docbook-xsl.tar.gz" ]]; then
+  (cd "${TARGET}" && tar xzf "${PROVEN_DIR}/docbook-xsl.tar.gz")
+fi
 
 echo "==> Applying config overlay and patches..."
 command cp "${SCRIPT_DIR}/config/config.local.sh" "${CLONE_DIR}/packaging/macos/config.local.sh"
@@ -369,13 +386,13 @@ if [[ -d "${SCRIPT_DIR}/patches/qt-patches" ]]; then
 fi
 
 echo ""
-echo "==> Rebuilding: ${STALE_TARGETS[*]}"
-(cd "${CLONE_DIR}/packaging/macos" && ./build.sh "${STALE_TARGETS[@]}")
+echo "==> Rebuilding: ${REBUILD_TARGETS[*]}"
+(cd "${CLONE_DIR}/packaging/macos" && ./build.sh "${REBUILD_TARGETS[@]}")
 
 # --- Repromote just the rebuilt packages -------------------------------------
 echo ""
-echo "==> Repromoting ${#STALE_PACKAGES[@]} rebuilt package(s)..."
-for pkg in "${STALE_PACKAGES[@]}"; do
+echo "==> Repromoting ${#REBUILD_PACKAGES[@]} rebuilt package(s)..."
+for pkg in "${REBUILD_PACKAGES[@]}"; do
   built="${TARGET}/packages/${pkg}.tar.gz"
   if [[ ! -f "${built}" ]]; then
     echo "ERROR: ${pkg} was rebuilt but ${built} is missing." >&2
