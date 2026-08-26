@@ -131,24 +131,25 @@ function is_lfs_pointer_file {
 function verify_pkg_sha256 {
   # Fail closed both ways. A package with no sidecar is unverifiable, which is
   # not the same as verified; every writer into a cache directory emits one.
+  # Prints a one-line reason, so a caller can collect every offender into one
+  # report rather than stopping at the first.
   local pkg_file="$1"
   local sha_file="${pkg_file}.sha256"
+  local expected actual
 
   if [[ ! -f "${sha_file}" ]]; then
-    echo "    ERROR: no .sha256 sidecar for ${pkg_file:t}"
-    echo "      A cached package without its hash cannot be verified."
-    echo "      Repopulate the cache: ./build-local.sh --restore-cache"
+    print "no .sha256 sidecar"
     return 1
   fi
 
   if (cd "${pkg_file:h}" && shasum -a 256 -c "${sha_file:t}" >/dev/null 2>&1); then
     return 0
-  else
-    echo "    ERROR: SHA256 mismatch on ${pkg_file:t}"
-    echo "      Expected (from ${sha_file:t}): $(cat "${sha_file}")"
-    echo "      Actual:                       $(shasum -a 256 "${pkg_file}")"
-    return 1
   fi
+
+  expected=$(<"${sha_file}")
+  actual=$(shasum -a 256 "${pkg_file}")
+  print "SHA256 mismatch (sidecar ${expected%% *}, actual ${actual%% *})"
+  return 1
 }
 
 # --- Manifest helpers ---
@@ -713,8 +714,10 @@ function restore_from_proven {
     return 1
   fi
 
-  # Validation pass. Every refusal is collected so one run names every offender
-  # rather than stopping at the first, and nothing is extracted if any refuse.
+  # Every refusal is collected so one run names every offender rather than
+  # stopping at the first. Identity is spec-derived, so docbook-xsl is out of
+  # scope here: it is cached under an unversioned filename with nothing to
+  # check against.
   local -a refused=() drifted=()
   local idx vmsg vrc
   for pkg in "${EXPECTED_PACKAGES[@]}"; do
@@ -736,6 +739,16 @@ function restore_from_proven {
     esac
   done
 
+  # Hashes cover everything that gets extracted, docbook-xsl included. An
+  # unverifiable package is refused rather than counted absent: a package that
+  # is present but cannot be checked is a question about the cache, not a
+  # reason to spend hours recompiling deps that are probably fine.
+  for pkg in "${EXPECTED_PACKAGES[@]}" docbook-xsl; do
+    if ! vmsg=$(verify_pkg_sha256 "${proven_dir}/${pkg}.tar.gz"); then
+      refused+=("${pkg}: ${vmsg}")
+    fi
+  done
+
   if [[ ${#refused[@]} -gt 0 ]]; then
     echo ""
     echo "ERROR: the proven cache does not match ${TAG}."
@@ -743,7 +756,9 @@ function restore_from_proven {
       echo "    ${pkg}"
     done
     echo ""
-    echo "  Nothing was extracted. Rebuild just the affected dependencies:"
+    echo "  Nothing was extracted. Repopulate packages and hashes from LFS:"
+    echo "    ./build-local.sh --restore-cache"
+    echo "  Rebuild just the affected dependencies:"
     echo "    ./tools/refresh-deps.sh ${TAG}"
     echo "  Or rebuild everything from source:"
     echo "    ./build-local.sh --full ${TAG}"
@@ -759,12 +774,9 @@ function restore_from_proven {
     done
   fi
 
-  # docbook-xsl is restored but not validated: it is cached under an unversioned
-  # filename and carries no spec-derived identity to check against.
   for pkg in "${EXPECTED_PACKAGES[@]}" docbook-xsl; do
     pkg_file="${proven_dir}/${pkg}.tar.gz"
     echo "    Restoring ${pkg}..."
-    verify_pkg_sha256 "${pkg_file}" || return 1
     (cd "${TARGET}" && tar xzf "${pkg_file}")
     restored=$((restored + 1))
     if [[ "${pkg}" == "docbook-xsl" ]]; then
