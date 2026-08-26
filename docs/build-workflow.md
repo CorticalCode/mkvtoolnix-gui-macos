@@ -6,7 +6,7 @@
 |------|---------|-----|-----------|----------|
 | *(default)* | Validate the cache against the tag, then restore it; full build if the cache is absent | Anyone | 15 min (cached) / 1-3 hrs (full) | Tag |
 | `tools/refresh-deps.sh` | Rebuild only the dependencies that no longer match the tag | Anyone | minutes to hours, depending on which | Tag |
-| `--restore-cache` | Pull pre-built deps from LFS to local cache | Anyone | ~2 min | Nothing |
+| `--restore-cache` | Pull pre-built deps from LFS to local cache; refuses a cache missing either sidecar | Anyone | ~2 min | Nothing |
 | `--full` | Rebuild all dependencies from source | Anyone | 1-3 hours | Tag |
 | `--promote` | Archive verified build to LFS | Maintainer | ~1 min | Verified build |
 | `--cleanup-lfs` | Restore proven/ to pointers, prune LFS cache | Anyone | ~10 sec | Nothing |

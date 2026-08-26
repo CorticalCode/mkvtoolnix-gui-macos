@@ -27,6 +27,14 @@ When you're ready to build, pull the cache for your architecture:
 
 This downloads the proven dependencies for your architecture (~130 MB), copies them to `~/opt/proven/{arch}/`, and cleans up the repo working copy. Future builds will restore from this local cache automatically (~15 minutes instead of 1-3 hours).
 
+The pull only succeeds if the published cache carries **both** sidecars for every package. If any
+`.manifest.json` is missing, `--restore-cache` names the offenders and copies nothing, rather than
+seeding a cache the build would refuse a minute later.
+
+> **Status, 2026-08-26 — the Intel cache is not yet usable.** Its manifests predate the provenance
+> requirement, so `--restore-cache` refuses `proven/intel/`. Build with `--full` on Intel until this
+> line is removed. Apple Silicon is unaffected once its promotion lands.
+
 If you prefer to build all dependencies from source instead, simply skip `--restore-cache` and run the build directly — it will detect the missing cache and do a full build.
 
 ### From a full build (if you need to build deps yourself)
@@ -45,10 +53,20 @@ cp ~/opt/packages/*.tar.gz ~/opt/proven/arm/
 
 This does **not** produce the `.manifest.json` that records which source tarball each package was
 built from, and a manifest cannot honestly be written after the fact — it could only record what
-`specs.sh` says today, not what the package was actually built from. Use `--promote` after a
-verified build, or `./tools/refresh-deps.sh <tag>`; both write real ones.
+`specs.sh` says today, not what the package was actually built from.
 
-Future builds will restore from this cache automatically.
+**So a cache built this way is refused, not reused.** The next build reports
+`no provenance manifest` for every package and stops. The copy is still worth doing as a
+starting point, but it has to be converted into a real cache before it is usable:
+
+```sh
+./tools/refresh-deps.sh release-XX.0
+```
+
+That rebuilds every package whose manifest is missing — on a hand-copied cache, all of them —
+and writes real manifests beside them in `~/opt/proven/{arch}/` without touching git. It costs
+the same as a full build the first time and pays for itself from the second build onward.
+Maintainers use `--promote` instead, which additionally commits the result to the repository.
 
 ### The `--promote` flag (maintainers only)
 
@@ -56,10 +74,11 @@ The `--promote` flag is a maintainer operation that archives the proven cache to
 
 ## What's in the cache
 
-16 packages per architecture, one `.tar.gz` per dependency. Each carries a `.sha256`,
-and each except `docbook-xsl` also carries a `.manifest.json` recording the source
-tarball it was built from — `docbook-xsl` is cached under an unversioned filename and
-has no spec-derived identity to record.
+16 packages per architecture, one `.tar.gz` per dependency. Each carries **both** a
+`.sha256` and a `.manifest.json` recording the source tarball it was built from —
+`docbook-xsl` included. Its cache filename is unversioned, but `specs.sh` declares a
+source filename and hash for it like any other dependency, and the manifest binds to
+those. A package missing either sidecar is refused at restore time.
 
 | Package | Description |
 |---------|-------------|
