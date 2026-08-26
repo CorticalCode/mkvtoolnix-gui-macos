@@ -687,21 +687,19 @@ function run_restore_cache_mode {
   echo "    Run './build-local.sh <tag>' to build using cached deps."
 }
 
-function restore_from_proven {
-  # Exit: 0 restored · 1 cache incomplete (caller may demote to a full build)
+function validate_proven_cache {
+  # Exit: 0 usable · 1 cache incomplete (caller may demote to a full build)
   #       2 cache contradicts the tag (caller must stop)
   #
-  # Release builds read the proven cache only. The experimental tier is owned by
-  # tools/build-exp.sh, which both populates and consumes it; a release artifact
-  # must be reproducible from what the repository ships in proven/.
+  # Reads only, and runs before wipe_workspace: a refusal is a question for a
+  # person, and handing them a wiped tree costs them the workspace they had.
   local proven_dir="${TARGET}/proven/${ARCH_LABEL}"
-  local restored=0
   local missing=()
-  local pkg pkg_file
+  local pkg idx vmsg vrc
+  local -a refused=() drifted=()
 
-  echo "==> Restoring from proven cache..."
+  echo "==> Validating proven cache against ${TAG}..."
 
-  # First pass: confirm every expected package is present before extracting any
   for pkg in "${EXPECTED_PACKAGES[@]}" docbook-xsl; do
     if [[ ! -f "${proven_dir}/${pkg}.tar.gz" ]]; then
       echo "    Missing: ${pkg}"
@@ -710,7 +708,7 @@ function restore_from_proven {
   done
 
   if [[ ${#missing[@]} -gt 0 ]]; then
-    echo "==> Restored ${restored} packages. Missing: ${#missing[@]}."
+    echo "==> Proven cache incomplete: ${#missing[@]} package(s) missing."
     return 1
   fi
 
@@ -718,8 +716,6 @@ function restore_from_proven {
   # stopping at the first. Identity is spec-derived, so docbook-xsl is out of
   # scope here: it is cached under an unversioned filename with nothing to
   # check against.
-  local -a refused=() drifted=()
-  local idx vmsg vrc
   for pkg in "${EXPECTED_PACKAGES[@]}"; do
     if ! idx=$(_spec_index_for_package "${pkg}"); then
       refused+=("${pkg}: not present in this tag's spec set")
@@ -756,7 +752,8 @@ function restore_from_proven {
       echo "    ${pkg}"
     done
     echo ""
-    echo "  Nothing was extracted. Repopulate packages and hashes from LFS:"
+    echo "  Nothing was extracted and the workspace is untouched."
+    echo "  Repopulate packages and hashes from LFS:"
     echo "    ./build-local.sh --restore-cache"
     echo "  Rebuild just the affected dependencies:"
     echo "    ./tools/refresh-deps.sh ${TAG}"
@@ -774,6 +771,20 @@ function restore_from_proven {
     done
   fi
 
+  return 0
+}
+
+function restore_from_proven {
+  # Extraction only; validate_proven_cache has already accepted this cache.
+  # Release builds read the proven cache only. The experimental tier is owned by
+  # tools/build-exp.sh, which both populates and consumes it; a release artifact
+  # must be reproducible from what the repository ships in proven/.
+  local proven_dir="${TARGET}/proven/${ARCH_LABEL}"
+  local restored=0
+  local pkg pkg_file idx
+
+  echo "==> Restoring from proven cache..."
+
   for pkg in "${EXPECTED_PACKAGES[@]}" docbook-xsl; do
     pkg_file="${proven_dir}/${pkg}.tar.gz"
     echo "    Restoring ${pkg}..."
@@ -788,7 +799,6 @@ function restore_from_proven {
   done
 
   echo "==> Restored ${restored} packages. Missing: 0."
-  return 0
 }
 
 function do_promote {
@@ -1261,17 +1271,20 @@ case "${BUILD_MODE}" in
     echo "==> Promote mode — skipping build, running verification..."
     ;;
   auto|"")
-    wipe_workspace
-    if restore_from_proven; then
-      restore_rc=0
+    if validate_proven_cache; then
+      cache_rc=0
     else
-      restore_rc=$?
+      cache_rc=$?
     fi
-    if [[ ${restore_rc} -eq 2 ]]; then
+    if [[ ${cache_rc} -eq 2 ]]; then
       # Refusal, not absence. Demoting to a full build here would paper over a
       # cache that disagrees with the tag; the message above says what to run.
+      # Nothing has been wiped yet, so the existing workspace survives.
       exit 1
-    elif [[ ${restore_rc} -eq 0 ]]; then
+    fi
+    wipe_workspace
+    if [[ ${cache_rc} -eq 0 ]]; then
+      restore_from_proven
       BUILD_SUMMARY="Restored from proven, built mkvtoolnix only"
       echo "==> All dependencies restored from proven. Building mkvtoolnix only..."
       # shared-mime-info produces no cacheable package (NO_CONFIGURE installs the
