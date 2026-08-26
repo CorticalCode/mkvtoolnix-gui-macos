@@ -353,9 +353,13 @@ _write_cache_manifests() {
   local dir="$1" f pkg idx
   for f in "${dir}"/*.tar.gz(N); do
     pkg="${f:t:r:r}"
-    # docbook-xsl is cached under an unversioned filename and carries no
-    # spec-derived identity, so there is nothing for a manifest to bind to.
-    [[ "${pkg}" == "docbook-xsl" ]] && continue
+    if [[ "${pkg}" == "docbook-xsl" ]]; then
+      # Not in EXPECTED_PACKAGES (unversioned cache stem), but upstream declares
+      # its source and hash, so it gets a manifest on the same terms.
+      _write_proven_manifest "docbook_xsl" "docbook-xsl" \
+        "${DOCBOOK_TARBALL}" "${DOCBOOK_SHA}" "${f}.manifest.json"
+      continue
+    fi
     if idx=$(_spec_index_for_package "${pkg}"); then
       _write_proven_manifest "${EXPECTED_TARGETS[$idx]}" "${pkg}" \
         "${EXPECTED_TARBALLS[$idx]}" "${EXPECTED_SHAS[$idx]}" "${f}.manifest.json"
@@ -667,17 +671,15 @@ function run_restore_cache_mode {
   # Copy to local cache. The sidecars travel with the packages: they are the
   # hashes committed to the repo, so a package restored here is checkable
   # against signed history rather than against itself.
-  # Check per package rather than by count: docbook-xsl legitimately has no
-  # manifest (unversioned filename, no spec-derived identity), so a bare count
-  # comparison would either reject a correct cache or accept an incomplete one.
+  # Check per package rather than by count, so the error names what is missing
+  # rather than reporting an arithmetic difference. Every package carries both
+  # sidecars, docbook-xsl included.
   local -a incomplete=()
   local tgz stem
   for tgz in "${pointer_files[@]}"; do
     stem="${tgz:t:r:r}"
     [[ -f "${tgz}.sha256" ]] || incomplete+=("${stem}: no .sha256")
-    if [[ "${stem}" != "docbook-xsl" ]] && [[ ! -f "${tgz}.manifest.json" ]]; then
-      incomplete+=("${stem}: no .manifest.json")
-    fi
+    [[ -f "${tgz}.manifest.json" ]] || incomplete+=("${stem}: no .manifest.json")
   done
   if [[ ${#incomplete[@]} -gt 0 ]]; then
     echo "ERROR: proven/${ARCH_LABEL}/ is missing sidecars:"
@@ -729,9 +731,8 @@ function validate_proven_cache {
   # the absent ones are counted separately and weighed below.
   for pkg in "${present[@]}"; do
     if [[ "${pkg}" == "docbook-xsl" ]]; then
-      # Cached under an unversioned filename, so it is not in EXPECTED_PACKAGES
-      # and has no spec-derived identity to bind a manifest to.
-      continue
+      spec="docbook_xsl"
+      sha="${DOCBOOK_SHA}"
     elif idx=$(_spec_index_for_package "${pkg}"); then
       spec="${EXPECTED_TARGETS[$idx]}"
       sha="${EXPECTED_SHAS[$idx]}"
@@ -1266,6 +1267,17 @@ for spec_var in "${EXPECTED_SPEC_VARS[@]}"; do
 done
 # Fix zlib naming (spec has zlib-v1.3.1, package is zlib-1.3.1)
 EXPECTED_PACKAGES=("${EXPECTED_PACKAGES[@]/zlib-v/zlib-}")
+
+# docbook-xsl is cached under an unversioned stem, so it cannot come out of the
+# loop above, which derives the stem from the tarball name. Its identity is not
+# absent, only differently shaped: upstream declares a source filename and hash
+# for it like any other dependency, and the manifest binds to those.
+DOCBOOK_TARBALL="${spec_docbook_xsl[1]:-}"
+DOCBOOK_SHA="${spec_docbook_xsl[3]:-}"
+if [[ -z "${DOCBOOK_TARBALL}" ]]; then
+  echo "ERROR: spec_docbook_xsl not found in specs.sh — upstream may have renamed it"
+  exit 1
+fi
 
 # Clean stale build directories — derive glob prefixes from EXPECTED_PACKAGES
 echo "==> Cleaning stale build directories..."
