@@ -640,6 +640,39 @@ function run_restore_cache_mode {
     return 1
   fi
 
+  # Only *.tar.gz is LFS-tracked (see .gitattributes), so both sidecars are
+  # ordinary files already present in any clone. Completeness is therefore
+  # knowable before the ~130 MB pull — refuse first rather than spend the
+  # download to reach a foregone abort.
+  local -a incomplete=()
+  local tgz stem
+  for tgz in "${pointer_files[@]}"; do
+    stem="${tgz:t:r:r}"
+    [[ -f "${tgz}.sha256" ]] || incomplete+=("${stem}: no .sha256")
+    [[ -f "${tgz}.manifest.json" ]] || incomplete+=("${stem}: no .manifest.json")
+  done
+  if [[ ${#incomplete[@]} -gt 0 ]]; then
+    echo "ERROR: proven/${ARCH_LABEL}/ is missing sidecars:"
+    for stem in "${incomplete[@]}"; do
+      echo "    ${stem}"
+    done
+    echo "  A package that cannot be verified or attributed is refused at restore"
+    echo "  time, so populating the cache from it would not help. Nothing was"
+    echo "  downloaded."
+    echo "  Build with './build-local.sh --full ${TAG:-<tag>}' instead. On the machine that"
+    echo "  owns this architecture, --full followed by --promote publishes the"
+    echo "  missing manifests."
+    return 1
+  fi
+
+  # git-lfs is a separate program, not part of git. Without it the pull below
+  # fails with git's own "not a git command" and nothing explains why.
+  if ! git lfs version >/dev/null 2>&1; then
+    echo "ERROR: git-lfs is not installed, and the proven cache is stored with it."
+    echo "       brew install git-lfs && git lfs install"
+    return 1
+  fi
+
   # Pull LFS objects for this arch only (override fetchexclude)
   echo "    Pulling LFS objects for ${ARCH_LABEL}..."
   if (cd "${SCRIPT_DIR}" && git lfs pull --include="proven/${ARCH_LABEL}/" --exclude=""); then
@@ -670,27 +703,8 @@ function run_restore_cache_mode {
 
   # Copy to local cache. The sidecars travel with the packages: they are the
   # hashes committed to the repo, so a package restored here is checkable
-  # against signed history rather than against itself.
-  # Check per package rather than by count, so the error names what is missing
-  # rather than reporting an arithmetic difference. Every package carries both
-  # sidecars, docbook-xsl included.
-  local -a incomplete=()
-  local tgz stem
-  for tgz in "${pointer_files[@]}"; do
-    stem="${tgz:t:r:r}"
-    [[ -f "${tgz}.sha256" ]] || incomplete+=("${stem}: no .sha256")
-    [[ -f "${tgz}.manifest.json" ]] || incomplete+=("${stem}: no .manifest.json")
-  done
-  if [[ ${#incomplete[@]} -gt 0 ]]; then
-    echo "ERROR: proven/${ARCH_LABEL}/ is missing sidecars:"
-    for stem in "${incomplete[@]}"; do
-      echo "    ${stem}"
-    done
-    echo "  A package that cannot be verified or attributed will be refused at"
-    echo "  restore time, so populating the cache from it would not help."
-    return 1
-  fi
-
+  # against signed history rather than against itself. Their presence was
+  # already established above, before the pull.
   mkdir -p "${local_proven}"
   echo "    Copying ${#pointer_files[@]} packages + sidecars to ${local_proven}..."
   command cp "${repo_proven}"/*.tar.gz "${local_proven}/"
