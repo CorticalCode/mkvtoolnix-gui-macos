@@ -31,10 +31,6 @@ The pull only succeeds if the published cache carries **both** sidecars for ever
 `.manifest.json` is missing, `--restore-cache` names the offenders and copies nothing, rather than
 seeding a cache the build would refuse a minute later.
 
-> **Status, 2026-08-26 — the Intel cache is not yet usable.** Its manifests predate the provenance
-> requirement, so `--restore-cache` refuses `proven/intel/`. Build with `--full` on Intel until this
-> line is removed. Apple Silicon is unaffected once its promotion lands.
-
 If you prefer to build all dependencies from source instead, simply skip `--restore-cache` and run the build directly — it will detect the missing cache and do a full build.
 
 ### From a full build (if you need to build deps yourself)
