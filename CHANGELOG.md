@@ -1,5 +1,25 @@
 # Changelog
 
+## v102.0-b2026.09.1 (2026-09-14) — Current Release
+
+MKVToolNix 102.0 "Little Houses" — Apple Silicon (arm64); Intel (x86_64) to follow.
+
+**Downloads:**
+- Apple Silicon (arm64): `MKVToolNix-102.0-macos-apple-silicon.dmg` — ~25 MB DMG (~75 MB app)
+- Intel (x86_64): `MKVToolNix-102.0-macos-intel.dmg` — in progress
+
+**Highlights:**
+- MKVToolNix 102.0 upstream (Qt 6.11.1, Boost 1.88.0, zlib 1.3.2).
+- Upstream security fix: CVE-2026-90783 — potential heap overflows in the bundled avilib's
+  OpenDML index handling with specially crafted AVI files; affects mkvmerge only.
+- Upstream bug fix: "Execute a program" actions replace `<MTX_…>` variables in the program's
+  arguments again (broken since v100; Codeberg #6306).
+- **No dependency changes from v101** — upstream's `packaging/macos/specs.sh` is byte-identical
+  between `release-101.0` and `release-102.0`, so Qt stays 6.11.1.
+- Single active wrapper patch (`mkvtoolnix-size-opt`, ThinLTO/`-Os`) — unchanged, still applies
+  cleanly; zero Qt source patches.
+- Built from the proven dependency cache (deps unchanged); arm64 DMG ~24.8 MB / app 74.9 MB.
+
 ## Cache/tag binding + release build manifests (2026-08-25)
 
 **The build can now tell whether its dependency cache matches the release tag, and
@@ -93,7 +113,7 @@ previously lacked.
   naming as well as promotion: a build that fails verification keeps its
   internal `build/` copy for diagnosis but does not get a release-named DMG.
 
-## v101.0-b2026.08.1 (2026-08-24) — Current Release
+## v101.0-b2026.08.1 (2026-08-24)
 
 MKVToolNix 101.0 "Time To Turn" — Apple Silicon (arm64) and Intel (x86_64).
 
