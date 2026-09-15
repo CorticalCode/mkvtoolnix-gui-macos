@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "kind": "proven_cache",
+  "spec_name": "flac",
+  "package": "flac-1.5.0",
+  "spec_tarball": "flac-1.5.0.tar.xz",
+  "source_sha256": "f2c1c76592a82ffff8413ba3c4a1299b6c7ab06c734dee03fd88630485c2b920",
+  "configure_args_hash": "",
+  "patch_state_hash": "none",
+  "built_at": "2026-09-15T22:10:06Z",
+  "built_by": {
+    "tool": "build-local.sh",
+    "upstream_tag": "release-102.0",
+    "wrapper_branch": "main",
+    "wrapper_sha": "2596fa9"
+  },
+  "host": {"cpu_brand":"Intel(R) Xeon(R) W-2150B CPU @ 3.00GHz","arch":"x86_64","cores_total":10,"ram_gb":64,"macos_version":"15.7.9","clang_version":"17.0.0","sdk_version":"26.2"}
+}

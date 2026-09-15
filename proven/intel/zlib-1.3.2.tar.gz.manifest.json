@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "kind": "proven_cache",
+  "spec_name": "zlib",
+  "package": "zlib-1.3.2",
+  "spec_tarball": "zlib-v1.3.2.tar.xz",
+  "source_sha256": "d7a0654783a4da529d1bb793b7ad9c3318020af77667bcae35f95d0e42a792f3",
+  "configure_args_hash": "",
+  "patch_state_hash": "none",
+  "built_at": "2026-09-15T22:10:07Z",
+  "built_by": {
+    "tool": "build-local.sh",
+    "upstream_tag": "release-102.0",
+    "wrapper_branch": "main",
+    "wrapper_sha": "2596fa9"
+  },
+  "host": {"cpu_brand":"Intel(R) Xeon(R) W-2150B CPU @ 3.00GHz","arch":"x86_64","cores_total":10,"ram_gb":64,"macos_version":"15.7.9","clang_version":"17.0.0","sdk_version":"26.2"}
+}

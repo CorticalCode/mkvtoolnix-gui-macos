@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "kind": "proven_cache",
+  "spec_name": "docbook_xsl",
+  "package": "docbook-xsl",
+  "spec_tarball": "docbook-xsl-1.79.2.tar.gz",
+  "source_sha256": "966188d7c05fc76eaca115a55893e643dd01a3486f6368733c9ad974fcee7a26",
+  "configure_args_hash": "",
+  "patch_state_hash": "none",
+  "built_at": "2026-09-15T22:10:05Z",
+  "built_by": {
+    "tool": "build-local.sh",
+    "upstream_tag": "release-102.0",
+    "wrapper_branch": "main",
+    "wrapper_sha": "2596fa9"
+  },
+  "host": {"cpu_brand":"Intel(R) Xeon(R) W-2150B CPU @ 3.00GHz","arch":"x86_64","cores_total":10,"ram_gb":64,"macos_version":"15.7.9","clang_version":"17.0.0","sdk_version":"26.2"}
+}

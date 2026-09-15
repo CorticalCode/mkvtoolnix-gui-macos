@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "kind": "proven_cache",
+  "spec_name": "pkgconfig",
+  "package": "pkg-config-0.29.2",
+  "spec_tarball": "pkg-config-0.29.2.tar.gz",
+  "source_sha256": "6fc69c01688c9458a57eb9a1664c9aba372ccda420a02bf4429fe610e7e7d591",
+  "configure_args_hash": "",
+  "patch_state_hash": "none",
+  "built_at": "2026-09-15T22:10:06Z",
+  "built_by": {
+    "tool": "build-local.sh",
+    "upstream_tag": "release-102.0",
+    "wrapper_branch": "main",
+    "wrapper_sha": "2596fa9"
+  },
+  "host": {"cpu_brand":"Intel(R) Xeon(R) W-2150B CPU @ 3.00GHz","arch":"x86_64","cores_total":10,"ram_gb":64,"macos_version":"15.7.9","clang_version":"17.0.0","sdk_version":"26.2"}
+}

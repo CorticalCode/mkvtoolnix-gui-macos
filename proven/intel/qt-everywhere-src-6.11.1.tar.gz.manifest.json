@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "kind": "proven_cache",
+  "spec_name": "qt",
+  "package": "qt-everywhere-src-6.11.1",
+  "spec_tarball": "qt-everywhere-src-6.11.1.tar.xz",
+  "source_sha256": "252acef8c5ae68074d91cadba2ee4a83465051bbb970dd26e8f0daa0f3904e03",
+  "configure_args_hash": "a7330ea5227a",
+  "patch_state_hash": "none",
+  "built_at": "2026-09-15T22:10:07Z",
+  "built_by": {
+    "tool": "build-local.sh",
+    "upstream_tag": "release-102.0",
+    "wrapper_branch": "main",
+    "wrapper_sha": "2596fa9"
+  },
+  "host": {"cpu_brand":"Intel(R) Xeon(R) W-2150B CPU @ 3.00GHz","arch":"x86_64","cores_total":10,"ram_gb":64,"macos_version":"15.7.9","clang_version":"17.0.0","sdk_version":"26.2"}
+}
