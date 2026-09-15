@@ -64,18 +64,19 @@ At v99 the build counter moved from `bNNN` to `relNNN` (release-track) plus `exp
 | rel003 | arm | main | 2026-07-05 13:01 | main | `MKVToolNix-100.0-arm-rel003-main.dmg` | `53af0bea8c` | — | v100.0-b2026.07.1 → apple-silicon.dmg | Qt 6.11.1, full from-source rebuild; superseded by v101 |
 | rel003 | intel | main | 2026-07-05 13:32 | main | `MKVToolNix-100.0-intel-rel003-main.dmg` | `453d903b2a` | — | v100.0-b2026.07.1 → intel.dmg | Qt 6.11.1; superseded by v101 |
 | rel004 | arm | main | 2026-08-24 23:39 | main | `MKVToolNix-101.0-arm-rel004-main.dmg` | `14ff7cfac4` | `logs/MKVToolNix-101.0-arm-rel004-main.log` | v101.0-b2026.08.1 → apple-silicon.dmg | Restored from proven cache; superseded by v102 |
-| **rel004** | intel | main | 2026-08-24 | main | `MKVToolNix-101.0-intel-rel004-main.dmg` | **`1ae058ea03`** | — | **v101.0-b2026.08.1 → intel.dmg** | **Current shipped (Intel)** until the v102.0 Intel build is added |
+| rel004 | intel | main | 2026-08-24 | main | `MKVToolNix-101.0-intel-rel004-main.dmg` | `1ae058ea03` | — | v101.0-b2026.08.1 → intel.dmg | Restored from proven cache; superseded by v102 |
 | **rel006** | arm | main | 2026-09-14 18:28 | main | `MKVToolNix-102.0-arm-rel006-main.dmg` | **`eaf42ec00f`** | `logs/MKVToolNix-102.0-arm-rel006-main.log` | **v102.0-b2026.09.1 → apple-silicon.dmg** | **Current shipped.** Restored from proven cache; deps unchanged from v101 |
+| **rel006** | intel | main | 2026-09-15 16:37 | main | `MKVToolNix-102.0-intel-rel006-main.dmg` | **`f1e1051b0a`** | `logs/MKVToolNix-102.0-intel-rel006-main.log` | **v102.0-b2026.09.1 → intel.dmg** | **Current shipped (Intel).** Full from-source rebuild; promoted the Intel proven cache so its packages carry provenance manifests |
 
-rel005 (arm, 2026-08-26) was a from-source rebuild of v101.0 that produced the current proven cache; it was not shipped.
+rel005 (arm, 2026-08-26) was a from-source rebuild of v101.0 that produced the current arm proven cache; it was not shipped. rel005 (intel, 2026-08-25) was a local test build of v101.0, also not shipped — which is why the Intel counter goes from rel004 to rel006.
 
 ## Summary
 
 - **v98 builds preserved:** 22 (17 arm + 5 intel) — the `bNNN` tables above
-- **Release builds (v99+):** 7 shipped — `rel002` arm+intel (v99), `rel003` arm+intel (v100), `rel004` arm+intel (v101), `rel006` arm (v102)
+- **Release builds (v99+):** 8 shipped — `rel002` arm+intel (v99), `rel003` arm+intel (v100), `rel004` arm+intel (v101), `rel006` arm+intel (v102)
 - **Missing from preservation:** 3 (arm b015, b016, b019)
-- **Currently shipped:** **arm rel006** (v102.0-b2026.09.1) + **intel rel004** (v101.0-b2026.08.1) until the v102.0 Intel build is added; SHA256-verified against the GitHub release assets
-- **Prior shipped (superseded):** v100.0-b2026.07.1 (arm/intel rel003); v99.0-b2026.05.1 (arm/intel rel002); v98.0-b2026.04.3 (arm b013 / intel b005)
+- **Currently shipped:** **arm rel006 + intel rel006** (v102.0-b2026.09.1); SHA256-verified against the GitHub release assets
+- **Prior shipped (superseded):** v101.0-b2026.08.1 (arm/intel rel004); v100.0-b2026.07.1 (arm/intel rel003); v99.0-b2026.05.1 (arm/intel rel002); v98.0-b2026.04.3 (arm b013 / intel b005)
 - **Retracted:** v98.0-b2026.04.1 (arm b010 + intel b001 probable — Homebrew leak crash; assets removed from GitHub)
 
 ## Notes on preservation gaps

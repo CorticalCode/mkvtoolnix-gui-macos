@@ -2,11 +2,11 @@
 
 ## v102.0-b2026.09.1 (2026-09-14) — Current Release
 
-MKVToolNix 102.0 "Little Houses" — Apple Silicon (arm64); Intel (x86_64) to follow.
+MKVToolNix 102.0 "Little Houses" — Apple Silicon (arm64) and Intel (x86_64).
 
 **Downloads:**
 - Apple Silicon (arm64): `MKVToolNix-102.0-macos-apple-silicon.dmg` — ~25 MB DMG (~75 MB app)
-- Intel (x86_64): `MKVToolNix-102.0-macos-intel.dmg` — in progress
+- Intel (x86_64): `MKVToolNix-102.0-macos-intel.dmg` — ~28 MB DMG (~78 MB app)
 
 **Highlights:**
 - MKVToolNix 102.0 upstream (Qt 6.11.1, Boost 1.88.0, zlib 1.3.2).
@@ -18,7 +18,10 @@ MKVToolNix 102.0 "Little Houses" — Apple Silicon (arm64); Intel (x86_64) to fo
   between `release-101.0` and `release-102.0`, so Qt stays 6.11.1.
 - Single active wrapper patch (`mkvtoolnix-size-opt`, ThinLTO/`-Os`) — unchanged, still applies
   cleanly; zero Qt source patches.
-- Built from the proven dependency cache (deps unchanged); arm64 DMG ~24.8 MB / app 74.9 MB.
+- Apple Silicon: built from the proven dependency cache (deps unchanged); DMG ~24.8 MB / app 74.9 MB.
+- Intel: full from-source rebuild, then promoted — the cached Intel dependencies predated the
+  provenance manifests the build now requires, so the cache itself was rebuilt and republished.
+  Same dependency versions as v101; DMG ~27.5 MB / app 78.4 MB.
 
 ## Cache/tag binding + release build manifests (2026-08-25)
 

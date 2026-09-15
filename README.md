@@ -12,7 +12,7 @@ These are this repo's **unofficial** builds. For official **notarized** DMGs (re
 
 | Date | Release | MKVToolNix | Apple Silicon | Intel |
 |------|---------|:----------:|:-------------:|:-----:|
-| 2026-09-14 | [v102.0-b2026.09.1](../../releases/tag/v102.0-b2026.09.1) | 102.0 | [DMG (25 MB)](../../releases/download/v102.0-b2026.09.1/MKVToolNix-102.0-macos-apple-silicon.dmg) | 🚧 Building… |
+| 2026-09-14 | [v102.0-b2026.09.1](../../releases/tag/v102.0-b2026.09.1) | 102.0 | [DMG (25 MB)](../../releases/download/v102.0-b2026.09.1/MKVToolNix-102.0-macos-apple-silicon.dmg) | [DMG (28 MB)](../../releases/download/v102.0-b2026.09.1/MKVToolNix-102.0-macos-intel.dmg) |
 | 2026-08-24 | [v101.0-b2026.08.1](../../releases/tag/v101.0-b2026.08.1) | 101.0 | [DMG (25 MB)](../../releases/download/v101.0-b2026.08.1/MKVToolNix-101.0-macos-apple-silicon.dmg) | [DMG (28 MB)](../../releases/download/v101.0-b2026.08.1/MKVToolNix-101.0-macos-intel.dmg) |
 | 2026-07-05 | [v100.0-b2026.07.1](../../releases/tag/v100.0-b2026.07.1) | 100.0 | [DMG (25 MB)](../../releases/download/v100.0-b2026.07.1/MKVToolNix-100.0-macos-apple-silicon.dmg) | [DMG (28 MB)](../../releases/download/v100.0-b2026.07.1/MKVToolNix-100.0-macos-intel.dmg) |
 | 2026-05-24 | [v99.0-b2026.05.1](../../releases/tag/v99.0-b2026.05.1) | 99.0 | [DMG (27 MB)](../../releases/download/v99.0-b2026.05.1/MKVToolNix-99.0-macos-apple-silicon.dmg) | [DMG (30 MB)](../../releases/download/v99.0-b2026.05.1/MKVToolNix-99.0-macos-intel.dmg) |

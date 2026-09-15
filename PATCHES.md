@@ -4,7 +4,7 @@ Living document tracking every modification made to build MKVToolNix on macOS (A
 
 ## Build status
 
-**v102.0** built and verified (Apple Silicon; Intel in progress). No dependency changes from v101 — upstream's `packaging/macos/specs.sh` is byte-identical between `release-101.0` and `release-102.0`, so Qt stays 6.11.1. The single active wrapper patch (**`mkvtoolnix-size-opt`**) still applies cleanly; zero Qt source patches. Restored from the proven cache; no promotion needed.
+**v102.0** built and verified (Apple Silicon + Intel). No dependency changes from v101 — upstream's `packaging/macos/specs.sh` is byte-identical between `release-101.0` and `release-102.0`, so Qt stays 6.11.1. The single active wrapper patch (**`mkvtoolnix-size-opt`**) still applies cleanly; zero Qt source patches. Apple Silicon restored from the proven cache; no promotion needed. Intel rebuilt every dependency from source and promoted the result — its cached dependencies predated the provenance manifests the build now requires, so the cache itself was republished. Dependency versions are unchanged either way.
 
 v101.0 built and verified (Apple Silicon + Intel). No dependency changes from v100 — upstream's `packaging/macos/specs.sh` is byte-identical between `release-100.0` and `release-101.0`, so Qt stays 6.11.1. The single active wrapper patch (**`mkvtoolnix-size-opt`**) still applies cleanly; zero Qt source patches. Restored from the proven cache; no promotion needed.
 
@@ -33,6 +33,7 @@ Previous release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build proces
 | **v100 rel003 (Qt 6.11.1)** | 24.8 MB | 74.8 MB | **6.11.1** | ARM, verified, full rebuild from source; Qt bumped to 6.11.1 |
 | **v101 rel004 (source bump)** | 24.8 MB | 74.9 MB | 6.11.1 | ARM, verified, restored from proven cache; deps unchanged from v100 |
 | **v102 rel006 (source bump)** | 24.8 MB | 74.9 MB | 6.11.1 | ARM, verified, restored from proven cache; deps unchanged from v101 |
+| **v102 rel006 (Intel)** | 27.5 MB | 78.4 MB | 6.11.1 | Intel, verified, full from-source rebuild; deps unchanged from v101 |
 
 ---
 
