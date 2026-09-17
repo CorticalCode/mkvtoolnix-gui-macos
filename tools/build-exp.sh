@@ -665,10 +665,12 @@ if [[ -f "${EXPERIMENTAL_DIR}/docbook-xsl.tar.gz" ]]; then
   echo "    docbook-xsl (experimental)"
   (cd "${TARGET}" && tar xzf "${EXPERIMENTAL_DIR}/docbook-xsl.tar.gz")
   from_experimental=$((from_experimental + 1))
+  restored=$((restored + 1))
 elif [[ -f "${PROVEN_DIR}/docbook-xsl.tar.gz" ]]; then
   echo "    docbook-xsl"
   (cd "${TARGET}" && tar xzf "${PROVEN_DIR}/docbook-xsl.tar.gz")
   from_proven=$((from_proven + 1))
+  restored=$((restored + 1))
 fi
 
 echo "==> Restored ${restored} packages (${from_experimental} experimental, ${from_proven} proven)."
