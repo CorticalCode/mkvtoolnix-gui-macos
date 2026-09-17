@@ -1,0 +1,19 @@
+Based on the fix J.D. Purcell proposed in QTBUG-150017:
+https://qt-project.atlassian.net/browse/QTBUG-150017
+Tested with Qt 6.11.1 on macOS 27.
+
+diff --git a/qtbase/src/plugins/styles/mac/qmacstyle_mac.mm b/qtbase/src/plugins/styles/mac/qmacstyle_mac.mm
+index 5d980d2..3f6dbb3 100644
+--- a/qtbase/src/plugins/styles/mac/qmacstyle_mac.mm
++++ b/qtbase/src/plugins/styles/mac/qmacstyle_mac.mm
+@@ -3524,8 +3524,8 @@ void QMacStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, QPai
+             return cs == QStyleHelper::SizeSmall ? 0.5 : 0.0;
+         } ();
+         d->drawNSViewInRect(tb, opt->rect, p, ^(CGContextRef ctx, const CGRect &rect) {
+-            CGContextTranslateCTM(ctx, 0, vOffset);
+-            [tb.cell drawInteriorWithFrame:rect inView:tb];
++            CGContextTranslateCTM(ctx, rect.origin.x, rect.origin.y + vOffset);
++            [tb.cell drawInteriorWithFrame:tb.bounds inView:tb];
+         });
+         break; }
+     case PE_FrameFocusRect:

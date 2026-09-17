@@ -53,6 +53,18 @@ Adds `-flto=thin -Os` to `CXXFLAGS` (and `-flto=thin` to `LDFLAGS`) for the mkvt
 
 No functional change; ThinLTO is fast incremental LTO and `-Os` favors size over speed (speed impact at the noise floor).
 
+### Active Qt source patch — `qt-patches/qtbug-150017-item-view-check-indicator`
+
+**File patched:** `qtbase/src/plugins/styles/mac/qmacstyle_mac.mm`, applied to the Qt source by upstream `build.sh` when it builds Qt.
+
+**Problem:** On macOS 27, when the app's executable records the macOS 26 SDK or newer, AppKit draws the check box and radio button cells of Qt's macOS style at the paint device's origin instead of inside their rectangle. Item views clip them away, so the check boxes in the multiplexer's track list are invisible ([QTBUG-150017](https://qt-project.atlassian.net/browse/QTBUG-150017), [Codeberg #6307](https://codeberg.org/mbunkus/mkvtoolnix/issues/6307), [#9](https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues/9)).
+
+**Fix:** [@jdpurcell](https://github.com/jdpurcell)'s change from QTBUG-150017: translate the drawing context to the indicator's rectangle and draw the cell into its own bounds. The file is byte-identical to the one merged into MKVToolNix as `fd809b6c5` (MR #6308).
+
+**Retire:** at the first MKVToolNix release whose source tarball includes the same patch file; check the actual release source.
+
+**Cache:** the patch changes the Qt fingerprint, so the next build on each architecture has to rebuild Qt (`tools/refresh-deps.sh`) and promote it.
+
 ### Retired at v99.0 (7 patches)
 
 Each was verified against the actual release-99.0 source before removal (reverse-applies clean = change present upstream; conflicts investigated individually). The detailed entries below are retained as historical record.

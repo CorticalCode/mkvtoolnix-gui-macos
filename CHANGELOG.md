@@ -1,5 +1,14 @@
 # Changelog
 
+## Qt patch for invisible check boxes on macOS 27 (2026-09-17)
+
+Adds `patches/qt-patches/qtbug-150017-item-view-check-indicator.patch`, [@jdpurcell](https://github.com/jdpurcell)'s fix for
+[QTBUG-150017](https://qt-project.atlassian.net/browse/QTBUG-150017): on macOS 27, check boxes in
+lists such as the multiplexer's track list are invisible ([#9](https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues/9)).
+The same file was merged into MKVToolNix as `fd809b6c5` (Codeberg MR #6308) and ships with its next
+release. It is not in a release of this repo yet; the `v102.0-b2026.09.2-test.1` pre-release is a
+test build with it.
+
 ## v102.0-b2026.09.1 (2026-09-14) — Current Release
 
 MKVToolNix 102.0 "Little Houses" — Apple Silicon (arm64) and Intel (x86_64).
