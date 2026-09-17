@@ -1076,19 +1076,8 @@ fi
 # Captures full build provenance: source refs, deps used, host machine specs
 # (non-identifying), patches, timing, verification results. Sits alongside
 # the DMG and its .sha256 in build/.
-_PATCH_DIR="${SCRIPT_DIR}/patches"
-PATCHES_JSON="["
-_first_patch=1
-if [[ -d "${_PATCH_DIR}" ]]; then
-  for p in "${_PATCH_DIR}"/*.patch(N) "${_PATCH_DIR}"/qt-patches/*.patch(N); do
-    [[ -f "$p" ]] || continue
-    [[ ${_first_patch} -eq 1 ]] && _first_patch=0 || PATCHES_JSON+=", "
-    p_sha=$(command shasum -a 256 "$p" | command awk '{print $1}')
-    p_rel="${p#${SCRIPT_DIR}/}"
-    PATCHES_JSON+="{\"name\":$(_json_str "${p_rel}"),\"sha256\":$(_json_str "${p_sha}")}"
-  done
-fi
-PATCHES_JSON+="]"
+# Experimental builds apply no wrapper patches; changes live in the source tree.
+PATCHES_JSON="[]"
 
 _BUNDLED_LIBS_JSON="["
 _first_lib=1
