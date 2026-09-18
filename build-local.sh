@@ -383,9 +383,12 @@ _write_cache_manifests() {
 #
 # source_sha256 is the load-bearing check: it is upstream's own declared hash,
 # read from this tag's specs.sh, so it inherits the tag signature's trust root.
-# configure_args_hash and patch_state_hash are advisory only — the first is
-# source-level and blind to CXXFLAGS, deployment target, clang and SDK version,
-# and exists for Qt alone. Neither is strong enough to refuse on.
+# patch_state_hash is load-bearing too: it hashes the contents of the patches
+# applied to the dep's source, so a mismatch says this package was built with a
+# different patch set, which no source hash can see. configure_args_hash stays
+# advisory — it is source-level and blind to CXXFLAGS, deployment target, clang
+# and SDK version, and exists for Qt alone, so it is not strong enough to refuse
+# on.
 _validate_proven_manifest() {
   local manifest="$1" exp_spec="$2" exp_pkg="$3" exp_src_sha="$4"
   local schema kind spec pkg src_sha
@@ -437,8 +440,13 @@ _validate_proven_manifest() {
   fi
   cur_patch=$(_patch_state_hash "${exp_spec}")
   manifest_patch=$(_manifest_field "${manifest}" "patch_state_hash")
-  if [[ -n "${cur_patch}" && -n "${manifest_patch}" && "${cur_patch}" != "${manifest_patch}" ]]; then
-    drift+=("patch_state:${manifest_patch}→${cur_patch}")
+  if [[ -z "${manifest_patch}" ]]; then
+    print "REFUSE: manifest records no patch_state_hash"
+    return 1
+  fi
+  if [[ "${cur_patch}" != "${manifest_patch}" ]]; then
+    print "REFUSE: built with a different patch set than this tree declares (${manifest_patch} vs ${cur_patch})"
+    return 1
   fi
 
   if [[ ${#drift[@]} -gt 0 ]]; then

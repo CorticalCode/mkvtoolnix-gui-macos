@@ -299,12 +299,22 @@ for i in {1..${#EXPECTED_PACKAGES[@]}}; do
     m_pkg=$(command grep -oE '"package"[[:space:]]*:[[:space:]]*"[^"]*"' "${manifest}" | command sed -E 's/.*"([^"]*)"$/\1/')
     m_sha=$(command grep -oE '"source_sha256"[[:space:]]*:[[:space:]]*"[^"]*"' "${manifest}" | command sed -E 's/.*"([^"]*)"$/\1/')
     m_kind=$(command grep -oE '"kind"[[:space:]]*:[[:space:]]*"[^"]*"' "${manifest}" | command sed -E 's/.*"([^"]*)"$/\1/')
+    # patch_state_hash hashes the contents of the patches applied to this dep's
+    # source, so a mismatch says the cached build used a different patch set —
+    # the one thing a source hash cannot see. A cache that predates the field
+    # cannot answer the question at all, so it counts as stale too.
+    m_patch=$(command grep -oE '"patch_state_hash"[[:space:]]*:[[:space:]]*"[^"]*"' "${manifest}" | command sed -E 's/.*"([^"]*)"$/\1/')
+    cur_patch=$(_patch_state_hash "${EXPECTED_TARGETS[$i]}")
     if [[ "${m_kind}" != "proven_cache" ]]; then
       reason="not promoted by build-local.sh (kind=${m_kind:-<none>})"
     elif [[ "${m_pkg}" != "${pkg}" ]]; then
       reason="manifest names ${m_pkg}"
     elif [[ -n "${EXPECTED_SHAS[$i]}" && "${m_sha}" != "${EXPECTED_SHAS[$i]}" ]]; then
       reason="built from a different source tarball than ${TAG} declares"
+    elif [[ -z "${m_patch}" ]]; then
+      reason="manifest records no patch_state_hash"
+    elif [[ "${m_patch}" != "${cur_patch}" ]]; then
+      reason="built with a different patch set (${m_patch} vs ${cur_patch})"
     fi
   fi
   if [[ -n "${reason}" ]]; then
