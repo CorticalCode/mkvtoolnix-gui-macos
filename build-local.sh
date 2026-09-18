@@ -862,6 +862,73 @@ function restore_from_proven {
   echo "==> Restored ${restored} packages. Missing: 0."
 }
 
+# True when the repo's proven/<arch> copy already carries exactly what the local
+# cache holds. Compares the sidecars, not the packages: in a normal checkout the
+# repo copies are LFS pointers, so their bytes say nothing about the package
+# they stand for, while the .sha256 and .manifest.json beside them are ordinary
+# files that name the hash and the build.
+function _repo_proven_matches_cache {
+  local proven_dir="${TARGET}/proven/${ARCH_LABEL}"
+  local repo_proven="${SCRIPT_DIR}/proven/${ARCH_LABEL}"
+  local f stem
+
+  for f in "${proven_dir}"/*.tar.gz(N); do
+    stem="${f:t}"
+    [[ -f "${repo_proven}/${stem}.sha256" ]]        || return 1
+    [[ -f "${repo_proven}/${stem}.manifest.json" ]] || return 1
+    command cmp -s "${f}.sha256" "${repo_proven}/${stem}.sha256"               || return 1
+    command cmp -s "${f}.manifest.json" "${repo_proven}/${stem}.manifest.json" || return 1
+  done
+  for f in "${repo_proven}"/*.tar.gz(N); do
+    [[ -f "${proven_dir}/${f:t}" ]] || return 1
+  done
+  return 0
+}
+
+# Syncs the repo's proven/<arch> to exactly what the local cache holds: prunes
+# packages the cache no longer has, copies packages and manifests, regenerates
+# the sidecar hashes, refuses to publish a set a restore would reject, and
+# commits with $1 as the subject.
+function _publish_cache_to_repo {
+  local subject="$1"
+  local proven_dir="${TARGET}/proven/${ARCH_LABEL}"
+  local repo_proven="${SCRIPT_DIR}/proven/${ARCH_LABEL}"
+  local existing pf f
+  local -a new_manifests=() unpublishable=()
+
+  mkdir -p "${repo_proven}"
+  for existing in "${repo_proven}"/*.tar.gz(N); do
+    if [[ ! -f "${proven_dir}/${existing:t}" ]]; then
+      echo "    Pruning stale proven package: ${existing:t}"
+      command rm -f "${existing}" "${existing}.sha256" "${existing}.manifest.json"
+    fi
+  done
+  command cp "${proven_dir}"/*.tar.gz "${repo_proven}/"
+  new_manifests=("${proven_dir}"/*.tar.gz.manifest.json(N))
+  [[ ${#new_manifests[@]} -gt 0 ]] && command cp "${new_manifests[@]}" "${repo_proven}/"
+  (cd "${repo_proven}" && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
+
+  # Publisher gate. The equivalent check lives in --restore-cache, which means
+  # it fires on whoever tries to use this rather than on whoever published it.
+  # Ask the same question here, before it becomes someone else's problem.
+  for pf in "${repo_proven}"/*.tar.gz(N); do
+    [[ -f "${pf}.sha256" ]]        || unpublishable+=("${pf:t:r:r}: no .sha256")
+    [[ -f "${pf}.manifest.json" ]] || unpublishable+=("${pf:t:r:r}: no .manifest.json")
+  done
+  if [[ ${#unpublishable[@]} -gt 0 ]]; then
+    echo "ERROR: refusing to publish a cache that would be refused on restore:"
+    for pf in "${unpublishable[@]}"; do
+      echo "    ${pf}"
+    done
+    echo "  Nothing was committed. proven/${ARCH_LABEL}/ in the working tree now holds"
+    echo "  the promoted set; reconcile it before committing by hand."
+    return 1
+  fi
+
+  # git add -A so pruned packages are staged as deletions, not just the new adds.
+  (cd "${SCRIPT_DIR}" && git add -A "proven/${ARCH_LABEL}/" && git diff --cached --quiet || git commit -m "${subject}" -- "proven/${ARCH_LABEL}/")
+}
+
 function do_promote {
   local proven_dir="${TARGET}/proven/${ARCH_LABEL}"
   local packages_dir="${TARGET}/packages"
@@ -921,9 +988,22 @@ function do_promote {
         echo "  would record what specs.sh says today, not what these were built from."
         exit 1
       fi
+      # The local cache can be ahead of this build. tools/refresh-deps.sh
+      # rebuilds the dependencies that drifted, repromotes them here, and says
+      # to run --promote to archive them — so compare the two copies rather
+      # than assuming a restore build leaves nothing to publish.
+      if ! _repo_proven_matches_cache; then
+        echo "==> This build rebuilt only mkvtoolnix, but the proven cache holds"
+        echo "    packages the repo copy does not. Archiving the cache as it stands..."
+        _publish_cache_to_repo "promote: ${ARCH_LABEL} proven deps $(date +%Y-%m-%d)" || exit 1
+        echo "==> Promotion complete. Proven cache published to LFS."
+        echo "    Push when ready."
+        cleanup_repo_lfs "${ARCH_LABEL}"
+        return 0
+      fi
       echo "==> Nothing to promote — the proven cache already holds every package"
-      echo "    this tag expects, and this build rebuilt only mkvtoolnix."
-      echo "    Dependencies are unchanged; the cache stands as-is."
+      echo "    this tag expects, this build rebuilt only mkvtoolnix, and the repo"
+      echo "    copy already matches the cache."
       return 0
     fi
     echo "ERROR: Cannot promote — packages/ is incomplete (${#missing_pkgs[@]} missing)."
@@ -985,38 +1065,7 @@ function do_promote {
   # predecessor like an old Qt/zlib) so it doesn't linger as an orphan. Step 1
   # already committed the outgoing cache, so anything pruned here stays
   # recoverable from git history.
-  mkdir -p "${repo_proven}"
-  for existing in "${repo_proven}"/*.tar.gz; do
-    if [[ ! -f "${proven_dir}/${existing:t}" ]]; then
-      echo "    Pruning stale proven package: ${existing:t}"
-      command rm -f "${existing}" "${existing}.sha256" "${existing}.manifest.json"
-    fi
-  done
-  command cp "${proven_dir}"/*.tar.gz "${repo_proven}/"
-  local -a new_manifests=("${proven_dir}"/*.tar.gz.manifest.json(N))
-  [[ ${#new_manifests[@]} -gt 0 ]] && command cp "${new_manifests[@]}" "${repo_proven}/"
-  (cd "${repo_proven}" && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
-  # Publisher gate. The equivalent check lives in --restore-cache, which means
-  # it fires on whoever tries to use this rather than on whoever published it.
-  # Ask the same question here, before it becomes someone else's problem.
-  local -a unpublishable=()
-  local pf
-  for pf in "${repo_proven}"/*.tar.gz(N); do
-    [[ -f "${pf}.sha256" ]]        || unpublishable+=("${pf:t:r:r}: no .sha256")
-    [[ -f "${pf}.manifest.json" ]] || unpublishable+=("${pf:t:r:r}: no .manifest.json")
-  done
-  if [[ ${#unpublishable[@]} -gt 0 ]]; then
-    echo "ERROR: refusing to publish a cache that would be refused on restore:"
-    for pf in "${unpublishable[@]}"; do
-      echo "    ${pf}"
-    done
-    echo "  Nothing was committed. proven/${ARCH_LABEL}/ in the working tree now holds"
-    echo "  the promoted set; reconcile it before committing by hand."
-    exit 1
-  fi
-
-  # git add -A so pruned packages are staged as deletions, not just the new adds.
-  (cd "${SCRIPT_DIR}" && git add -A "proven/${ARCH_LABEL}/" && git diff --cached --quiet || git commit -m "promote: ${ARCH_LABEL} proven deps $(date +%Y-%m-%d)" -- "proven/${ARCH_LABEL}/")
+  _publish_cache_to_repo "promote: ${ARCH_LABEL} proven deps $(date +%Y-%m-%d)" || exit 1
 
   echo "==> Promotion complete. Proven cache updated."
   echo "    LFS archive committed. Push when ready."
