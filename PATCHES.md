@@ -4,6 +4,8 @@ Living document tracking every modification made to build MKVToolNix on macOS (A
 
 ## Build status
 
+**v102.0-b2026.09.2** (rel007, Apple Silicon, 2026-09-18) adds the Qt source patch **`qt-patches/qtbug-150017-item-view-check-indicator.patch`** for the macOS 27 check boxes, so Qt 6.11.1 and gnupg were rebuilt from source and repromoted to the local cache. Same signed 102.0 source and the same wrapper patch otherwise. Intel still to come.
+
 **v102.0** built and verified (Apple Silicon + Intel). No dependency changes from v101 — upstream's `packaging/macos/specs.sh` is byte-identical between `release-101.0` and `release-102.0`, so Qt stays 6.11.1. The single active wrapper patch (**`mkvtoolnix-size-opt`**) still applies cleanly; zero Qt source patches. Apple Silicon restored from the proven cache; no promotion needed. Intel rebuilt every dependency from source and promoted the result — its cached dependencies predated the provenance manifests the build now requires, so the cache itself was republished. Dependency versions are unchanged either way.
 
 v101.0 built and verified (Apple Silicon + Intel). No dependency changes from v100 — upstream's `packaging/macos/specs.sh` is byte-identical between `release-100.0` and `release-101.0`, so Qt stays 6.11.1. The single active wrapper patch (**`mkvtoolnix-size-opt`**) still applies cleanly; zero Qt source patches. Restored from the proven cache; no promotion needed.
@@ -34,6 +36,7 @@ Previous release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build proces
 | **v101 rel004 (source bump)** | 24.8 MB | 74.9 MB | 6.11.1 | ARM, verified, restored from proven cache; deps unchanged from v100 |
 | **v102 rel006 (source bump)** | 24.8 MB | 74.9 MB | 6.11.1 | ARM, verified, restored from proven cache; deps unchanged from v101 |
 | **v102 rel006 (Intel)** | 27.5 MB | 78.4 MB | 6.11.1 | Intel, verified, full from-source rebuild; deps unchanged from v101 |
+| **v102 rel007 (Qt patch)** | 25.6 MB | 75.0 MB | 6.11.1 | ARM, verified, Qt rebuilt from source with the QTBUG-150017 patch (Xcode 27) |
 
 ---
 

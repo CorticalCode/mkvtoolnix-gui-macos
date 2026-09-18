@@ -10,10 +10,9 @@ This repo is a proof-of-concept that builds the full GUI from upstream source an
 
 These are this repo's **unofficial** builds. For official **notarized** DMGs (recommended for most users), see the [official downloads page](https://mkvtoolnix.download/downloads.html#macosx).
 
-> ⚠️ **macOS 27:** a test build that fixes invisible check boxes is available for Apple Silicon as a pre-release: [v102.0-b2026.09.2-test.1](../../releases/tag/v102.0-b2026.09.2-test.1). It isn't an official release yet.
-
 | Date | Release | MKVToolNix | Apple Silicon | Intel |
 |------|---------|:----------:|:-------------:|:-----:|
+| 2026-09-18 | [v102.0-b2026.09.2](../../releases/tag/v102.0-b2026.09.2) | 102.0 | [DMG (26 MB)](../../releases/download/v102.0-b2026.09.2/MKVToolNix-102.0-macos-apple-silicon.dmg) | 🚧 Building… |
 | 2026-09-14 | [v102.0-b2026.09.1](../../releases/tag/v102.0-b2026.09.1) | 102.0 | [DMG (25 MB)](../../releases/download/v102.0-b2026.09.1/MKVToolNix-102.0-macos-apple-silicon.dmg) | [DMG (28 MB)](../../releases/download/v102.0-b2026.09.1/MKVToolNix-102.0-macos-intel.dmg) |
 | 2026-08-24 | [v101.0-b2026.08.1](../../releases/tag/v101.0-b2026.08.1) | 101.0 | [DMG (25 MB)](../../releases/download/v101.0-b2026.08.1/MKVToolNix-101.0-macos-apple-silicon.dmg) | [DMG (28 MB)](../../releases/download/v101.0-b2026.08.1/MKVToolNix-101.0-macos-intel.dmg) |
 | 2026-07-05 | [v100.0-b2026.07.1](../../releases/tag/v100.0-b2026.07.1) | 100.0 | [DMG (25 MB)](../../releases/download/v100.0-b2026.07.1/MKVToolNix-100.0-macos-apple-silicon.dmg) | [DMG (28 MB)](../../releases/download/v100.0-b2026.07.1/MKVToolNix-100.0-macos-intel.dmg) |

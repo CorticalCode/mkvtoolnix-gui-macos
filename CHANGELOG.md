@@ -1,5 +1,27 @@
 # Changelog
 
+## v102.0-b2026.09.2 (2026-09-18) — Current Release
+
+MKVToolNix 102.0 "Little Houses" — Apple Silicon (arm64); Intel (x86_64) to follow.
+
+**Downloads:**
+- Apple Silicon (arm64): `MKVToolNix-102.0-macos-apple-silicon.dmg` — ~25.6 MB DMG (~75 MB app)
+- Intel (x86_64): 🚧 building
+
+**Highlights:**
+- Fixes invisible check boxes on macOS 27 in lists such as the multiplexer's track list. Qt is built with
+  `patches/qt-patches/qtbug-150017-item-view-check-indicator.patch`, @jdpurcell's fix from QTBUG-150017 and
+  the same file MKVToolNix merged as `fd809b6c5` for its next release.
+- Same source as v102.0-b2026.09.1: the signed MKVToolNix 102.0 release tarball and the one wrapper patch
+  (`mkvtoolnix-size-opt`). Qt 6.11.1 and gnupg were rebuilt from source with the Qt patch and repromoted to
+  the local cache; every other dependency came from the proven cache.
+- The cache guard now refuses a cached dependency whose recorded patch set differs from the tree's, which is
+  what flagged Qt for the rebuild. Previously that mismatch was only a warning.
+- The DMG grew ~0.8 MB against b2026.09.1 because Qt was rebuilt with Xcode 27 rather than the Xcode 26 that
+  produced the cached copy. All 24 binaries arm64, no external library references.
+- Known gap: `--promote` archives only what a build compiled itself, so the repo's `proven/arm` copy still
+  holds the pre-patch Qt. A restore from it is refused by the new check rather than silently used.
+
 ## Qt patch for invisible check boxes on macOS 27 (2026-09-17)
 
 Adds `patches/qt-patches/qtbug-150017-item-view-check-indicator.patch`, [@jdpurcell](https://github.com/jdpurcell)'s fix for
@@ -9,7 +31,7 @@ The same file was merged into MKVToolNix as `fd809b6c5` (Codeberg MR #6308) and 
 release. It is not in a release of this repo yet; the `v102.0-b2026.09.2-test.1` pre-release is a
 test build with it.
 
-## v102.0-b2026.09.1 (2026-09-14) — Current Release
+## v102.0-b2026.09.1 (2026-09-14)
 
 MKVToolNix 102.0 "Little Houses" — Apple Silicon (arm64) and Intel (x86_64).
 
