@@ -77,14 +77,23 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
+      # The build root lives outside $HOME so that no account name is baked
+      # into the artifacts. /opt is root-owned on the runners, so it takes one
+      # privileged step to create before anything else touches it.
+      - name: Create the build root
+        run: |
+          sudo mkdir -p /opt/mtx
+          sudo chown "$(id -un)" /opt/mtx
+          test -w /opt/mtx
+
       # Layer 1: GitHub Actions cache (ephemeral, 7-day TTL)
       - name: Restore dependency cache
         id: dep-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
-            ~/opt/packages
-            ~/opt/source
+            /opt/mtx/prefix/packages
+            /opt/mtx/src
           key: deps-${{ needs.check-release.outputs.version }}-${{ hashFiles('patches/*.patch', 'patches/qt-patches/*.patch', 'config/config.local.sh') }}
           restore-keys: |
             deps-${{ needs.check-release.outputs.version }}-
@@ -114,7 +123,7 @@ jobs:
           # build-local.sh writes release/MKVToolNix-<ver>-macos-<arch>.dmg only
           # on main and only when post-build verification passed, so the file's
           # existence is the gate. Reading it here rather than reconstructing a
-          # path under ~/tmp/compile also survives upstream renaming its own DMG,
+          # path under /opt/mtx/build also survives upstream renaming its own DMG,
           # which it last did at release-99.0.
           SRC="release/MKVToolNix-${VERSION}-macos-arm.dmg"
           if [[ ! -f "${SRC}" ]]; then
