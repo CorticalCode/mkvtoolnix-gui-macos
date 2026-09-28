@@ -328,7 +328,7 @@ _write_proven_manifest() {
   wrapper_sha=$(git -C "${SCRIPT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
   cat > "${out}" <<EOF
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "kind": "proven_cache",
   "spec_name": $(_json_str "${spec_name}"),
   "package": $(_json_str "${package}"),
@@ -336,6 +336,7 @@ _write_proven_manifest() {
   "source_sha256": $(_json_str "${source_sha}"),
   "configure_args_hash": $(_json_str "${args_hash}"),
   "patch_state_hash": $(_json_str "${patch_hash}"),
+  "prefix": $(_json_str "${TARGET}"),
   "built_at": $(_json_str "$(_iso_utc)"),
   "built_by": {
     "tool": "build-local.sh",
@@ -408,8 +409,8 @@ _validate_proven_manifest() {
     print "REFUSE: malformed manifest (no schema_version)"
     return 1
   fi
-  if [[ "${schema}" != "1" ]]; then
-    print "REFUSE: schema_version=${schema} (this build-local.sh handles only v1)"
+  if [[ "${schema}" != "2" ]]; then
+    print "REFUSE: schema_version=${schema} (this build-local.sh handles only v2)"
     return 1
   fi
   if [[ "${kind}" != "proven_cache" ]]; then
@@ -446,6 +447,22 @@ _validate_proven_manifest() {
   fi
   if [[ "${cur_patch}" != "${manifest_patch}" ]]; then
     print "REFUSE: built with a different patch set than this tree declares (${manifest_patch} vs ${cur_patch})"
+    return 1
+  fi
+
+  # The install prefix is baked into the packages themselves — pkg-config .pc
+  # files, libtool .la files, CMake config files and compiled-in defaults all
+  # record it as an absolute path. A package built under a different prefix is
+  # therefore wrong for this tree no matter how well its source hash matches,
+  # and restoring it would put stale paths back into everything downstream.
+  local manifest_prefix
+  manifest_prefix=$(_manifest_field "${manifest}" "prefix")
+  if [[ -z "${manifest_prefix}" ]]; then
+    print "REFUSE: manifest records no build prefix"
+    return 1
+  fi
+  if [[ "${manifest_prefix}" != "${TARGET}" ]]; then
+    print "REFUSE: built under a different prefix than this tree uses (${manifest_prefix} vs ${TARGET})"
     return 1
   fi
 

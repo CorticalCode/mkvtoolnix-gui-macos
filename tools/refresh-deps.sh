@@ -266,7 +266,7 @@ _refresh_write_manifest() {
   ws=$(git -C "${SCRIPT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
   cat > "${out}" <<EOF
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "kind": "proven_cache",
   "spec_name": $(_json_str "${spec}"),
   "package": $(_json_str "${package}"),
@@ -274,6 +274,7 @@ _refresh_write_manifest() {
   "source_sha256": $(_json_str "${src_sha}"),
   "configure_args_hash": $(_json_str "${args_hash}"),
   "patch_state_hash": $(_json_str "${patch_hash}"),
+  "prefix": $(_json_str "${TARGET}"),
   "built_at": $(_json_str "$(_iso_utc)"),
   "built_by": {
     "tool": "tools/refresh-deps.sh",
@@ -315,6 +316,10 @@ for i in {1..${#EXPECTED_PACKAGES[@]}}; do
     # cannot answer the question at all, so it counts as stale too.
     m_patch=$(command grep -oE '"patch_state_hash"[[:space:]]*:[[:space:]]*"[^"]*"' "${manifest}" | command sed -E 's/.*"([^"]*)"$/\1/')
     cur_patch=$(_patch_state_hash "${EXPECTED_TARGETS[$i]}")
+    # The install prefix is baked into the package as absolute paths (.pc, .la,
+    # CMake configs, compiled-in defaults), so one built elsewhere is stale for
+    # this tree whatever its source hash says.
+    m_prefix=$(command grep -oE '"prefix"[[:space:]]*:[[:space:]]*"[^"]*"' "${manifest}" | command sed -E 's/.*"([^"]*)"$/\1/')
     if [[ "${m_kind}" != "proven_cache" ]]; then
       reason="not promoted by build-local.sh (kind=${m_kind:-<none>})"
     elif [[ "${m_pkg}" != "${pkg}" ]]; then
@@ -325,6 +330,10 @@ for i in {1..${#EXPECTED_PACKAGES[@]}}; do
       reason="manifest records no patch_state_hash"
     elif [[ "${m_patch}" != "${cur_patch}" ]]; then
       reason="built with a different patch set (${m_patch} vs ${cur_patch})"
+    elif [[ -z "${m_prefix}" ]]; then
+      reason="manifest records no build prefix"
+    elif [[ "${m_prefix}" != "${TARGET}" ]]; then
+      reason="built under a different prefix (${m_prefix} vs ${TARGET})"
     fi
   fi
   if [[ -n "${reason}" ]]; then
