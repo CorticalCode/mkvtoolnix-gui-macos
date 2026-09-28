@@ -1,0 +1,13 @@
+diff --git a/packaging/macos/myinstall.sh b/packaging/macos/myinstall.sh
+index 8144181..a92fa91 100755
+--- a/packaging/macos/myinstall.sh
++++ b/packaging/macos/myinstall.sh
+@@ -20,7 +20,7 @@ function run_build {
+   local package tmpdir install_command
+ 
+   package=${PACKAGE:-${PWD:t}}
+-  tmpdir=$HOME/tmp/install-${$}-${package}
++  tmpdir=${STAGING_DIR:-$HOME/tmp}/install-${$}-${package}
+   install_command=${INSTALL_COMMAND//TMPDIR/${tmpdir}}
+   echo PACKAGE $PACKAGE package $package tmpdir $tmpdir install_command $install_command
+   $DEBUG mkdir -p $tmpdir $PACKAGE_DIR

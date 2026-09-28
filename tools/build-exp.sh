@@ -53,6 +53,14 @@ TRAPZERR() {
 # SCRIPT_DIR = wrapper repo root (tools/ → parent)
 SCRIPT_DIR=${0:a:h:h}
 
+# Build locations come from the experimental config overlay — the same file
+# staged as config.local.sh in the source tree, so this wrapper and the build
+# it drives agree on where the experimental tree lives. Read it here, before
+# anything reads TARGET.
+if [[ -f "${SCRIPT_DIR}/config/config.exp.local.sh" ]]; then
+  source "${SCRIPT_DIR}/config/config.exp.local.sh"
+fi
+
 usage() {
   cat <<'USAGE'
 Usage: ./tools/build-exp.sh <path-to-source> [--slug NAME] [--verify-symbol SYM] [--rebuild-deps]
@@ -216,7 +224,7 @@ if [[ -z "${MTX_VER}" ]]; then
 fi
 
 # --- Paths: honor env overrides, default to upstream's convention ---
-WORK_DIR="${WORK_DIR:-${HOME}/tmp/compile}"
+WORK_DIR="${CMPL:-${WORK_DIR:-${HOME}/tmp/compile}}"
 TARGET="${TARGET:-${HOME}/opt}"
 
 # --- Predict build number and derive hash (deterministic from slug+num+ver) ---
@@ -778,31 +786,23 @@ fi
 # then the wrapper config (already resolved to WRAPPER_CONFIG above —
 # config.exp.local.sh preferred, falls back to config.local.sh).
 #
-# Preserve any user-provided TARGET/SRCDIR env overrides. Upstream's config.sh
-# unconditionally writes `export TARGET=$HOME/opt`, `export SRCDIR=$HOME/opt/source`,
-# `export PACKAGE_DIR=$HOME/opt/packages`. Without this guard,
-# `TARGET=/Volumes/Fast/opt ./tools/build-exp.sh ...` silently mixes dep
-# trees: cache restore (which ran BEFORE this block, with the override
-# honored) extracts into /Volumes/Fast/opt while build links against
-# $HOME/opt. The restoration below re-asserts the user's choice and
-# re-anchors PACKAGE_DIR so the promote step finds tarballs in the right
-# place.
-_saved_target="${TARGET:-}"
-_saved_srcdir="${SRCDIR:-}"
+# Upstream's config.sh exports its own $HOME-based TARGET, SRCDIR and
+# PACKAGE_DIR unconditionally. The wrapper overlay is sourced immediately
+# after and sets every path unconditionally too, so the overlay wins and no
+# re-assertion is needed here. Relocate the whole tree with MTX_ROOT, which
+# the overlay honors.
+#
+# Without an overlay there is nothing to override config.sh, and the build
+# would silently run under $HOME. That is a refusal, not a fallback.
+if [[ -z "${WRAPPER_CONFIG}" ]]; then
+  echo "ERROR: no wrapper config resolved — config/config.exp.local.sh and" >&2
+  echo "       config/config.local.sh are both missing from this checkout." >&2
+  echo "       Refusing to build with upstream's \$HOME-based paths." >&2
+  exit 1
+fi
 _SAVED_OPTS=$(setopt | tr '\n' ' ')
 source "${FORK_BUILD_DIR}/packaging/macos/config.sh"
-if [[ -n "${WRAPPER_CONFIG}" ]]; then
-  source "${WRAPPER_CONFIG}"
-fi
-if [[ -n "${_saved_target}" ]]; then
-  export TARGET="${_saved_target}"
-  export PACKAGE_DIR="${TARGET}/packages"
-  [[ -z "${_saved_srcdir}" ]] && export SRCDIR="${TARGET}/source"
-fi
-if [[ -n "${_saved_srcdir}" ]]; then
-  export SRCDIR="${_saved_srcdir}"
-fi
-unset _saved_target _saved_srcdir
+source "${WRAPPER_CONFIG}"
 # Re-enable our options after sourced files may have changed them
 setopt ${=_SAVED_OPTS} 2>/dev/null
 set -e

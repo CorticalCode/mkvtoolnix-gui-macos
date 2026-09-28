@@ -20,7 +20,17 @@ unalias -a 2>/dev/null || true
 
 SCRIPT_DIR=${0:a:h:h}
 UPSTREAM_URL="https://codeberg.org/mbunkus/mkvtoolnix.git"
-WORK_DIR=${WORK_DIR:-$HOME/tmp/compile}
+# Build locations come from the config overlay — the same file the build copies
+# into the upstream tree — so this tool refreshes packages in the tree the
+# build actually uses.
+if [[ -f "${SCRIPT_DIR}/config/config.local.sh" ]]; then
+  source "${SCRIPT_DIR}/config/config.local.sh"
+fi
+# WORK_DIR here only locates the upstream source clone below; the compile
+# workspace the child build.sh uses is CMPL, from the overlay. An environment
+# override is therefore safe and cannot make the two disagree — unlike in
+# build-local.sh, where WORK_DIR is the workspace that gets wiped.
+WORK_DIR=${WORK_DIR:-${CMPL:-$HOME/tmp/compile}}
 TARGET=${TARGET:-$HOME/opt}
 CLONE_DIR="${WORK_DIR}/mkvtoolnix-src"
 DRY_RUN=0

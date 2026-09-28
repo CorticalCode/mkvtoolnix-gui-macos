@@ -1077,12 +1077,24 @@ function do_promote {
   echo "    objects this promote retained (git-lfs keeps objects of unpushed commits)."
 }
 
+# Build locations come from the config overlay, which is also copied verbatim
+# into the upstream tree so build.sh derives the same values from the same
+# file. Read it here, before anything creates a directory, so the wrapper and
+# the build it drives never disagree about where the build lives. The overlay
+# is sourced again later from the clone (to read QTVER); both reads produce
+# the same paths.
+if [[ -f "${SCRIPT_DIR}/config/config.local.sh" ]]; then
+  source "${SCRIPT_DIR}/config/config.local.sh"
+fi
+
 # Defaults
 TAG=""
 BUILD_MODE="auto"  # auto, full, promote
-WORK_DIR=${WORK_DIR:-$HOME/tmp/compile}
+# CMPL is upstream's name for the compile workspace and is authoritative when
+# the overlay supplies it; the $HOME fallbacks apply only without an overlay.
+WORK_DIR=${CMPL:-${WORK_DIR:-$HOME/tmp/compile}}
 TARGET=${TARGET:-$HOME/opt}
-PACKAGE_DIR="${TARGET}/packages"
+PACKAGE_DIR=${PACKAGE_DIR:-${TARGET}/packages}
 BUILD_DIR="${SCRIPT_DIR}/build"
 RELEASE_DIR="${SCRIPT_DIR}/release"
 VERIFY_PASSED=false

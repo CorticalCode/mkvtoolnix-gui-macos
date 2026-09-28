@@ -17,11 +17,24 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Both roots come from the config overlays, the single source of truth for
+# where each tree lives. Each is evaluated in its own subshell: the overlays
+# derive their paths from MTX_ROOT with a ${MTX_ROOT:-default} form, so
+# sourcing them one after another in the same shell would leave the first
+# file's root in place and silently resolve the second tree to it.
+_target_from() {
+  [ -f "$1" ] || { printf '%s' "$HOME/opt"; return; }
+  # shellcheck disable=SC1090
+  ( . "$1" >/dev/null 2>&1; printf '%s' "$TARGET" )
+}
+_rel_target="$(_target_from "$SCRIPT_DIR/config/config.local.sh")"
+_exp_target="$(_target_from "$SCRIPT_DIR/config/config.exp.local.sh")"
+
 SCAN_DIRS=(
-  "$HOME/opt/proven/arm"
-  "$HOME/opt/proven/intel"
-  "$HOME/opt/proven-experimental/arm"
-  "$HOME/opt/proven-experimental/intel"
+  "$_rel_target/proven/arm"
+  "$_rel_target/proven/intel"
+  "$_exp_target/proven-experimental/arm"
+  "$_exp_target/proven-experimental/intel"
   "$SCRIPT_DIR/build"
   "$SCRIPT_DIR/release"
 )
