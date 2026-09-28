@@ -4,7 +4,7 @@ Living document tracking every modification made to build MKVToolNix on macOS (A
 
 ## Build status
 
-**v102.0-b2026.09.2** (rel007, Apple Silicon, 2026-09-18) adds the Qt source patch **`qt-patches/qtbug-150017-item-view-check-indicator.patch`** for the macOS 27 check boxes, so Qt 6.11.1 and gnupg were rebuilt from source and repromoted to the local cache. Same signed 102.0 source and the same wrapper patch otherwise. Intel still to come.
+**v102.0-b2026.09.2** (rel007, Apple Silicon, 2026-09-18) adds the Qt source patch **`qt-patches/qtbug-150017-item-view-check-indicator.patch`** for the macOS 27 check boxes, so Qt 6.11.1 and gnupg were rebuilt from source and repromoted to the local cache. Same signed 102.0 source as b2026.09.1 otherwise. Intel followed on 2026-09-28 (rel009) with a full from-source rebuild of every dependency and a repromoted cache; the wrapper patches still apply cleanly and dependency versions are unchanged.
 
 **v102.0** built and verified (Apple Silicon + Intel). No dependency changes from v101 — upstream's `packaging/macos/specs.sh` is byte-identical between `release-101.0` and `release-102.0`, so Qt stays 6.11.1. The single active wrapper patch (**`mkvtoolnix-size-opt`**) still applies cleanly; zero Qt source patches. Apple Silicon restored from the proven cache; no promotion needed. Intel rebuilt every dependency from source and promoted the result — its cached dependencies predated the provenance manifests the build now requires, so the cache itself was republished. Dependency versions are unchanged either way.
 
@@ -37,6 +37,7 @@ Previous release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build proces
 | **v102 rel006 (source bump)** | 24.8 MB | 74.9 MB | 6.11.1 | ARM, verified, restored from proven cache; deps unchanged from v101 |
 | **v102 rel006 (Intel)** | 27.5 MB | 78.4 MB | 6.11.1 | Intel, verified, full from-source rebuild; deps unchanged from v101 |
 | **v102 rel007 (Qt patch)** | 25.6 MB | 75.0 MB | 6.11.1 | ARM, verified, Qt rebuilt from source with the QTBUG-150017 patch (Xcode 27) |
+| **v102 rel009 (Qt patch, Intel)** | 27.5 MB | 78.4 MB | 6.11.1 | Intel, verified, full from-source rebuild including the QTBUG-150017 patch |
 
 ---
 
@@ -66,7 +67,7 @@ No functional change; ThinLTO is fast incremental LTO and `-Os` favors size over
 
 **Retire:** at the first MKVToolNix release whose source tarball includes the same patch file; check the actual release source.
 
-**Cache:** the patch changes the Qt fingerprint, so the next build on each architecture has to rebuild Qt (`tools/refresh-deps.sh`) and promote it.
+**Cache:** the patch changes the Qt fingerprint, so each architecture has to rebuild Qt and promote it. Done for Intel at rel009. Apple Silicon still carries the pre-patch Qt in the published cache; its manifests also predate the current format, which `tools/refresh-deps.sh` cannot repair on its own — that one needs `--full` followed by `--promote`.
 
 ### Retired at v99.0 (7 patches)
 
@@ -228,8 +229,11 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 **Not a patch** -- a config file sourced by the upstream build system.
 
+- Build locations -- the install prefix, compile workspace, source and package directories, all
+  derived from `MTX_ROOT` (default `/opt/mtx`). Upstream's `config.sh` puts them under `$HOME`;
+  these override it so recorded paths do not vary with the account that built them.
 - `SIGNATURE_IDENTITY="-"` -- ad-hoc code signing (required for macOS Sequoia 15.1+; no Apple Developer cert needed)
-- `DRAKETHREADS=12` -- parallel build threads (default is 4, machine has 14 cores)
+- `DRAKETHREADS=12` -- parallel build threads (upstream default is 4)
 - `CFLAGS += -O2` -- standard release optimization (upstream sets no -O flag)
 - `CXXFLAGS += -O2` -- same for C++
 - `LDFLAGS += -Wl,-dead_strip` -- remove unreachable code at link time
@@ -240,11 +244,11 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 ## Build script fixes (in `build-local.sh`)
 
-**Proven cache architecture:** Compiled dependency packages are stored in an architecture-specific proven cache (`/opt/mtx/prefix/proven/arm/` or `/opt/mtx/prefix/proven/intel/`). Each build wipes the workspace (everything under `/opt/mtx/prefix/` except `proven/` and `source/`), restores from the proven cache for the current architecture, and only builds what's missing. If all deps are available, only mkvtoolnix is rebuilt (minutes instead of hours). A full rebuild from source is available with `--full`.
+**Proven cache architecture:** Compiled dependency packages are stored in an architecture-specific proven cache (`/opt/mtx/prefix/proven/arm/` or `/opt/mtx/prefix/proven/intel/`). Each build wipes the workspace (everything under `/opt/mtx/prefix/` except the `proven/` cache beneath it; downloaded source tarballs live outside at `/opt/mtx/src/`), restores from the proven cache for the current architecture, and only builds what's missing. If all deps are available, only mkvtoolnix is rebuilt (minutes instead of hours). A full rebuild from source is available with `--full`.
 
 **Promotion workflow:** After a successful build and manual testing, `--promote` archives the current proven cache to Git LFS, atomically swaps in the new packages, and commits. Uses directory-swap for atomicity — interruption at any point leaves either old or new proven intact. Each promoted package gets a `.manifest.json` recording the source tarball it was built from. A smart-restore build legitimately leaves `packages/` incomplete, which promotion reports as a successful no-op when the cache already covers the tag.
 
-**Cache/tag binding:** Restores are refused when a cached package's manifest names a different source tarball than the release tag declares, or when a package has no manifest. `tools/refresh-deps.sh <tag>` rebuilds only the affected dependencies, in upstream's build order, and repromotes those alone.
+**Cache/tag binding:** Restores are refused when a cached package's manifest names a different source tarball than the release tag declares, records a different patch set or install prefix, or when a package has no manifest at all. `tools/refresh-deps.sh <tag>` rebuilds only the affected dependencies, in upstream's build order, and repromotes those alone — but it cannot repair a cache refused over its format or prefix, since it never rewrites docbook-xsl's manifest; that case needs `--full` then `--promote`.
 
 **Build manifest:** Every DMG in `build/` gets a `<dmg>.manifest.json` recording the dependencies used and their origin (cache or from-source), source hashes, applied patches, bundled dylibs, toolchain, host, timings, and verification results. A maintainer diagnostic — diffing two manifests shows what changed between builds.
 
