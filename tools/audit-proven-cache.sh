@@ -37,7 +37,7 @@ audit_arch() {
   local arch="$1"
   local dir="${SCRIPT_DIR}/proven/${arch}"
   local -a tarballs missing_sidecar bad_name bad_oid bad_manifest orphans
-  local tgz stem rec_hash rec_name oid m schema kind pkg
+  local tgz stem rec_hash rec_name oid m schema kind pkg prefix
 
   [[ -d "${dir}" ]] || return 0
   tarballs=("${dir}"/*.tar.gz(N))
@@ -74,9 +74,16 @@ audit_arch() {
       schema=$(command grep -oE '"schema_version"[[:space:]]*:[[:space:]]*[0-9]+' "${m}" | command awk '{print $NF}')
       kind=$(command grep -oE '"kind"[[:space:]]*:[[:space:]]*"[^"]*"' "${m}" | command sed -E 's/.*"([^"]*)"$/\1/')
       pkg=$(command grep -oE '"package"[[:space:]]*:[[:space:]]*"[^"]*"' "${m}" | command sed -E 's/.*"([^"]*)"$/\1/')
-      [[ "${schema}" == "1" ]]            || bad_manifest+=("${stem}: schema_version=${schema:-<none>}")
+      # The prefix a package was built under is baked into its .pc, .la and
+      # CMake files as absolute paths, so a manifest that does not record one
+      # cannot answer whether the package suits the tree restoring it. This is
+      # the same question build-local.sh asks before restoring; asking it here
+      # means the publisher finds out instead of the consumer.
+      prefix=$(command grep -oE '"prefix"[[:space:]]*:[[:space:]]*"[^"]*"' "${m}" | command sed -E 's/.*"([^"]*)"$/\1/')
+      [[ "${schema}" == "2" ]]            || bad_manifest+=("${stem}: schema_version=${schema:-<none>} (expected 2)")
       [[ "${kind}" == "proven_cache" ]]   || bad_manifest+=("${stem}: kind=${kind:-<none>}")
       [[ "${pkg}" == "${stem}" ]]         || bad_manifest+=("${stem}: manifest names ${pkg:-<none>}")
+      [[ -n "${prefix}" ]]                || bad_manifest+=("${stem}: no build prefix recorded")
     fi
   done
 

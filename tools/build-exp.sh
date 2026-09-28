@@ -551,9 +551,27 @@ PROVEN_DIR="${TARGET}/proven/${ARCH_LABEL}"
 EXPERIMENTAL_DIR="${TARGET}/proven-experimental/${ARCH_LABEL}"
 
 if [[ ! -d "${PROVEN_DIR}" ]]; then
-  echo "ERROR: Proven cache not found at ${PROVEN_DIR}" >&2
-  echo "       Run './build-local.sh --restore-cache' first." >&2
-  exit 1
+  # The release cache cannot stand in for this one. Experimental builds have
+  # their own root, and every cached package records the prefix it was built
+  # under inside its .pc, .la and CMake files — restoring release packages
+  # here would leave an experiment linked against the release tree. So the
+  # remedy is to build the dependencies here, not to copy them in;
+  # --restore-cache populates the release root and would not help.
+  if [[ ${REBUILD_DEPS} -eq 0 ]]; then
+    echo "ERROR: no experimental dependency cache at ${PROVEN_DIR}" >&2
+    echo "" >&2
+    echo "  Experimental builds keep their own prefix, so they cannot borrow the" >&2
+    echo "  release cache: those packages record ${MTX_SRC_ROOT:-/opt/mtx}/prefix" >&2
+    echo "  internally and would point this build at the release tree." >&2
+    echo "" >&2
+    echo "  Build the dependencies under the experimental prefix instead:" >&2
+    echo "    $0 ${*} --rebuild-deps" >&2
+    echo "  The first such run compiles every dependency and takes hours;" >&2
+    echo "  later runs reuse what it leaves behind." >&2
+    exit 1
+  fi
+  echo "==> No experimental dependency cache yet — --rebuild-deps will build them."
+  mkdir -p "${PROVEN_DIR}"
 fi
 
 # Spec-aware restore: read the worktree's specs.sh to discover which exact
@@ -751,18 +769,21 @@ rsync -a \
 # file is absent. Production build-local.sh continues to consume
 # config.local.sh unchanged; only experimental builds get the
 # exp.local.sh substitution.
-WRAPPER_CONFIG=""
-if [[ -f "${SCRIPT_DIR}/config/config.exp.local.sh" ]]; then
-  WRAPPER_CONFIG="${SCRIPT_DIR}/config/config.exp.local.sh"
-  echo "==> Staging config.exp.local.sh as packaging/macos/config.local.sh..."
-elif [[ -f "${SCRIPT_DIR}/config/config.local.sh" ]]; then
-  WRAPPER_CONFIG="${SCRIPT_DIR}/config/config.local.sh"
-  echo "==> Staging config.local.sh as packaging/macos/config.local.sh (no experimental config found)..."
+# No fallback to config.local.sh. That file points at the release tree, and
+# the paths this script already resolved came from the experimental overlay —
+# falling back would restore and wipe under one root while installing under
+# the other, and an experiment would write into the prefix release builds
+# depend on. There is nothing safe to do without the experimental overlay.
+WRAPPER_CONFIG="${SCRIPT_DIR}/config/config.exp.local.sh"
+if [[ ! -f "${WRAPPER_CONFIG}" ]]; then
+  echo "ERROR: config/config.exp.local.sh is missing from this checkout." >&2
+  echo "       Experimental builds need their own overlay: it is what keeps them" >&2
+  echo "       out of the release prefix. Restore it before building." >&2
+  exit 1
 fi
-if [[ -n "${WRAPPER_CONFIG}" ]]; then
-  STAGED_CONFIG="${FORK_BUILD_DIR}/packaging/macos/config.local.sh"
-  command cp "${WRAPPER_CONFIG}" "${STAGED_CONFIG}"
-fi
+echo "==> Staging config.exp.local.sh as packaging/macos/config.local.sh..."
+STAGED_CONFIG="${FORK_BUILD_DIR}/packaging/macos/config.local.sh"
+command cp "${WRAPPER_CONFIG}" "${STAGED_CONFIG}"
 
 # --- Inject VERSIONNAME into staged source ---
 # Uses the same perl substitution pattern as upstream's

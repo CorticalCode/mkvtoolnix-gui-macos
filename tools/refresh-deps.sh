@@ -296,7 +296,7 @@ EOF
 
 # --- Detect drift ------------------------------------------------------------
 echo "==> Checking the cache against ${TAG}..."
-STALE_PACKAGES=(); FIRST_STALE=0
+STALE_PACKAGES=(); STRUCTURAL=(); FIRST_STALE=0
 for i in {1..${#EXPECTED_PACKAGES[@]}}; do
   pkg="${EXPECTED_PACKAGES[$i]}"
   tgz="${PROVEN_DIR}/${pkg}.tar.gz"
@@ -332,18 +332,37 @@ for i in {1..${#EXPECTED_PACKAGES[@]}}; do
       reason="built with a different patch set (${m_patch} vs ${cur_patch})"
     elif [[ -z "${m_prefix}" ]]; then
       reason="manifest records no build prefix"
-    elif [[ "${m_prefix}" != "${TARGET}" ]]; then
+    elif [[ "${m_prefix:A}" != "${TARGET:A}" ]]; then
       reason="built under a different prefix (${m_prefix} vs ${TARGET})"
     fi
   fi
   if [[ -n "${reason}" ]]; then
     echo "    STALE  ${pkg} — ${reason}"
     STALE_PACKAGES+=("${pkg}")
+    case "${reason}" in
+      *"build prefix"*|*"different prefix"*) STRUCTURAL+=("${pkg}") ;;
+    esac
     if [[ ${FIRST_STALE} -eq 0 ]]; then
       FIRST_STALE=$i
     fi
   fi
 done
+
+# A prefix mismatch is a property of the whole cache, not of one dependency,
+# and this tool cannot clear it: it repromotes the spec packages only, while
+# docbook-xsl is restored from the cache and never rewritten. Rebuilding
+# fifteen dependencies for hours and leaving the cache still refused is worse
+# than refusing now and naming the command that works.
+if [[ ${#STRUCTURAL[@]} -gt 0 ]]; then
+  echo ""
+  echo "ERROR: ${#STRUCTURAL[@]} package(s) were built under a different prefix, or record none."
+  echo "       refresh-deps cannot repair that — it never rewrites docbook-xsl's"
+  echo "       manifest, so the cache would stay refused after a full rebuild here."
+  echo "       Rebuild and republish the whole cache instead:"
+  echo "         ./build-local.sh --full ${TAG}"
+  echo "         ./build-local.sh --promote ${TAG}"
+  exit 2
+fi
 
 if [[ ${FIRST_STALE} -eq 0 ]]; then
   echo "==> Cache matches ${TAG}. Nothing to rebuild."

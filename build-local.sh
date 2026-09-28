@@ -826,12 +826,33 @@ function validate_proven_cache {
     echo "  Nothing was extracted, and the dependency prefix and proven/ are"
     echo "  intact. The upstream clone and the per-package build directories"
     echo "  were already reset earlier in this run."
-    echo "  Repopulate packages and hashes from LFS:"
-    echo "    ./build-local.sh --restore-cache"
-    echo "  Rebuild just the affected dependencies:"
-    echo "    ./tools/refresh-deps.sh ${TAG}"
-    echo "  Or rebuild everything from source:"
-    echo "    ./build-local.sh --full ${TAG}"
+    # A schema or prefix refusal is a property of how the cache was built, not
+    # of which packages drifted, so the per-dependency remedies cannot clear
+    # it: re-pulling from LFS returns the same manifests, and refresh-deps
+    # repromotes only the spec packages — docbook-xsl is restored, never
+    # rewritten, so its old manifest survives and the next run refuses again.
+    # Naming the one command that works avoids sending the reader in a circle.
+    local -a structural=()
+    for pkg in "${refused[@]}"; do
+      case "${pkg}" in
+        *"schema_version"*|*"build prefix"*|*"different prefix"*) structural+=("${pkg}") ;;
+      esac
+    done
+    if [[ ${#structural[@]} -gt 0 ]]; then
+      echo "  ${#structural[@]} of these were built to an older cache format or under a"
+      echo "  different prefix. Neither --restore-cache nor refresh-deps.sh can fix"
+      echo "  that: the first re-pulls the same manifests, and the second leaves"
+      echo "  docbook-xsl's manifest untouched. Rebuild and republish instead:"
+      echo "    ./build-local.sh --full ${TAG}"
+      echo "    ./build-local.sh --promote ${TAG}"
+    else
+      echo "  Repopulate packages and hashes from LFS:"
+      echo "    ./build-local.sh --restore-cache"
+      echo "  Rebuild just the affected dependencies:"
+      echo "    ./tools/refresh-deps.sh ${TAG}"
+      echo "  Or rebuild everything from source:"
+      echo "    ./build-local.sh --full ${TAG}"
+    fi
     # 2, not 1: an incomplete cache legitimately demotes to a full build, but a
     # cache that contradicts the tag is a decision for a human, not a fallback.
     return 2
