@@ -71,8 +71,8 @@ The `--promote` flag is a maintainer operation that archives the proven cache to
 ## What's in the cache
 
 16 packages per architecture, one `.tar.gz` per dependency. Each carries **both** a
-`.sha256` and a `.manifest.json` recording the source tarball it was built from —
-`docbook-xsl` included. Its cache filename is unversioned, but `specs.sh` declares a
+`.sha256` and a `.manifest.json` recording the source tarball it was built from, the
+patch set applied to it, and the prefix it was installed under — `docbook-xsl` included. Its cache filename is unversioned, but `specs.sh` declares a
 source filename and hash for it like any other dependency, and the manifest binds to
 those. A package missing either sidecar is refused at restore time.
 

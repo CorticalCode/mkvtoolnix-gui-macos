@@ -8,7 +8,7 @@ labels: build
 
 **Xcode version** (`clang --version`):
 
-**Chip** (e.g. M1, M2 Pro, M4 Max):
+**Chip** (e.g. M1, M2 Pro, M4 Max, or Intel Core i7 / Xeon):
 
 **MKVToolNix version / tag:**
 
@@ -16,6 +16,9 @@ labels: build
 ```
 ./build-local.sh release-XX.0
 ```
+
+**Did you create the build root?** (`/opt/mtx` — see the README; first-run
+failures are usually this):
 
 **Which step failed** (dependency name or mkvtoolnix):
 

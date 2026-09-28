@@ -97,8 +97,9 @@ already rooted in mbunkus's tag signature. The manifest records two further fact
 express: the patch set applied to that source, and the prefix the package was installed under —
 which matters because a prefix is baked into `.pc`, `.la` and CMake files as an absolute path.
 Before restoring, the build compares all three against the tree being built and refuses any
-package that differs on any of them, or which carries no manifest at all. This closes a gap the `.sha256` alone cannot: a sidecar proves a file is the one
-that was cached, not that the thing cached was built from the right source.
+package that differs on any of them, or which carries no manifest at all. This closes a gap
+the `.sha256` alone cannot: a sidecar proves a file is the one that was cached, not that the
+thing cached was built from the right source.
 
 ### 7. Build provenance (CI builds only)
 

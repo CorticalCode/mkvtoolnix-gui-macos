@@ -10,6 +10,7 @@
 | `--full` | Rebuild all dependencies from source | Anyone | 1-3 hours | Tag |
 | `--promote` | Archive verified build to LFS | Maintainer | ~1 min | Verified build |
 | `--cleanup-lfs` | Restore proven/ to pointers, prune LFS cache | Anyone | ~10 sec | Nothing |
+| `tools/audit-proven-cache.sh` | Check the cache committed to the repo is usable by whoever restores it | Maintainer | ~1 sec | Nothing |
 
 ## First-Time Setup
 
@@ -101,13 +102,14 @@ flowchart LR
     LFS["<b>Git LFS</b><br/><i>proven/{arch}/</i><br/>archival storage"]
     LC["<b>Local Cache</b><br/><i>/opt/mtx/prefix/proven/{arch}/</i>"]
     BUILD(("Build"))
-    PKG["<b>DMG</b><br/><i>/opt/mtx/prefix/packages/</i>"]
+    PKG["<b>Built packages</b><br/><i>/opt/mtx/prefix/packages/</i>"]
     FULL["<b>--full</b><br/><i>(skip cache,<br/>build all from source)</i>"]
 
     LFS -->|"--restore-cache"| LC
     LC -->|"auto-restore"| BUILD
     FULL --> BUILD
     BUILD -->|"produces"| PKG
+    BUILD -->|"produces"| DMG["<b>DMG</b><br/><i>release/</i>"]
 
     style LFS fill:#e8f4fd,stroke:#2196f3,stroke-width:2px,color:#000
     style PKG fill:#e8f5e9,stroke:#4caf50,stroke-width:2px,color:#000
@@ -225,10 +227,12 @@ not — in upstream's own build order — and repromotes just those into the loc
 else is left alone. The repo's LFS copy is untouched until you run `--promote` after a verified
 build.
 
-Two fields in the manifest, `configure_args_hash` and `patch_state_hash`, are reported when they
-drift but never refuse. They are approximations: the first is derived from the text of Qt's
-configure arguments and so is blind to compiler, SDK and deployment-target changes, and neither
-exists for dependencies other than Qt. The source hash is the one that decides.
+One field, `configure_args_hash`, is reported when it drifts but never refuses. It is an
+approximation: derived from the text of Qt's configure arguments, so blind to compiler, SDK and
+deployment-target changes, and it exists for Qt alone. The three that decide are the source hash,
+the patch state and the prefix — `patch_state_hash` is recorded for every dependency (`"none"`
+where a dependency has no patches) and a mismatch refuses, which is what caught a Qt built
+without its patch set.
 
 ## Build Numbers
 
@@ -266,7 +270,7 @@ For experimental builds (e.g. testing against upstream `main` with a bumped Qt v
 
 `tools/build-exp.sh` both fills and reads that directory. `build-local.sh` never looks in it.
 
-That separation is deliberate. A release DMG has to be reproducible from what the repository ships in `proven/`, and a dependency built on one machine by the experimental builder is not. `build-local.sh` does still *preserve* the directory when it wipes the workspace, because `build-exp.sh` depends on it surviving between runs — but preserving it and reading from it are different things.
+That separation is deliberate. A release DMG has to be reproducible from what the repository ships in `proven/`, and a dependency built on one machine by the experimental builder is not. The experimental tree now sits under its own root, outside anything `build-local.sh` wipes, so it survives release builds by construction rather than by being named in a preserve list.
 
 ### Filling it
 
@@ -297,6 +301,7 @@ cd mkvtoolnix-gui-macos
 ### First build on a new machine (fast path)
 
 ```sh
+sudo mkdir -p /opt/mtx && sudo chown "$(id -un)" /opt/mtx   # once per machine
 git clone https://github.com/CorticalCode/mkvtoolnix-gui-macos.git
 cd mkvtoolnix-gui-macos
 ./build-local.sh --restore-cache          # ~2 min, populates local cache
@@ -306,6 +311,7 @@ cd mkvtoolnix-gui-macos
 ### First build on a new machine (from source)
 
 ```sh
+sudo mkdir -p /opt/mtx && sudo chown "$(id -un)" /opt/mtx   # once per machine
 git clone https://github.com/CorticalCode/mkvtoolnix-gui-macos.git
 cd mkvtoolnix-gui-macos
 ./build-local.sh release-XX.0             # ~1-3 hours, builds everything

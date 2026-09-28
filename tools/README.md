@@ -10,9 +10,13 @@ creating once per machine (`sudo mkdir -p /opt/mtx && sudo chown "$(id -un)"
 
 - **`build-exp.sh`** — experimental build entry point. Compiles a source tree you
   point it at (a worktree, a detached upstream snapshot) and owns the
-  `/opt/mtx-exp/prefix/proven-experimental/` dep cache: it fills that cache after building
-  missing deps and empties it with `--clear-cache`. Does not apply wrapper
-  patches, and never writes to `release/`.
+  `/opt/mtx-exp/prefix/proven-experimental/` dep cache: it fills that cache as it
+  builds and empties it with `--clear-cache`. It cannot borrow the release cache —
+  every cached package records the prefix it was built under, so release packages
+  would point an experiment at the release tree — so the first run needs
+  `--rebuild-deps` and compiles every dependency under the experimental prefix.
+  Later runs reuse what it leaves behind. Does not apply wrapper patches, and
+  never writes to `release/`.
 - **`refresh-deps.sh <tag>`** — rebuilds only the cached dependencies whose
   recorded source no longer matches a release tag, in upstream's build order,
   and repromotes just those. Run it when `build-local.sh` refuses a cache over

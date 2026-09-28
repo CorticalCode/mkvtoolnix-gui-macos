@@ -26,7 +26,7 @@ MKVToolNix source code.
 | | |
 |---|---|
 | **Project** | MKVToolNix |
-| **Version** | 98.0 (build target; `proven/` does not bundle MKVToolNix binaries) |
+| **Version** | 102.0 (build target; `proven/` does not bundle MKVToolNix binaries) |
 | **Author** | Moritz Bunkus & contributors |
 | **License** | GPL-2.0-or-later |
 | **Upstream** | https://mkvtoolnix.download |
@@ -41,7 +41,7 @@ shipped `.app` bundle. Both architecture caches contain equivalent builds.
 
 | Library | Version | License (SPDX) | Copyright | Source |
 |---------|---------|---------------|-----------|--------|
-| **Qt** (Core, Gui, Widgets, Network, Concurrent, Multimedia, MultimediaWidgets, MultimediaQuick, Svg, SvgWidgets, NetworkAuth, Core5Compat) | 6.11.1 | `LGPL-3.0-only` with Qt GPL Exception v1.0 | The Qt Company Ltd. and other contributors | https://download.qt.io/archive/qt/6.11/6.11.1/ |
+| **Qt** (Core, Gui, Widgets, Network, Concurrent, Multimedia, MultimediaWidgets, Svg, SvgWidgets) | 6.11.1 | `LGPL-3.0-only` with Qt GPL Exception v1.0 | The Qt Company Ltd. and other contributors | https://download.qt.io/archive/qt/6.11/6.11.1/ |
 | **Boost** (system; headers-only components are not separately bundled) | 1.88.0 | `BSL-1.0` (Boost Software License 1.0) | Boost contributors | https://boost.org |
 | **zlib** | 1.3.2 | `Zlib` | Jean-loup Gailly & Mark Adler | https://zlib.net |
 | **FLAC** (`libFLAC`) | 1.5.0 | `BSD-3-Clause` (Xiph variant) | Josh Coalson, Xiph.Org Foundation | https://xiph.org/flac/ |
@@ -51,7 +51,6 @@ shipped `.app` bundle. Both architecture caches contain equivalent builds.
 | **GNU gettext** (`libintl` runtime) | 0.23 | `LGPL-2.1-or-later` (runtime) / `GPL-3.0-or-later` (tools) | Ulrich Drepper, Bruno Haible, FSF | https://gnu.org/software/gettext/ |
 | **GMP** | 6.3.0 | `LGPL-3.0-or-later` **or** `GPL-2.0-or-later` (dual-licensed) | Free Software Foundation | https://gmplib.org |
 | **cmark** | 0.30.3 | `BSD-2-Clause` | John MacFarlane | https://github.com/commonmark/cmark |
-| **curl** (99.0+ only — not in 98.0 builds) | 8.11.1 | `curl` (MIT-like) | Daniel Stenberg & contributors | https://curl.se |
 
 ---
 
@@ -107,4 +106,6 @@ If you believe any attribution here is missing, incorrect, or stale, please
 open an issue at
 https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues and we will fix it.
 
-Last updated: 2026-05-24 — added GnuPG (`gpg`) to the build-time tools cache for v99 (covers both `proven/arm/` and `proven/intel/`).
+Last updated: 2026-09-28 — build target to 102.0; dropped curl, which the wrapper does not
+cache and the application does not bundle; Qt module list trimmed to the libraries actually
+shipped in the `.app`.
