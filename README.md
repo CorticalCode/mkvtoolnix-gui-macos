@@ -49,7 +49,7 @@ If this trust model isn't right for you, build from source (next section) or use
 Requirements: Xcode CLI tools, **GnuPG** (`brew install gnupg` — the build verifies upstream's
 signed tag and source tarball before compiling anything, and refuses to start without it),
 **Git LFS** (`brew install git-lfs` — only if you want the pre-built dependency cache),
-~10 GB disk space, 1–3 hours first build.
+~12 GB disk space, 1–3 hours first build.
 
 The build uses a fixed root at `/opt/mtx` rather than your home directory, so
 the paths compilers record end up identical on every machine instead of varying
@@ -76,7 +76,7 @@ cd mkvtoolnix-gui-macos
 ./build-local.sh release-XX.0
 ```
 
-The DMG will be at `release/MKVToolNix-XX.0-macos-arm.dmg`, with a build-numbered copy in `build/`. See [docs/proven-cache.md](docs/proven-cache.md) for the cache architecture and `--full` for a forced full rebuild.
+The DMG will be at `release/MKVToolNix-XX.0-macos-<arch>.dmg` — `apple-silicon` or `intel`, matching the machine you built on — with a build-numbered copy in `build/`. See [docs/proven-cache.md](docs/proven-cache.md) for the cache architecture and `--full` for a forced full rebuild.
 
 ## What this repo contains
 

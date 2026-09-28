@@ -93,9 +93,11 @@ Both paths populate the local cache with sidecars, so the restore check runs eit
 
 Alongside each package sits a `.manifest.json` recording the source tarball it was compiled from —
 specifically the SHA256 that upstream's `specs.sh` declares for that dependency, which step 2 has
-already rooted in mbunkus's tag signature. Before restoring, the build compares that record against
-the tag being built and refuses any package whose recorded source differs, or which carries no
-manifest at all. This closes a gap the `.sha256` alone cannot: a sidecar proves a file is the one
+already rooted in mbunkus's tag signature. The manifest records two further facts that no hash can
+express: the patch set applied to that source, and the prefix the package was installed under —
+which matters because a prefix is baked into `.pc`, `.la` and CMake files as an absolute path.
+Before restoring, the build compares all three against the tree being built and refuses any
+package that differs on any of them, or which carries no manifest at all. This closes a gap the `.sha256` alone cannot: a sidecar proves a file is the one
 that was cached, not that the thing cached was built from the right source.
 
 ### 7. Build provenance (CI builds only)

@@ -42,7 +42,7 @@ Previous release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build proces
 
 ## Patches
 
-v99.0 retired **7 of the 8** wrapper patches — upstream `release-99.0` merged or superseded them. One remains active: **`mkvtoolnix-size-opt`**, our ThinLTO/`-Os` optimization, which has no upstream equivalent and was re-added after measuring it against the pure baseline.
+v99.0 retired **7 of the 8** wrapper patches — upstream `release-99.0` merged or superseded them. **`mkvtoolnix-size-opt`** stayed active: our ThinLTO/`-Os` optimization, which has no upstream equivalent and was re-added after measuring it against the pure baseline.
 
 ### Active patch — `mkvtoolnix-size-opt`
 
@@ -288,7 +288,7 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 7 of the 8 wrapper patches were retired at **v99.0** — see "Retired at v99.0 (7 patches)" above for the per-patch evidence; the detailed historical entries are preserved in that section.
 
-`mkvtoolnix-size-opt` was *not* retired — it is our own ThinLTO/`-Os` optimization with no upstream equivalent. It was dropped from the pure rel001 baseline only to measure it in isolation, then re-added (rel002) once the delta was confirmed (−1.08 MB DMG / −2.65 MB app). It is the single active wrapper patch — see "Active patch" above.
+`mkvtoolnix-size-opt` was *not* retired — it is our own ThinLTO/`-Os` optimization with no upstream equivalent. It was dropped from the pure rel001 baseline only to measure it in isolation, then re-added (rel002) once the delta was confirmed (−1.08 MB DMG / −2.65 MB app). See "Active patch" above.
 
 ---
 

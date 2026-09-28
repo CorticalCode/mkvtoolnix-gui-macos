@@ -2,6 +2,10 @@
 
 Helper scripts and trust artifacts for the wrapper build pipeline.
 
+All of these operate on the build root, which defaults to `/opt/mtx` and needs
+creating once per machine (`sudo mkdir -p /opt/mtx && sudo chown "$(id -un)"
+/opt/mtx`). Set `MTX_ROOT` to relocate the whole tree somewhere already owned.
+
 ## Scripts
 
 - **`build-exp.sh`** — experimental build entry point. Compiles a source tree you
@@ -11,8 +15,18 @@ Helper scripts and trust artifacts for the wrapper build pipeline.
   patches, and never writes to `release/`.
 - **`refresh-deps.sh <tag>`** — rebuilds only the cached dependencies whose
   recorded source no longer matches a release tag, in upstream's build order,
-  and repromotes just those. Run it when `build-local.sh` refuses a cache;
-  `--dry-run` reports what would be rebuilt without building.
+  and repromotes just those. Run it when `build-local.sh` refuses a cache over
+  drift; `--dry-run` reports what would be rebuilt without building. It does
+  **not** repair a cache refused over its format or its build prefix: it
+  rewrites only the spec packages, leaving docbook-xsl's manifest as it was,
+  so the cache would still be refused afterwards. It says so and stops. The
+  fix there is `--full` then `--promote`.
+- **`audit-proven-cache.sh [arch]`** — asks of the cache committed to this
+  repository the same questions a consumer asks of it: both sidecars present,
+  the recorded hash matching the LFS pointer, and a manifest of the current
+  format naming the package and the prefix it was built under. Reads sidecars
+  and pointers only, downloads nothing. Run it after `--promote` so the
+  publisher finds a bad cache rather than whoever next restores it.
 - **`check-upstream-tag-signing.sh`** — see "Periodically validating upstream
   tag-signing" below.
 - **`backfill-sha256.sh`** — regenerates missing `.sha256` sidecars in the local

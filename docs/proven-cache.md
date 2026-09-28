@@ -6,8 +6,8 @@ The build system caches compiled dependencies so that subsequent builds only nee
 
 When you run `./build-local.sh release-XX.0`:
 
-1. The workspace (`/opt/mtx/prefix/`) is wiped clean (except the cache and source tarballs)
-2. Each cached package is checked twice before anything is extracted: its **`.sha256` sidecar** proves the file is intact, and its **`.manifest.json`** proves it was built from the source tarball this release tag declares. A mismatch, a missing sidecar, or a missing manifest aborts the build (see [trust-model.md §6](trust-model.md) for context).
+1. The workspace (`/opt/mtx/prefix/`) is wiped clean, except the proven cache beneath it. Downloaded source tarballs live outside it at `/opt/mtx/src/` and are never in scope
+2. Each cached package is checked twice before anything is extracted: its **`.sha256` sidecar** proves the file is intact, and its **`.manifest.json`** proves it was built from the source tarball this release tag declares, with the patch set this tree carries, under the prefix this tree installs to. A mismatch on any of the three, a missing sidecar, or a missing manifest aborts the build (see [trust-model.md §6](trust-model.md) for context).
 3. If all dependencies are found, only MKVToolNix is built from source
 4. If any are missing, a full build from source runs automatically
 
@@ -25,7 +25,7 @@ When you're ready to build, pull the cache for your architecture:
 ./build-local.sh --restore-cache
 ```
 
-This downloads the proven dependencies for your architecture (~130 MB), copies them to `/opt/mtx/prefix/proven/{arch}/`, and cleans up the repo working copy. Future builds will restore from this local cache automatically (~15 minutes instead of 1-3 hours).
+This downloads the proven dependencies for your architecture (~140 MB), copies them to `/opt/mtx/prefix/proven/{arch}/`, and cleans up the repo working copy. Future builds will restore from this local cache automatically (~15 minutes instead of 1-3 hours).
 
 The pull only succeeds if the published cache carries **both** sidecars for every package. If any
 `.manifest.json` is missing, `--restore-cache` names the offenders and copies nothing, rather than
@@ -97,6 +97,10 @@ The proven cache is archived in the repository via Git LFS under `proven/{arch}/
 On a new machine:
 
 ```sh
+# The build root lives outside your home directory, so it needs creating once.
+# Set MTX_ROOT to somewhere you already own to skip this.
+sudo mkdir -p /opt/mtx && sudo chown "$(id -un)" /opt/mtx
+
 git clone https://github.com/CorticalCode/mkvtoolnix-gui-macos.git
 cd mkvtoolnix-gui-macos
 
@@ -107,7 +111,7 @@ cd mkvtoolnix-gui-macos
 ./build-local.sh release-XX.0
 ```
 
-The `--restore-cache` flag handles everything: pulls LFS objects for your architecture only (~130 MB), copies them to `/opt/mtx/prefix/proven/{arch}/`, and cleans up the repo working copy so it returns to its lightweight state.
+The `--restore-cache` flag handles everything: pulls LFS objects for your architecture only (~140 MB), copies them to `/opt/mtx/prefix/proven/{arch}/`, and cleans up the repo working copy so it returns to its lightweight state.
 
 ## Forcing a full rebuild
 

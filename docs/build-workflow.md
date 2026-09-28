@@ -13,11 +13,24 @@
 
 ## First-Time Setup
 
-Choose your path based on whether you want to use pre-built dependencies or compile everything yourself.
+The build installs into a fixed root rather than your home directory, so the
+paths recorded by compilers are the same on every machine. `/opt` is
+root-owned, so the root is created once per machine before anything else:
+
+```sh
+sudo mkdir -p /opt/mtx && sudo chown "$(id -un)" /opt/mtx
+```
+
+`MTX_ROOT` relocates the whole tree if you would rather build somewhere you
+already own — it is the only knob, and the prefix, workspace, packages and
+staging all derive from it.
+
+Then choose your path based on whether you want to use pre-built dependencies or compile everything yourself.
 
 ```mermaid
 flowchart TD
-    A["<b>git clone</b> repo<br/><i>~1 MB, no binaries</i>"] --> B{"Want pre-built<br/>dependencies?"}
+    A["<b>Create the build root</b><br/><i>once per machine</i>"] --> A2["<b>git clone</b> repo<br/><i>~1 MB, no binaries</i>"]
+    A2 --> B{"Want pre-built<br/>dependencies?"}
 
     B -->|Yes| C["<b>--restore-cache</b><br/>Pull from Git LFS"]
     C --> D["Local cache populated<br/><i>/opt/mtx/prefix/proven/{arch}/</i>"]
@@ -175,7 +188,7 @@ flowchart TD
     A -->|"Yes, prefer manual"| D["Manual: git checkout + lfs prune"]
     A -->|No| E["Nothing to do<br/><i>.lfsconfig prevents auto-download</i>"]
 
-    B --> F["Repo ~1 MB<br/>Local cache ~130 MB"]
+    B --> F["Repo ~1 MB<br/>Local cache ~140 MB"]
     C --> G["Repo ~1 MB"]
     D --> G
 
@@ -187,9 +200,10 @@ flowchart TD
 
 ## When the cache no longer matches the tag
 
-Each cached dependency carries a `.manifest.json` recording the source tarball it was built
-from, taken from that release's `specs.sh`. Before restoring anything, a build compares those
-records against the tag it is building.
+Each cached dependency carries a `.manifest.json` recording three things about how it was
+built: the source tarball, taken from that release's `specs.sh`; the patch set applied to that
+source; and the prefix it was installed under. Before restoring anything, a build compares all
+three against the tree it is building, and refuses the package if any differs.
 
 A version bump was always caught, because the version is part of the cache filename and the file
 simply goes missing. What the manifest adds is the case the filename cannot express: **same
