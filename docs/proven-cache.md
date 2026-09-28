@@ -6,7 +6,7 @@ The build system caches compiled dependencies so that subsequent builds only nee
 
 When you run `./build-local.sh release-XX.0`:
 
-1. The workspace (`~/opt/`) is wiped clean (except the cache and source tarballs)
+1. The workspace (`/opt/mtx/prefix/`) is wiped clean (except the cache and source tarballs)
 2. Each cached package is checked twice before anything is extracted: its **`.sha256` sidecar** proves the file is intact, and its **`.manifest.json`** proves it was built from the source tarball this release tag declares. A mismatch, a missing sidecar, or a missing manifest aborts the build (see [trust-model.md §6](trust-model.md) for context).
 3. If all dependencies are found, only MKVToolNix is built from source
 4. If any are missing, a full build from source runs automatically
@@ -25,7 +25,7 @@ When you're ready to build, pull the cache for your architecture:
 ./build-local.sh --restore-cache
 ```
 
-This downloads the proven dependencies for your architecture (~130 MB), copies them to `~/opt/proven/{arch}/`, and cleans up the repo working copy. Future builds will restore from this local cache automatically (~15 minutes instead of 1-3 hours).
+This downloads the proven dependencies for your architecture (~130 MB), copies them to `/opt/mtx/prefix/proven/{arch}/`, and cleans up the repo working copy. Future builds will restore from this local cache automatically (~15 minutes instead of 1-3 hours).
 
 The pull only succeeds if the published cache carries **both** sidecars for every package. If any
 `.manifest.json` is missing, `--restore-cache` names the offenders and copies nothing, rather than
@@ -39,12 +39,12 @@ After a successful `--full` build:
 
 ```sh
 # Copy the built packages to your local proven cache
-mkdir -p ~/opt/proven/arm    # or ~/opt/proven/intel
-cp ~/opt/packages/*.tar.gz ~/opt/proven/arm/
+mkdir -p /opt/mtx/prefix/proven/arm    # or /opt/mtx/prefix/proven/intel
+cp /opt/mtx/prefix/packages/*.tar.gz /opt/mtx/prefix/proven/arm/
 
 # Write a .sha256 sidecar beside each one — a package without its hash is
 # unverifiable, and the restore step refuses it
-(cd ~/opt/proven/arm && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
+(cd /opt/mtx/prefix/proven/arm && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
 ```
 
 This does **not** produce the `.manifest.json` that records which source tarball each package was
@@ -60,7 +60,7 @@ starting point, but it has to be converted into a real cache before it is usable
 ```
 
 That rebuilds every package whose manifest is missing — on a hand-copied cache, all of them —
-and writes real manifests beside them in `~/opt/proven/{arch}/` without touching git. It costs
+and writes real manifests beside them in `/opt/mtx/prefix/proven/{arch}/` without touching git. It costs
 the same as a full build the first time and pays for itself from the second build onward.
 Maintainers use `--promote` instead, which additionally commits the result to the repository.
 
@@ -107,7 +107,7 @@ cd mkvtoolnix-gui-macos
 ./build-local.sh release-XX.0
 ```
 
-The `--restore-cache` flag handles everything: pulls LFS objects for your architecture only (~130 MB), copies them to `~/opt/proven/{arch}/`, and cleans up the repo working copy so it returns to its lightweight state.
+The `--restore-cache` flag handles everything: pulls LFS objects for your architecture only (~130 MB), copies them to `/opt/mtx/prefix/proven/{arch}/`, and cleans up the repo working copy so it returns to its lightweight state.
 
 ## Forcing a full rebuild
 
@@ -124,6 +124,6 @@ The proven cache is not modified by `--full` — it remains as a safety net.
 If you modify a patch that affects a specific dependency without bumping its version, delete that package from the cache to force a rebuild:
 
 ```sh
-rm ~/opt/proven/arm/qt-everywhere-src-6.11.1.tar.gz
+rm /opt/mtx/prefix/proven/arm/qt-everywhere-src-6.11.1.tar.gz
 ./build-local.sh release-XX.0  # will detect missing Qt and do a full build
 ```

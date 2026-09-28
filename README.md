@@ -51,6 +51,24 @@ signed tag and source tarball before compiling anything, and refuses to start wi
 **Git LFS** (`brew install git-lfs` — only if you want the pre-built dependency cache),
 ~10 GB disk space, 1–3 hours first build.
 
+The build uses a fixed root at `/opt/mtx` rather than your home directory, so
+the paths compilers record end up identical on every machine instead of varying
+with the account that built it. `/opt` is root-owned, so creating it is the one
+step that needs `sudo`, once per machine:
+
+```sh
+sudo mkdir -p /opt/mtx && sudo chown "$(id -un)" /opt/mtx
+```
+
+Prefer not to? Set `MTX_ROOT` to anywhere you already own — it's the single
+knob, and everything else derives from it:
+
+```sh
+export MTX_ROOT="$HOME/mtx"
+```
+
+Then:
+
 ```sh
 git clone https://github.com/CorticalCode/mkvtoolnix-gui-macos.git
 cd mkvtoolnix-gui-macos

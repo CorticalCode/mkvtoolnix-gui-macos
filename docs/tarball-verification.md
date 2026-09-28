@@ -12,7 +12,7 @@ This guide explains what it does, why it exists, and how to operate it.
 Upstream's `packaging/macos/build.sh` does **not** checksum or verify the
 mkvtoolnix tarball — `build_package /literal-path` mode bypasses
 `retrieve_file`, so unlike Qt, Boost, FLAC, etc., the tarball is taken
-on faith. If the file at `~/opt/source/mkvtoolnix-${VERSION}.tar.xz` is
+on faith. If the file at `/opt/mtx/src/mkvtoolnix-${VERSION}.tar.xz` is
 silently replaced (server compromise, accidental local overwrite, a
 buggy helper script), the next build picks it up with no detection.
 
@@ -29,8 +29,8 @@ flowchart LR
     Att["Attacker<br/><i>(intent)</i>"]
     Acc["Accident /<br/>oversight"]
 
-    Tam["Tampered tarball<br/>at ~/opt/source/"]
-    Wrong["Wrong tarball<br/>at ~/opt/source/"]
+    Tam["Tampered tarball<br/>at /opt/mtx/src/"]
+    Wrong["Wrong tarball<br/>at /opt/mtx/src/"]
 
     B["build-local.sh<br/><i>no verification</i>"]
     D["DMG<br/><i>(incorrect content)</i>"]
@@ -183,7 +183,7 @@ flowchart TD
     Start[Build fails with<br/>'GPG signature verification FAILED']
     Start --> Q1{Did you copy<br/>or modify the tarball<br/>recently?}
 
-    Q1 -->|Yes| Fix1[rm ~/opt/source/mkvtoolnix-X.tar.xz<br/>rm ~/opt/source/mkvtoolnix-X.tar.xz.sig<br/>rerun build]
+    Q1 -->|Yes| Fix1[rm /opt/mtx/src/mkvtoolnix-X.tar.xz<br/>rm /opt/mtx/src/mkvtoolnix-X.tar.xz.sig<br/>rerun build]
     Q1 -->|No| Q2{Has the monthly<br/>workflow alerted<br/>about key drift?}
 
     Q2 -->|Yes| DriftCheck[Drift means the trust chain<br/>has changed. Before refreshing,<br/>verify the new fingerprint via<br/>independent channels — upstream<br/>announcement, multiple sources.]

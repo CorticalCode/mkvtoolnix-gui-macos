@@ -6,7 +6,7 @@ Helper scripts and trust artifacts for the wrapper build pipeline.
 
 - **`build-exp.sh`** — experimental build entry point. Compiles a source tree you
   point it at (a worktree, a detached upstream snapshot) and owns the
-  `~/opt/proven-experimental/` dep cache: it fills that cache after building
+  `/opt/mtx-exp/prefix/proven-experimental/` dep cache: it fills that cache after building
   missing deps and empties it with `--clear-cache`. Does not apply wrapper
   patches, and never writes to `release/`.
 - **`refresh-deps.sh <tag>`** — rebuilds only the cached dependencies whose

@@ -240,7 +240,7 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 ## Build script fixes (in `build-local.sh`)
 
-**Proven cache architecture:** Compiled dependency packages are stored in an architecture-specific proven cache (`~/opt/proven/arm/` or `~/opt/proven/intel/`). Each build wipes the workspace (everything under `~/opt/` except `proven/` and `source/`), restores from the proven cache for the current architecture, and only builds what's missing. If all deps are available, only mkvtoolnix is rebuilt (minutes instead of hours). A full rebuild from source is available with `--full`.
+**Proven cache architecture:** Compiled dependency packages are stored in an architecture-specific proven cache (`/opt/mtx/prefix/proven/arm/` or `/opt/mtx/prefix/proven/intel/`). Each build wipes the workspace (everything under `/opt/mtx/prefix/` except `proven/` and `source/`), restores from the proven cache for the current architecture, and only builds what's missing. If all deps are available, only mkvtoolnix is rebuilt (minutes instead of hours). A full rebuild from source is available with `--full`.
 
 **Promotion workflow:** After a successful build and manual testing, `--promote` archives the current proven cache to Git LFS, atomically swaps in the new packages, and commits. Uses directory-swap for atomicity — interruption at any point leaves either old or new proven intact. Each promoted package gets a `.manifest.json` recording the source tarball it was built from. A smart-restore build legitimately leaves `packages/` incomplete, which promotion reports as a successful no-op when the cache already covers the tag.
 

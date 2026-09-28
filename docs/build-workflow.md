@@ -20,7 +20,7 @@ flowchart TD
     A["<b>git clone</b> repo<br/><i>~1 MB, no binaries</i>"] --> B{"Want pre-built<br/>dependencies?"}
 
     B -->|Yes| C["<b>--restore-cache</b><br/>Pull from Git LFS"]
-    C --> D["Local cache populated<br/><i>~/opt/proven/{arch}/</i>"]
+    C --> D["Local cache populated<br/><i>/opt/mtx/prefix/proven/{arch}/</i>"]
     D --> E["<b>./build-local.sh</b> tag<br/><i>~15 min</i>"]
 
     B -->|No| F["<b>./build-local.sh</b> tag<br/><i>~1-3 hours</i>"]
@@ -43,7 +43,7 @@ flowchart TD
     START["./build-local.sh [flag] tag"] --> MODE{Flag?}
 
     MODE -->|--restore-cache| RC1["Pull LFS for current arch"]
-    RC1 --> RC2["Copy to ~/opt/proven/{arch}/"]
+    RC1 --> RC2["Copy to /opt/mtx/prefix/proven/{arch}/"]
     RC2 --> RC3["Verify all packages arrived"]
     RC3 --> RC4["Clean up repo LFS objects"]
     RC4 --> RC5(("Exit<br/><i>cache ready</i>"))
@@ -53,7 +53,7 @@ flowchart TD
     F2 --> POST
 
     MODE -->|default / auto| A1["Wipe workspace"]
-    A1 --> A2{"~/opt/proven/{arch}/<br/>has all packages?"}
+    A1 --> A2{"/opt/mtx/prefix/proven/{arch}/<br/>has all packages?"}
     A2 -->|Yes| A3["Restore deps from cache"]
     A3 --> A4["Build mkvtoolnix only"]
     A4 --> POST
@@ -86,9 +86,9 @@ How dependencies flow between Git LFS, the local cache, and the build system. Th
 ```mermaid
 flowchart LR
     LFS["<b>Git LFS</b><br/><i>proven/{arch}/</i><br/>archival storage"]
-    LC["<b>Local Cache</b><br/><i>~/opt/proven/{arch}/</i>"]
+    LC["<b>Local Cache</b><br/><i>/opt/mtx/prefix/proven/{arch}/</i>"]
     BUILD(("Build"))
-    PKG["<b>DMG</b><br/><i>~/opt/packages/</i>"]
+    PKG["<b>DMG</b><br/><i>/opt/mtx/prefix/packages/</i>"]
     FULL["<b>--full</b><br/><i>(skip cache,<br/>build all from source)</i>"]
 
     LFS -->|"--restore-cache"| LC
@@ -107,7 +107,7 @@ Most users only ever do this: pull dependencies from LFS into the local cache (o
 
 ```mermaid
 flowchart LR
-    PKG["<b>Verified Packages</b><br/><i>~/opt/packages/</i><br/>(after a clean build)"]
+    PKG["<b>Verified Packages</b><br/><i>/opt/mtx/prefix/packages/</i><br/>(after a clean build)"]
     LFS["<b>Git LFS</b><br/><i>proven/{arch}/</i><br/>archived for the next consumer"]
 
     PKG -->|"--promote<br/>(maintainer only)"| LFS
@@ -132,7 +132,7 @@ Use `--restore-cache` to copy the already-downloaded binaries to your local buil
 ./build-local.sh --restore-cache
 ```
 
-This copies the deps to `~/opt/proven/{arch}/`, restores `proven/` to pointer files, and prunes the LFS cache. Repo drops from ~535 MB to ~1 MB. Future builds use the local cache.
+This copies the deps to `/opt/mtx/prefix/proven/{arch}/`, restores `proven/` to pointer files, and prunes the LFS cache. Repo drops from ~535 MB to ~1 MB. Future builds use the local cache.
 
 ### Option B: Just reclaim space (no build planned)
 
@@ -246,7 +246,7 @@ The counter then restarts at 1 and increments locally from there. **Do not push 
 
 For experimental builds (e.g. testing against upstream `main` with a bumped Qt version), recompiling multi-hour dependencies like Qt on every iteration is wasteful. The proven cache shouldn't absorb those builds — it's versioned to the current release — so there's a second, purely-local tier:
 
-- `~/opt/proven-experimental/{arm,intel}/` — never pushed, never committed, machine-specific.
+- `/opt/mtx-exp/prefix/proven-experimental/{arm,intel}/` — never pushed, never committed, machine-specific.
 
 ### One tier, one owner
 
@@ -264,7 +264,7 @@ That separation is deliberate. A release DMG has to be reproducible from what th
 ./tools/build-exp.sh --clear-cache
 ```
 
-Removes `~/opt/proven-experimental/{arch}/` for the current architecture and exits; it takes no source path. The proven cache is untouched.
+Removes `/opt/mtx-exp/prefix/proven-experimental/{arch}/` for the current architecture and exits; it takes no source path. The proven cache is untouched.
 
 ### When work graduates to a release
 

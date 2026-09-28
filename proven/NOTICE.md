@@ -11,7 +11,7 @@ apply equally to both caches.
 
 This notice acknowledges each project's authorship, license, and upstream
 source. Full license texts are not reproduced here; they are preserved verbatim
-inside each upstream source tarball (cached in `~/opt/source/` during builds,
+inside each upstream source tarball (cached in `/opt/mtx/src/` during builds,
 or available at each project's homepage).
 
 ---
@@ -79,7 +79,7 @@ For the GPL- and LGPL-licensed components listed above, source code is
 available in three ways:
 
 1. **Upstream projects** — follow the "Source" URL in each table above.
-2. **Source tarballs cached locally during builds** at `~/opt/source/`
+2. **Source tarballs cached locally during builds** at `/opt/mtx/src/`
    (see `build-local.sh` for the download URLs in `specs.sh`).
 3. **On request** — open an issue at
    https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues and we will

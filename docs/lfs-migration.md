@@ -15,7 +15,7 @@ git clone https://github.com/CorticalCode/mkvtoolnix-gui-macos.git
 cd mkvtoolnix-gui-macos
 ```
 
-Your local build cache (`~/opt/proven/`) is not affected — it lives outside the repo and will be picked up by future builds automatically.
+Your local build cache (`/opt/mtx/prefix/proven/`) is not affected — it lives outside the repo and will be picked up by future builds automatically.
 
 ## Alternative: Manual cleanup
 
