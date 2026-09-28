@@ -23,9 +23,15 @@ UPSTREAM_URL="https://codeberg.org/mbunkus/mkvtoolnix.git"
 # Build locations come from the config overlay — the same file the build copies
 # into the upstream tree — so this tool refreshes packages in the tree the
 # build actually uses.
-if [[ -f "${SCRIPT_DIR}/config/config.local.sh" ]]; then
-  source "${SCRIPT_DIR}/config/config.local.sh"
+# Without the overlay there is nothing to override upstream's $HOME-based
+# paths, so this would refresh packages in a tree the build never uses — and
+# bake the invoking user's home directory into them. Refuse rather than guess.
+if [[ ! -f "${SCRIPT_DIR}/config/config.local.sh" ]]; then
+  echo "ERROR: config/config.local.sh is missing from this checkout." >&2
+  echo "       It is the only supported override for upstream's build paths." >&2
+  exit 1
 fi
+source "${SCRIPT_DIR}/config/config.local.sh"
 # WORK_DIR here only locates the upstream source clone below; the compile
 # workspace the child build.sh uses is CMPL, from the overlay. An environment
 # override is therefore safe and cannot make the two disagree — unlike in
@@ -403,7 +409,7 @@ for item in "${TARGET}"/*; do
   esac
   command rm -rf "${item}"
 done
-mkdir -p "${TARGET}/include" "${TARGET}/lib" "${TARGET}/bin" "${TARGET}/packages"
+mkdir -p "${TARGET}/include" "${TARGET}/lib" "${TARGET}/bin" "${PACKAGE_DIR}"
 
 echo "==> Restoring the cached dependencies built before ${EXPECTED_PACKAGES[$FIRST_STALE]}..."
 for i in {1..${#EXPECTED_PACKAGES[@]}}; do
@@ -441,11 +447,11 @@ echo "==> Rebuilding: ${REBUILD_TARGETS[*]}"
 # archive after ${PWD:t}, so it lands as mtx-build.tar.gz rather than under
 # cmark's versioned name. build-local.sh renames it after a full build; a
 # partial rebuild that reaches cmark needs the same.
-if [[ -f "${TARGET}/packages/mtx-build.tar.gz" ]]; then
+if [[ -f "${PACKAGE_DIR}/mtx-build.tar.gz" ]]; then
   cmark_pkg="${REBUILD_PACKAGES[(r)cmark-*]}"
   if [[ -n "${cmark_pkg}" ]]; then
     echo "==> Renaming mtx-build.tar.gz to ${cmark_pkg}.tar.gz"
-    command mv "${TARGET}/packages/mtx-build.tar.gz" "${TARGET}/packages/${cmark_pkg}.tar.gz"
+    command mv "${PACKAGE_DIR}/mtx-build.tar.gz" "${PACKAGE_DIR}/${cmark_pkg}.tar.gz"
   fi
 fi
 
@@ -455,7 +461,7 @@ fi
 # that then validates clean, because each package it did write is self-consistent.
 missing_built=()
 for pkg in "${REBUILD_PACKAGES[@]}"; do
-  [[ -f "${TARGET}/packages/${pkg}.tar.gz" ]] || missing_built+=("${pkg}")
+  [[ -f "${PACKAGE_DIR}/${pkg}.tar.gz" ]] || missing_built+=("${pkg}")
 done
 if [[ ${#missing_built[@]} -gt 0 ]]; then
   echo "ERROR: the rebuild produced no package for:" >&2
@@ -469,7 +475,7 @@ fi
 echo ""
 echo "==> Repromoting ${#REBUILD_PACKAGES[@]} rebuilt package(s)..."
 for pkg in "${REBUILD_PACKAGES[@]}"; do
-  built="${TARGET}/packages/${pkg}.tar.gz"
+  built="${PACKAGE_DIR}/${pkg}.tar.gz"
   command cp "${built}" "${PROVEN_DIR}/${pkg}.tar.gz"
   (cd "${PROVEN_DIR}" && shasum -a 256 "${pkg}.tar.gz" > "${pkg}.tar.gz.sha256")
   _refresh_write_manifest "${pkg}" "${PROVEN_DIR}/${pkg}.tar.gz.manifest.json"

@@ -3,8 +3,8 @@
 # Idempotent: skips any file that already has a matching .sha256.
 #
 # Scans:
-#   ~/opt/proven/{arm,intel}          (the canonical local proven cache)
-#   ~/opt/proven-experimental/{arm,intel}
+#   /opt/mtx/prefix/proven/{arm,intel}          (the canonical local proven cache)
+#   /opt/mtx-exp/prefix/proven-experimental/{arm,intel}
 #   <repo>/build                      (internal dev DMGs)
 #   <repo>/release                    (release-ready DMGs)
 #
@@ -22,10 +22,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # derive their paths from MTX_ROOT with a ${MTX_ROOT:-default} form, so
 # sourcing them one after another in the same shell would leave the first
 # file's root in place and silently resolve the second tree to it.
+# Fails closed: a scanner that cannot tell where the trees are must say so
+# rather than scan a path that does not exist and report "nothing found".
+# stderr is kept so a sourcing failure is visible instead of being mistaken
+# for an empty result.
 _target_from() {
-  [ -f "$1" ] || { printf '%s' "$HOME/opt"; return; }
-  # shellcheck disable=SC1090
-  ( . "$1" >/dev/null 2>&1; printf '%s' "$TARGET" )
+    if [ ! -f "$1" ]; then
+        echo "ERROR: $1 is missing; cannot determine where the cache lives." >&2
+        exit 1
+    fi
+    # shellcheck disable=SC1090
+    if ! _t=$( . "$1" >/dev/null; printf '%s' "$TARGET" ) || [ -z "$_t" ]; then
+        echo "ERROR: could not read TARGET from $1." >&2
+        exit 1
+    fi
+    printf '%s' "$_t"
 }
 _rel_target="$(_target_from "$SCRIPT_DIR/config/config.local.sh")"
 _exp_target="$(_target_from "$SCRIPT_DIR/config/config.exp.local.sh")"

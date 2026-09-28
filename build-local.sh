@@ -66,7 +66,7 @@ echo "==> Shell: zsh ${ZSH_VERSION}, arch: ${MACHINE_ARCH} (${ARCH_LABEL})"
 function wipe_workspace {
   echo "==> Wiping workspace (preserving proven/, proven-experimental/, source/, and upstream clone)..."
 
-  # Clean TARGET (~/opt/) — preserve proven cache, experimental cache, and source tarballs
+  # Clean TARGET (/opt/mtx/prefix/) — preserve proven cache, experimental cache, and source tarballs
   local preserve_proven="${TARGET}/proven"
   local preserve_experimental="${TARGET}/proven-experimental"
   local preserve_source="${TARGET}/source"
@@ -79,7 +79,7 @@ function wipe_workspace {
     command rm -rf "${item}"
   done
 
-  # Clean WORK_DIR (~/tmp/compile/) — preserve upstream clone and active log
+  # Clean WORK_DIR (/opt/mtx/build/) — preserve upstream clone and active log
   local preserve_clone="${WORK_DIR}/mkvtoolnix-src"
 
   for item in "${WORK_DIR}"/*; do
@@ -90,7 +90,7 @@ function wipe_workspace {
   done
 
   # Recreate essential directories
-  mkdir -p "${TARGET}/include" "${TARGET}/lib" "${TARGET}/bin" "${TARGET}/packages"
+  mkdir -p "${TARGET}/include" "${TARGET}/lib" "${TARGET}/bin" "${PACKAGE_DIR}"
   echo "==> Workspace clean."
 }
 
@@ -115,8 +115,17 @@ Default behavior:
   exists, does a full build from source.
 
 Environment:
-  WORK_DIR          Compile workspace (default: ~/tmp/compile)
-  TARGET            Install prefix (default: ~/opt)
+  MTX_ROOT          Build root (default: /opt/mtx). Everything derives from
+                    it — install prefix, compile workspace, packages and
+                    staging — so this one variable relocates the whole tree,
+                    for the wrapper and for upstream's build.sh alike.
+
+First run on a machine: the default root is outside your home directory and
+needs creating once.
+
+  sudo mkdir -p /opt/mtx && sudo chown "$(id -un)" /opt/mtx
+
+Or point MTX_ROOT somewhere you already own and skip that entirely.
 USAGE
   exit 0
 }
@@ -461,7 +470,9 @@ _validate_proven_manifest() {
     print "REFUSE: manifest records no build prefix"
     return 1
   fi
-  if [[ "${manifest_prefix}" != "${TARGET}" ]]; then
+  # Both sides are normalized before comparing, so a trailing slash in
+  # MTX_ROOT or a symlinked root does not read as a different prefix.
+  if [[ "${manifest_prefix:A}" != "${TARGET:A}" ]]; then
     print "REFUSE: built under a different prefix than this tree uses (${manifest_prefix} vs ${TARGET})"
     return 1
   fi
@@ -969,7 +980,7 @@ function _publish_cache_to_repo {
 
 function do_promote {
   local proven_dir="${TARGET}/proven/${ARCH_LABEL}"
-  local packages_dir="${TARGET}/packages"
+  local packages_dir="${PACKAGE_DIR}"
   local repo_proven="${SCRIPT_DIR}/proven/${ARCH_LABEL}"
   local missing_pkgs=()
   local pkg
@@ -1121,9 +1132,16 @@ function do_promote {
 # the build it drives never disagree about where the build lives. The overlay
 # is sourced again later from the clone (to read QTVER); both reads produce
 # the same paths.
-if [[ -f "${SCRIPT_DIR}/config/config.local.sh" ]]; then
-  source "${SCRIPT_DIR}/config/config.local.sh"
+# Without the overlay there is nothing to override upstream's $HOME-based
+# paths, so the build would run in the invoking user's home directory and bake
+# that path into everything it produces. That is a refusal, not a fallback.
+if [[ ! -f "${SCRIPT_DIR}/config/config.local.sh" ]]; then
+  echo "ERROR: config/config.local.sh is missing from this checkout." >&2
+  echo "       It is the only supported override for upstream's build paths." >&2
+  echo "       Restore it before building." >&2
+  exit 1
 fi
+source "${SCRIPT_DIR}/config/config.local.sh"
 
 # Defaults
 TAG=""
@@ -1171,6 +1189,42 @@ if [[ -z "${TAG}" ]]; then
   exit 1
 fi
 VERSION=${TAG#release-}
+
+# The build root lives outside $HOME, so it takes one privileged step per
+# machine to create. mkdir would fail here with a bare EACCES that says
+# nothing about what to do; check first and give the two commands instead.
+if [[ ! -d "${MTX_ROOT}" ]]; then
+  echo "ERROR: build root ${MTX_ROOT} does not exist." >&2
+  echo "" >&2
+  echo "  It lives outside your home directory, so creating it needs one" >&2
+  echo "  privileged step per machine. Run these once, then build again:" >&2
+  echo "" >&2
+  echo "    sudo mkdir -p ${MTX_ROOT}" >&2
+  echo "    sudo chown \"\$(id -un)\" ${MTX_ROOT}" >&2
+  echo "" >&2
+  echo "  To build somewhere you already own instead, set MTX_ROOT:" >&2
+  echo "    MTX_ROOT=\"\$HOME/mtx\" $0 ${*}" >&2
+  exit 1
+fi
+if [[ ! -w "${MTX_ROOT}" ]]; then
+  echo "ERROR: build root ${MTX_ROOT} is not writable by $(id -un)." >&2
+  echo "       sudo chown \"\$(id -un)\" ${MTX_ROOT}" >&2
+  exit 1
+fi
+
+# The docbook package is archived relative to the stylesheet root's parent and
+# restored by extracting into TARGET, so the two only line up while the
+# stylesheets live under TARGET. Moving them out silently skips the archive
+# step and yields a cache one package short, which is how this was found.
+# Stating the invariant here turns that into a refusal at the first run.
+if [[ "${DOCBOOK_XSL_ROOT_DIR:A}" != "${TARGET:A}/"* ]]; then
+  echo "ERROR: DOCBOOK_XSL_ROOT_DIR must live under TARGET." >&2
+  echo "       TARGET:                ${TARGET}" >&2
+  echo "       DOCBOOK_XSL_ROOT_DIR:  ${DOCBOOK_XSL_ROOT_DIR}" >&2
+  echo "       The docbook package is restored by extracting into TARGET, so a" >&2
+  echo "       stylesheet root outside it cannot round-trip through the cache." >&2
+  exit 1
+fi
 
 # Ensure required directories exist
 mkdir -p "${TARGET}/include" "${TARGET}/lib" "${PACKAGE_DIR}" "${WORK_DIR}"
@@ -1475,8 +1529,8 @@ case "${BUILD_MODE}" in
     ./build.sh
     ;;
   promote)
-    local promote_pkgs=("${TARGET}/packages"/*.tar.gz)
-    if [[ ! -d "${TARGET}/packages" ]] || [[ ${#promote_pkgs[@]} -eq 0 ]]; then
+    local promote_pkgs=("${PACKAGE_DIR}"/*.tar.gz)
+    if [[ ! -d "${PACKAGE_DIR}" ]] || [[ ${#promote_pkgs[@]} -eq 0 ]]; then
       echo "ERROR: No build packages found. Build first, then promote."
       exit 1
     fi
@@ -1519,23 +1573,28 @@ esac
 # Post-build fixups and DMG (skip for promote mode — packages already exist)
 if [[ "${BUILD_MODE}" != "promote" ]]; then
   # Rename unversioned cmark package to include version
-  if [[ -f "${TARGET}/packages/mtx-build.tar.gz" ]]; then
+  if [[ -f "${PACKAGE_DIR}/mtx-build.tar.gz" ]]; then
     cmark_version=$(echo "${EXPECTED_PACKAGES[@]}" | tr ' ' '\n' | grep "^cmark-" || true)
     if [[ -n "${cmark_version}" ]]; then
       echo "==> Renaming mtx-build.tar.gz to ${cmark_version}.tar.gz"
-      command mv "${TARGET}/packages/mtx-build.tar.gz" "${TARGET}/packages/${cmark_version}.tar.gz"
+      command mv "${PACKAGE_DIR}/mtx-build.tar.gz" "${PACKAGE_DIR}/${cmark_version}.tar.gz"
     fi
   fi
 
   # Archive docbook-xsl if not already in packages
-  if [[ -d "${TARGET}/xsl-stylesheets" ]] && [[ ! -f "${TARGET}/packages/docbook-xsl.tar.gz" ]]; then
-    local docbook_dirs=("${TARGET}"/docbook-xsl-*)
+  if [[ -d "${DOCBOOK_XSL_ROOT_DIR}" ]] && [[ ! -f "${PACKAGE_DIR}/docbook-xsl.tar.gz" ]]; then
+    # Archived relative to the stylesheets' own parent, which is what restore
+    # extracts into. The member names are taken from the variables rather than
+    # written literally, so moving the stylesheet root moves both halves of the
+    # round-trip together instead of silently skipping this step.
+    local docbook_parent="${DOCBOOK_XSL_ROOT_DIR:h}"
+    local docbook_dirs=("${docbook_parent}"/docbook-xsl-*)
     if [[ ${#docbook_dirs[@]} -gt 0 ]]; then
       echo "==> Archiving docbook-xsl..."
-      (cd "${TARGET}" && tar czf "${TARGET}/packages/docbook-xsl.tar.gz" xsl-stylesheets "${docbook_dirs[@]:t}")
+      (cd "${docbook_parent}" && tar czf "${PACKAGE_DIR}/docbook-xsl.tar.gz" "${DOCBOOK_XSL_ROOT_DIR:t}" "${docbook_dirs[@]:t}")
     else
-      echo "WARNING: xsl-stylesheets exists but no docbook-xsl-* directories found — archive may be incomplete"
-      (cd "${TARGET}" && tar czf "${TARGET}/packages/docbook-xsl.tar.gz" xsl-stylesheets)
+      echo "WARNING: ${DOCBOOK_XSL_ROOT_DIR:t} exists but no docbook-xsl-* directories found — archive may be incomplete"
+      (cd "${docbook_parent}" && tar czf "${PACKAGE_DIR}/docbook-xsl.tar.gz" "${DOCBOOK_XSL_ROOT_DIR:t}")
     fi
   fi
 

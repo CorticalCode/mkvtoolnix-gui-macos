@@ -11,12 +11,17 @@
 # downloaded source tarballs are shared (MTX_SRC_ROOT): those are upstream
 # archives verified before use, not build output.
 #
-#   /opt/mtx-exp/prefix   install prefix; the experimental cache lives beneath it
+#   /opt/mtx-exp/prefix   install prefix; the experimental cache, the built
+#                         packages and the DocBook stylesheets all live beneath
+#                         it, because the cache round-trip requires it
 #   /opt/mtx-exp/build    compile workspace (upstream's CMPL)
-#   /opt/mtx-exp/pkg      built package tarballs
-#   /opt/mtx-exp/xsl      DocBook XSL stylesheets
 #   /opt/mtx-exp/stage    DESTDIR staging root used by myinstall.sh
 #   /opt/mtx/src          source tarballs, shared with the release tree
+#
+# Experimental builds cannot borrow the release cache: every cached package
+# records the prefix it was built under, so restoring release packages here
+# would point the experiment at the release tree. The first experimental build
+# compiles its own dependencies (--rebuild-deps).
 #
 # Unconditional on purpose: config.sh is sourced first and exports its own
 # $HOME-based values unconditionally, so a conditional form would lose to it.
@@ -26,8 +31,8 @@ export MTX_SRC_ROOT="${MTX_SRC_ROOT:-/opt/mtx}"
 export TARGET="${MTX_ROOT}/prefix"
 export CMPL="${MTX_ROOT}/build"
 export SRCDIR="${MTX_SRC_ROOT}/src"
-export PACKAGE_DIR="${MTX_ROOT}/pkg"
-export DOCBOOK_XSL_ROOT_DIR="${MTX_ROOT}/xsl"
+export PACKAGE_DIR="${TARGET}/packages"
+export DOCBOOK_XSL_ROOT_DIR="${TARGET}/xsl-stylesheets"
 export STAGING_DIR="${MTX_ROOT}/stage"
 
 # Ad-hoc code signing — required for macOS Sequoia 15.1+ which blocks

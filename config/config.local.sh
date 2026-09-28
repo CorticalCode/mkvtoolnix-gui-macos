@@ -14,12 +14,17 @@
 # values unconditionally and is sourced first, so a conditional form here
 # would always lose to it.
 #
-#   prefix/  install prefix; the proven cache lives beneath it
+#   prefix/  install prefix; the proven cache, the built packages and the
+#            DocBook stylesheets all live beneath it
 #   build/   compile workspace (upstream's CMPL)
 #   src/     downloaded source tarballs
-#   pkg/     built package tarballs
-#   xsl/     DocBook XSL stylesheets
 #   stage/   DESTDIR staging root used by myinstall.sh
+#
+# PACKAGE_DIR and DOCBOOK_XSL_ROOT_DIR stay under TARGET because the cache
+# round-trip depends on it: the docbook package is created relative to TARGET
+# and restored by extracting into TARGET, so moving its source directory
+# elsewhere breaks the restore. SRCDIR is outside TARGET on purpose — nothing
+# is ever restored into it, and the experimental tree shares it.
 export MTX_ROOT="${MTX_ROOT:-/opt/mtx}"
 
 # Downloaded source tarballs are shared with the experimental root, which
@@ -31,8 +36,8 @@ export MTX_SRC_ROOT="${MTX_SRC_ROOT:-${MTX_ROOT}}"
 export TARGET="${MTX_ROOT}/prefix"
 export CMPL="${MTX_ROOT}/build"
 export SRCDIR="${MTX_SRC_ROOT}/src"
-export PACKAGE_DIR="${MTX_ROOT}/pkg"
-export DOCBOOK_XSL_ROOT_DIR="${MTX_ROOT}/xsl"
+export PACKAGE_DIR="${TARGET}/packages"
+export DOCBOOK_XSL_ROOT_DIR="${TARGET}/xsl-stylesheets"
 export STAGING_DIR="${MTX_ROOT}/stage"
 
 # Ad-hoc code signing — required for macOS Sequoia 15.1+ which blocks
