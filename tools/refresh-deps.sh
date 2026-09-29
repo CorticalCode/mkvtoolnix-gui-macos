@@ -112,7 +112,10 @@ echo "==> Verified: tag ${TAG} signed by the pinned mbunkus key"
 _SAVED_TARGET="${TARGET}"; _SAVED_WORK_DIR="${WORK_DIR}"
 _SAVED_OPTS=$(setopt | tr '\n' ' ')
 source "${CLONE_DIR}/packaging/macos/config.sh"
-test -f "${CLONE_DIR}/packaging/macos/config.local.sh" && source "${CLONE_DIR}/packaging/macos/config.local.sh"
+# The wrapper's overlay, not the clone's copy of it: that copy is made only
+# just before the rebuild, so here it is absent on a fresh clone and may be
+# stale on an old one.
+source "${SCRIPT_DIR}/config/config.local.sh"
 source "${CLONE_DIR}/packaging/macos/specs.sh"
 setopt ${=_SAVED_OPTS} 2>/dev/null
 set -e
