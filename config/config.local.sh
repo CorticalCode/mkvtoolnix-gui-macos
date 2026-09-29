@@ -24,18 +24,12 @@
 # round-trip depends on it: the docbook package is created relative to TARGET
 # and restored by extracting into TARGET, so moving its source directory
 # elsewhere breaks the restore. SRCDIR is outside TARGET on purpose — nothing
-# is ever restored into it, and the experimental tree shares it.
+# is ever restored into it.
 export MTX_ROOT="${MTX_ROOT:-/opt/mtx}"
-
-# Downloaded source tarballs are shared with the experimental root, which
-# points MTX_SRC_ROOT here. They are upstream archives verified by checksum
-# and signature before use, not build output, so sharing them cannot carry a
-# built artifact from one tree into the other.
-export MTX_SRC_ROOT="${MTX_SRC_ROOT:-${MTX_ROOT}}"
 
 export TARGET="${MTX_ROOT}/prefix"
 export CMPL="${MTX_ROOT}/build"
-export SRCDIR="${MTX_SRC_ROOT}/src"
+export SRCDIR="${MTX_ROOT}/src"
 export PACKAGE_DIR="${TARGET}/packages"
 export DOCBOOK_XSL_ROOT_DIR="${TARGET}/xsl-stylesheets"
 export STAGING_DIR="${MTX_ROOT}/stage"

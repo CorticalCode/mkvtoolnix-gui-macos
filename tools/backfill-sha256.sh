@@ -18,10 +18,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Both roots come from the config overlays, the single source of truth for
-# where each tree lives. Each is evaluated in its own subshell: the overlays
-# derive their paths from MTX_ROOT with a ${MTX_ROOT:-default} form, so
-# sourcing them one after another in the same shell would leave the first
-# file's root in place and silently resolve the second tree to it.
+# where each tree lives. Each is evaluated in its own subshell, because an
+# overlay exits when it refuses its root; _target_from then names the file.
 # Fails closed: a scanner that cannot tell where the trees are must say so
 # rather than scan a path that does not exist and report "nothing found".
 # stderr is kept so a sourcing failure is visible instead of being mistaken

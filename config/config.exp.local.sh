@@ -7,33 +7,67 @@
 # omits the QTVER pin so experimental builds defer to the source's specs.sh.
 
 # Build locations — a root of its own, separate from the release tree, so an
-# experiment can never install over what a release build depends on. Only the
-# downloaded source tarballs are shared (MTX_SRC_ROOT): those are upstream
-# archives verified before use, not build output.
+# experiment can never install over what a release build depends on.
+# MTX_EXP_ROOT is the single knob; everything else derives from it:
 #
 #   /opt/mtx-exp/prefix   install prefix; the experimental cache, the built
 #                         packages and the DocBook stylesheets all live beneath
 #                         it, because the cache round-trip requires it
 #   /opt/mtx-exp/build    compile workspace (upstream's CMPL)
 #   /opt/mtx-exp/stage    DESTDIR staging root used by myinstall.sh
-#   /opt/mtx/src          source tarballs, shared with the release tree
+#   /opt/mtx-exp/src      source tarballs
 #
 # Experimental builds cannot borrow the release cache: every cached package
 # records the prefix it was built under, so restoring release packages here
 # would point the experiment at the release tree. The first experimental build
 # compiles its own dependencies (--rebuild-deps).
-#
+export MTX_EXP_ROOT="${MTX_EXP_ROOT:-/opt/mtx-exp}"
+
+# The root must be absolute, and must neither equal, lie inside nor hold the
+# release root (/opt/mtx, or MTX_ROOT when set): this file is read from more
+# than one working directory, and each track wipes its own prefix. Folders
+# that exist are compared with symlinks resolved. Written for zsh and bash
+# alike: tools/backfill-sha256.sh reads this file with bash.
+_mtx_release_root="${MTX_ROOT:-/opt/mtx}"
+_mtx_real() {
+  local p="$1"
+  if [ -d "${p}" ]; then
+    p=$(cd -P -- "${p}" >/dev/null && pwd -P) || return 1
+  fi
+  while [ "${p%/}" != "${p}" ]; do p="${p%/}"; done
+  printf '%s\n' "${p}"
+}
+_mtx_within() {
+  case "$1/" in "$2/"*) return 0 ;; esac
+  return 1
+}
+case "${MTX_EXP_ROOT}" in
+  /*) ;;
+  *)
+    echo "ERROR: MTX_EXP_ROOT must be an absolute path, not '${MTX_EXP_ROOT}'." >&2
+    exit 1 ;;
+esac
+if ! _mtx_exp=$(_mtx_real "${MTX_EXP_ROOT}") || ! _mtx_rel=$(_mtx_real "${_mtx_release_root}"); then
+  echo "ERROR: cannot resolve MTX_EXP_ROOT (${MTX_EXP_ROOT}) or the release root (${_mtx_release_root})." >&2
+  exit 1
+fi
+if _mtx_within "${_mtx_exp}" "${_mtx_rel}" || _mtx_within "${_mtx_rel}" "${_mtx_exp}"; then
+  echo "ERROR: MTX_EXP_ROOT (${_mtx_exp}) overlaps the release root (${_mtx_rel})." >&2
+  echo "       Each track wipes its own prefix, so one would destroy the other's." >&2
+  echo "       Set MTX_EXP_ROOT or MTX_ROOT so that neither folder holds the other." >&2
+  exit 1
+fi
+unset -f _mtx_real _mtx_within
+unset _mtx_release_root _mtx_exp _mtx_rel
+
 # Unconditional on purpose: config.sh is sourced first and exports its own
 # $HOME-based values unconditionally, so a conditional form would lose to it.
-export MTX_ROOT="${MTX_ROOT:-/opt/mtx-exp}"
-export MTX_SRC_ROOT="${MTX_SRC_ROOT:-/opt/mtx}"
-
-export TARGET="${MTX_ROOT}/prefix"
-export CMPL="${MTX_ROOT}/build"
-export SRCDIR="${MTX_SRC_ROOT}/src"
+export TARGET="${MTX_EXP_ROOT}/prefix"
+export CMPL="${MTX_EXP_ROOT}/build"
+export SRCDIR="${MTX_EXP_ROOT}/src"
 export PACKAGE_DIR="${TARGET}/packages"
 export DOCBOOK_XSL_ROOT_DIR="${TARGET}/xsl-stylesheets"
-export STAGING_DIR="${MTX_ROOT}/stage"
+export STAGING_DIR="${MTX_EXP_ROOT}/stage"
 
 # Ad-hoc code signing — required for macOS Sequoia 15.1+ which blocks
 # completely unsigned apps. The "-" identity signs without a certificate.
