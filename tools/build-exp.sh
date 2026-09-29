@@ -56,10 +56,17 @@ SCRIPT_DIR=${0:a:h:h}
 # Build locations come from the experimental config overlay — the same file
 # staged as config.local.sh in the source tree, so this wrapper and the build
 # it drives agree on where the experimental tree lives. Read it here, before
-# anything reads TARGET.
-if [[ -f "${SCRIPT_DIR}/config/config.exp.local.sh" ]]; then
-  source "${SCRIPT_DIR}/config/config.exp.local.sh"
+# anything reads TARGET. There is no fallback: upstream's config.sh would put
+# every path under $HOME, and config.local.sh points at the release tree.
+WRAPPER_CONFIG="${SCRIPT_DIR}/config/config.exp.local.sh"
+if [[ ! -f "${WRAPPER_CONFIG}" ]]; then
+  echo "ERROR: config/config.exp.local.sh is missing from this checkout." >&2
+  echo "       Experimental builds need their own overlay: it is what keeps them" >&2
+  echo "       out of the release prefix. Restore it before building:" >&2
+  echo "         git -C ${SCRIPT_DIR} restore config/config.exp.local.sh" >&2
+  exit 1
 fi
+source "${WRAPPER_CONFIG}"
 
 usage() {
   cat <<'USAGE'
@@ -153,7 +160,7 @@ if [[ ${CLEAR_CACHE} -eq 1 ]]; then
     x86_64) _arch_label="intel" ;;
     *)      _arch_label="${_machine}" ;;
   esac
-  _exp_dir="${TARGET:-${HOME}/opt}/proven-experimental/${_arch_label}"
+  _exp_dir="${TARGET}/proven-experimental/${_arch_label}"
   if [[ -d "${_exp_dir}" ]]; then
     echo "==> Clearing experimental cache for ${_arch_label}..."
     command rm -rf "${_exp_dir}"
@@ -223,9 +230,8 @@ if [[ -z "${MTX_VER}" ]]; then
   exit 1
 fi
 
-# --- Paths: honor env overrides, default to upstream's convention ---
-WORK_DIR="${CMPL:-${WORK_DIR:-${HOME}/tmp/compile}}"
-TARGET="${TARGET:-${HOME}/opt}"
+# --- Paths come from the experimental overlay read at the top ---
+WORK_DIR="${CMPL}"
 
 # --- Predict build number and derive hash (deterministic from slug+num+ver) ---
 # Counter only increments on success, so a failed build's retry gets the same
@@ -561,7 +567,7 @@ if [[ ! -d "${PROVEN_DIR}" ]]; then
     echo "ERROR: no experimental dependency cache at ${PROVEN_DIR}" >&2
     echo "" >&2
     echo "  Experimental builds keep their own prefix, so they cannot borrow the" >&2
-    echo "  release cache: those packages record ${MTX_SRC_ROOT:-/opt/mtx}/prefix" >&2
+    echo "  release cache: those packages record the release prefix" >&2
     echo "  internally and would point this build at the release tree." >&2
     echo "" >&2
     echo "  Build the dependencies under the experimental prefix instead:" >&2
@@ -763,24 +769,10 @@ rsync -a \
   "${FORK_BUILD_DIR}/"
 
 # --- Stage wrapper's config into the staged packaging dir ---
-# Upstream build.sh sources packaging/macos/config.local.sh if present. We
-# prefer config.exp.local.sh (experimental-only: no QTVER pin, defers to
-# upstream specs.sh) and fall back to config.local.sh if the experimental
-# file is absent. Production build-local.sh continues to consume
-# config.local.sh unchanged; only experimental builds get the
-# exp.local.sh substitution.
-# No fallback to config.local.sh. That file points at the release tree, and
-# the paths this script already resolved came from the experimental overlay —
-# falling back would restore and wipe under one root while installing under
-# the other, and an experiment would write into the prefix release builds
-# depend on. There is nothing safe to do without the experimental overlay.
-WRAPPER_CONFIG="${SCRIPT_DIR}/config/config.exp.local.sh"
-if [[ ! -f "${WRAPPER_CONFIG}" ]]; then
-  echo "ERROR: config/config.exp.local.sh is missing from this checkout." >&2
-  echo "       Experimental builds need their own overlay: it is what keeps them" >&2
-  echo "       out of the release prefix. Restore it before building." >&2
-  exit 1
-fi
+# Upstream build.sh sources packaging/macos/config.local.sh if present. The
+# experimental overlay read at the top is staged under that name, so the build
+# uses the same locations as this script. Production build-local.sh continues
+# to consume config.local.sh unchanged.
 echo "==> Staging config.exp.local.sh as packaging/macos/config.local.sh..."
 STAGED_CONFIG="${FORK_BUILD_DIR}/packaging/macos/config.local.sh"
 command cp "${WRAPPER_CONFIG}" "${STAGED_CONFIG}"
@@ -804,23 +796,13 @@ fi
 
 # --- Environment for upstream build.sh ---
 # Source upstream's config.sh (provides CMPL, RAKE, MACOSX_DEPLOYMENT_TARGET, etc.)
-# then the wrapper config (already resolved to WRAPPER_CONFIG above —
-# config.exp.local.sh preferred, falls back to config.local.sh).
+# then the experimental overlay read at the top.
 #
 # Upstream's config.sh exports its own $HOME-based TARGET, SRCDIR and
 # PACKAGE_DIR unconditionally. The wrapper overlay is sourced immediately
 # after and sets every path unconditionally too, so the overlay wins and no
-# re-assertion is needed here. Relocate the whole tree with MTX_ROOT, which
-# the overlay honors.
-#
-# Without an overlay there is nothing to override config.sh, and the build
-# would silently run under $HOME. That is a refusal, not a fallback.
-if [[ -z "${WRAPPER_CONFIG}" ]]; then
-  echo "ERROR: no wrapper config resolved — config/config.exp.local.sh and" >&2
-  echo "       config/config.local.sh are both missing from this checkout." >&2
-  echo "       Refusing to build with upstream's \$HOME-based paths." >&2
-  exit 1
-fi
+# re-assertion is needed here. Relocate the whole tree with MTX_EXP_ROOT,
+# which the overlay honors.
 _SAVED_OPTS=$(setopt | tr '\n' ' ')
 source "${FORK_BUILD_DIR}/packaging/macos/config.sh"
 source "${WRAPPER_CONFIG}"
@@ -835,7 +817,6 @@ export DYLD_LIBRARY_PATH="${TARGET}/lib:${DYLD_LIBRARY_PATH}"
 # Normalize paths — upstream config.sh hardcodes $HOME/tmp/compile; honor our WORK_DIR if different
 export CMPL="${WORK_DIR}"
 export TARGET
-export SRCDIR="${SRCDIR:-${HOME}/opt/source}"
 export MTX_VER
 export NO_EXTRACTION=1  # critical: source already staged, don't let build_package wipe+re-extract
 
