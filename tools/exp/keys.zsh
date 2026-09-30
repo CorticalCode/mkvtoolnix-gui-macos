@@ -84,7 +84,8 @@ exp_function_text() {
 # build_<library>_* hooks, the shared build_package and build_tarball,
 # myinstall.sh, and the patches in <library>-patches/.
 exp_recipe_hash() {
-  local dir="$1" lib="$2" listing fn f part text=""
+  setopt local_options pipe_fail
+  local dir="$1" lib="$2" listing fn f part text="" hash
   local -a fns
   listing=$(command grep -E "^function build_${lib}(_[a-z_]+)? \\{\$" "${dir}/build.sh") || true
   fns=( ${(o)${${(f)listing}#function }% \{} )
@@ -102,7 +103,12 @@ exp_recipe_hash() {
     part=$(command cat "${f}") || return 1
     text+="== patch ${f:t}"$'\n'"${part}"$'\n'
   done
-  print -rn -- "${text}" | command shasum -a 256 | command cut -d' ' -f1
+  hash=$(print -rn -- "${text}" | command shasum -a 256 | command cut -d' ' -f1) || hash=""
+  if [[ -z "${hash}" ]]; then
+    print -u2 "ERROR: cannot compute the recipe hash for ${lib}"
+    return 1
+  fi
+  print -r -- "${hash}"
 }
 
 # exp_env_hash <packaging-dir>
@@ -111,7 +117,8 @@ exp_recipe_hash() {
 # apart from HOME, PATH and MTX_EXP_ROOT — the environment library builds
 # run in.
 exp_env_hash() {
-  local dir="$1" text
+  setopt local_options pipe_fail
+  local dir="$1" text hash
   local -a pass=()
   if [[ -n "${MTX_EXP_ROOT:-}" ]]; then pass+=("MTX_EXP_ROOT=${MTX_EXP_ROOT}"); fi
   text=$(command env -i HOME="${HOME}" PATH="${PATH}" "${pass[@]}" /bin/zsh -c '
@@ -123,7 +130,12 @@ exp_env_hash() {
     print -u2 "ERROR: cannot read the build settings in ${dir}"
     return 1
   }
-  print -rn -- "${text}" | command shasum -a 256 | command cut -d' ' -f1
+  hash=$(print -rn -- "${text}" | command shasum -a 256 | command cut -d' ' -f1) || hash=""
+  if [[ -z "${hash}" ]]; then
+    print -u2 "ERROR: cannot compute the build settings hash for ${dir}"
+    return 1
+  fi
+  print -r -- "${hash}"
 }
 
 # exp_toolchain_id
@@ -166,7 +178,8 @@ exp_spec_source() {
 # EXP_TARBALL for each library, and EXP_TOOLCHAIN_ID, which cache entries and
 # build manifests record and no key includes.
 exp_compute_keys() {
-  local dir="$1" arch="$2" out lib src recipe env tool prev="" block
+  setopt local_options pipe_fail
+  local dir="$1" arch="$2" out lib src recipe env tool prev="" block hash
   EXP_ORDER=(); EXP_KEY=(); EXP_INPUT=(); EXP_TARBALL=()
   out=$(exp_build_order "${dir}") || return 1
   local -a order=( ${(f)out} )
@@ -184,8 +197,13 @@ arch=${arch}
 previous=${prev}"
     EXP_INPUT[${lib}]="${block}"
     EXP_TARBALL[${lib}]="${src%% *}"
-    EXP_KEY[${lib}]=$(print -rn -- "${block}" | command shasum -a 256 | command cut -d' ' -f1)
-    prev="${EXP_KEY[${lib}]}"
+    hash=$(print -rn -- "${block}" | command shasum -a 256 | command cut -d' ' -f1) || hash=""
+    if [[ -z "${hash}" ]]; then
+      print -u2 "ERROR: cannot compute the key for ${lib}"
+      return 1
+    fi
+    EXP_KEY[${lib}]="${hash}"
+    prev="${hash}"
     EXP_ORDER+=("${lib}")
   done
 }
