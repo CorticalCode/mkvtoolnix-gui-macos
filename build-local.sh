@@ -1214,8 +1214,8 @@ if [[ ! -d "${MTX_ROOT}" ]]; then
   echo "    sudo mkdir -p ${MTX_ROOT}" >&2
   echo "    sudo chown \"\$(id -un)\" ${MTX_ROOT}" >&2
   echo "" >&2
-  echo "  To build somewhere you already own instead, set MTX_ROOT:" >&2
-  echo "    MTX_ROOT=\"\$HOME/mtx\" $0 ${*}" >&2
+  echo "  To build somewhere you already own instead, set MTX_ROOT to it and add" >&2
+  echo "  --full: the published dependencies are built for /opt/mtx only." >&2
   exit 1
 fi
 if [[ ! -w "${MTX_ROOT}" ]]; then

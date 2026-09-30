@@ -60,12 +60,10 @@ step that needs `sudo`, once per machine:
 sudo mkdir -p /opt/mtx && sudo chown "$(id -un)" /opt/mtx
 ```
 
-Prefer not to? Set `MTX_ROOT` to anywhere you already own — it's the single
-knob, and everything else derives from it:
-
-```sh
-export MTX_ROOT="$HOME/mtx"
-```
+Prefer not to? `MTX_ROOT` moves the whole tree anywhere you own. The pre-built
+dependencies are built for `/opt/mtx`, so under any other root skip
+`--restore-cache` and build with `--full`. A root inside your home folder records
+your account name in everything you build.
 
 Then:
 
