@@ -45,6 +45,7 @@ _exp_change_hash() {
 # EXP_CHANGE_BRANCH for each holding a branch file. EXP_CHANGE_COMMITS is
 # emptied for the caller to fill from exp_source_commits.
 exp_changes_load_list() {
+  local LC_ALL=C   # name order and glob order must not depend on the locale
   local root="$1" list="$2" name dir branch entry name_re='^[a-z0-9][a-z0-9_.-]*$'
   local -a names patches
   EXP_CHANGES=(); EXP_CHANGE_HASH=(); EXP_CHANGE_BRANCH=(); EXP_CHANGE_COMMITS=()
@@ -65,6 +66,12 @@ exp_changes_load_list() {
       return 1
     fi
     for entry in "${dir}"/*(DN); do
+      # a leading dot is refused outright: the patch glob skips dotfiles, so a
+      # hidden .patch would be hashed and never applied
+      if [[ "${entry:t}" == .* ]]; then
+        print -u2 "ERROR: change ${name}: ${entry:t} is not something a change can hold (a branch file, .patch files, a packaging/ folder); remove or rename it"
+        return 1
+      fi
       if [[ "${entry:t}" == branch && -f "${entry}" && ! -L "${entry}" ]]; then continue; fi
       if [[ "${entry:t}" == *.patch && -f "${entry}" && ! -L "${entry}" ]]; then continue; fi
       if [[ "${entry:t}" == packaging && -d "${entry}" && ! -L "${entry}" ]]; then continue; fi
@@ -158,6 +165,7 @@ _exp_apply() {
 # branch commits, its .patch files, then its packaging/ folder. Nothing is
 # written to <repo>.
 exp_prepare_source() {
+  local LC_ALL=C   # patch files apply in the same order in every locale
   local repo="$1" pin="$2" dest="$3" root="$4" gitdir listing line key sub_name sub_path entry sha mod name c f text err
   local -a commits
   if [[ -e "${dest}" ]]; then
