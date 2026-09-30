@@ -996,6 +996,18 @@ function do_promote {
     exit 1
   fi
 
+  # Precondition: the default build root. Every build that restores the
+  # published cache uses /opt/mtx and refuses packages built under another
+  # prefix, and a prefix inside the home folder would publish the account name
+  # into LFS, where it cannot be taken back.
+  if [[ "${TARGET:A}" != "/opt/mtx/prefix" ]]; then
+    echo "ERROR: Promote refused — this tree's prefix is ${TARGET}, not /opt/mtx/prefix."
+    echo "       Builds that restore the published cache use /opt/mtx and refuse"
+    echo "       packages built anywhere else. Promote from a build with MTX_ROOT"
+    echo "       unset: ./build-local.sh --full ${TAG}, then --promote ${TAG}"
+    exit 1
+  fi
+
   # Precondition: verification must have passed
   if [[ "${VERIFY_PASSED}" != true ]]; then
     echo "ERROR: Cannot promote — post-build verification did not pass."
