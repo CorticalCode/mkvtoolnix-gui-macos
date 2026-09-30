@@ -1,12 +1,10 @@
 #!/bin/zsh
-# tools/build-exp.sh — Build MKVToolNix from an experimental/worktree source tree.
+# tools/build-exp.sh — experimental MKVToolNix builds, never release artifacts.
 #
-# For experimental builds only. Does NOT produce release artifacts. Compiles
-# the given source with the proven + experimental dep caches (experimental
-# overlays proven, e.g. Qt 6.11.0 wins over 6.10.2), produces a DMG in build/
-# with an experimental-specific filename, and never copies to release/.
-#
-# Usage: ./tools/build-exp.sh <path-to-source> [--slug NAME] [--verify-symbol SYM] [--rebuild-deps]
+# Try mode builds a source tree as it is; series mode builds an exact upstream
+# commit plus named changes, so its builds can be compared. Library builds are
+# cached by a key of their inputs (tools/exp/). DMGs go to build/; release/ is
+# never touched. See --help.
 
 if [[ -z "${ZSH_VERSION}" ]]; then
   echo "ERROR: This script requires zsh. Run it with: ./tools/build-exp.sh" >&2
@@ -19,6 +17,21 @@ fi
 
 set -e
 setopt NULL_GLOB
+
+# Every run ends with one line saying how it ended, whatever the exit path.
+# Installed first so the refusals below end with it too. A function that fails
+# at top level under `set -e` skips this trap, so a top-level call to a function
+# that can fail is written `fn ... || exit $?`.
+_exp_outcome() {
+  local rc=$?
+  if [[ ${rc} -eq 0 ]]; then
+    print -r -- "build-exp: finished (exit 0)"
+  else
+    print -r -- "build-exp: FAILED (exit ${rc})"
+  fi
+}
+trap _exp_outcome EXIT
+
 unalias -a 2>/dev/null || true
 
 # --- Startup tool probe ---
@@ -46,6 +59,10 @@ for _t in "${_required_tools[@]}"; do
 done
 unset _t _required_tools
 
+# PATH as the caller set it, before anything here prepends to it; library
+# builds start from this.
+EXP_BASE_PATH="${PATH}"
+
 TRAPZERR() {
   echo "ERROR: build-exp.sh failed at ${funcfiletrace[1]:-line ${LINENO}} (exit code $?)" >&2
 }
@@ -66,121 +83,136 @@ if [[ ! -f "${WRAPPER_CONFIG}" ]]; then
   echo "         git -C ${SCRIPT_DIR} restore config/config.exp.local.sh" >&2
   exit 1
 fi
-source "${WRAPPER_CONFIG}"
+source "${WRAPPER_CONFIG}" || exit $?
+
+# A root under the home folder would compile the account name into every
+# library and binary built there, and experimental DMGs are sometimes published.
+if [[ "${MTX_EXP_ROOT:A}/" == "${HOME:A}/"* ]]; then
+  echo "ERROR: MTX_EXP_ROOT (${MTX_EXP_ROOT}) is inside the home folder." >&2
+  echo "       Paths under it would be recorded in every library and binary built there." >&2
+  echo "       Use the default root: export MTX_EXP_ROOT=/opt/mtx-exp (or unset MTX_EXP_ROOT)" >&2
+  exit 1
+fi
+
+for _lib in keys cache series; do
+  source "${SCRIPT_DIR}/tools/exp/${_lib}.zsh" || exit $?
+done
+unset _lib
 
 usage() {
   cat <<'USAGE'
-Usage: ./tools/build-exp.sh <path-to-source> [--slug NAME] [--verify-symbol SYM] [--rebuild-deps]
+Usage:
+  ./tools/build-exp.sh --source <path> [--slug NAME] [--verify-symbol SYM] [--build-missing]
+  ./tools/build-exp.sh --pin <ref> [--with a,b,...] [--verify-symbol SYM] [--build-missing]
+  ./tools/build-exp.sh --cache-drop <library>/<key> | --clear-cache
 
-Build MKVToolNix from an experimental/worktree source tree. Produces a DMG
-in build/ with an experimental-specific filename. Uses proven + experimental
-dep caches (experimental wins on conflicts, e.g. Qt 6.11.0 > 6.10.2).
+Experimental MKVToolNix builds under MTX_EXP_ROOT (default /opt/mtx-exp).
+DMGs go to build/; release/ is never touched.
 
-For experimental builds only. Never copies to release/.
+Modes:
+  --source <path>     Try mode: build a source tree as it is, uncommitted edits
+                      included, e.g. a worktree while working on a fix.
+  --pin <ref>         Series mode: build an exact upstream commit (a branch, tag
+                      or SHA in the MKVToolNix clone named by MTX_EXP_UPSTREAM,
+                      e.g. upstream/main or origin/main for the latest) plus
+                      the changes named by --with. Without --with, the baseline.
+  --with a,b,...      Changes by name, from MTX_EXP_CHANGES/<name>/. Order does
+                      not matter. A change folder holds any of: a file branch
+                      naming a branch whose own commits apply (the clone needs
+                      a remote named upstream), .patch files applied to the
+                      source, and a packaging/ folder copied over the source's
+                      (e.g. packaging/macos/qt-patches/ for a Qt patch).
 
-Arguments:
-  <path-to-source>         Absolute path to a mkvtoolnix source tree
-                           (e.g., a git worktree checkout).
+Libraries:
+  Each library build is cached in MTX_EXP_ROOT/cache under a key of everything
+  that shaped it. A build restores what it can and, while anything is missing,
+  stops before wiping or building anything and lists what is missing.
+  --build-missing     Build the libraries the cache lacks, and keep them.
+  --cache-drop L/KEY  Remove one entry (at least 12 characters of the key).
+  --clear-cache       Remove this architecture's whole cache.
 
-Options:
-  --slug NAME              DMG filename suffix. Defaults to basename
-                           of source path (with leading "mkvtoolnix-
-                           upstream-" stripped if present).
-  --verify-symbol SYM      Verify the built binary contains this string
-                           before declaring success. Abort if missing.
-                           Intended to catch "patch didn't compile in"
-                           failure mode. Example: lastProgramRunnerAudioDir
-  --rebuild-deps           Allow building missing deps from source. Without
-                           this flag, missing entries in the experimental
-                           cache cause an immediate hard-fail (preserves
-                           cache-only smart-restore semantics for fast
-                           iteration). With this flag, the missing deps
-                           are added to upstream's build.sh target list,
-                           built fresh, and promoted to the experimental
-                           cache (with a provenance manifest sidecar) for
-                           future runs. Use this once when (re)populating
-                           the cache; omit it for measurement runs.
-  --clear-cache            Remove the experimental dep cache for this
-                           architecture and exit. Takes no source path.
-                           The proven cache is untouched.
-  --help, -h               Show this help.
+Other:
+  --slug NAME         Try mode only: the DMG name's suffix (default: the source
+                      folder's name).
+  --verify-symbol SYM Fail unless the built binary contains SYM.
+  --help, -h          This help.
 USAGE
 }
 
 # --- Arg parsing ---
+MODE=""
 SRC=""
-CLEAR_CACHE=0
+PIN=""
+WITH=""
 SLUG=""
 VERIFY_SYMBOL=""
-REBUILD_DEPS=0
-while [[ -n $1 ]]; do
+BUILD_MISSING=0
+ACTION=build
+DROP_SPEC=""
+_need() {
+  if [[ $2 -lt $3 ]]; then
+    echo "ERROR: $1 needs $(( $3 - 1 )) value(s)" >&2
+    exit 1
+  fi
+}
+while [[ $# -gt 0 ]]; do
   case $1 in
-    --slug)
-      shift
-      SLUG="$1"
-      ;;
-    --verify-symbol)
-      shift
-      VERIFY_SYMBOL="$1"
-      ;;
-    --rebuild-deps)
-      REBUILD_DEPS=1
-      ;;
-    --clear-cache)
-      CLEAR_CACHE=1
-      ;;
-    --help|-h)
-      usage
-      exit 0
-      ;;
-    -*)
-      echo "ERROR: Unknown option: $1" >&2
-      usage >&2
-      exit 1
-      ;;
+    --source)        _need "$1" $# 2; SRC="$2"; shift ;;
+    --pin)           _need "$1" $# 2; PIN="$2"; shift ;;
+    --with)          _need "$1" $# 2; WITH="$2"; shift ;;
+    --slug)          _need "$1" $# 2; SLUG="$2"; shift ;;
+    --verify-symbol) _need "$1" $# 2; VERIFY_SYMBOL="$2"; shift ;;
+    --build-missing) BUILD_MISSING=1 ;;
+    --rebuild-deps)  echo "ERROR: --rebuild-deps is now --build-missing" >&2; exit 1 ;;
+    --clear-cache)   ACTION=clear-cache ;;
+    --cache-drop)    _need "$1" $# 2; ACTION=cache-drop; DROP_SPEC="$2"; shift ;;
+    --help|-h)       usage; exit 0 ;;
     *)
-      if [[ -z "${SRC}" ]]; then
-        SRC="$1"
-      else
-        echo "ERROR: Unexpected argument: $1" >&2
-        exit 1
-      fi
-      ;;
+      echo "ERROR: unexpected argument: $1 (a source tree is given with --source)" >&2
+      usage >&2
+      exit 1 ;;
   esac
   shift
 done
 
-# --clear-cache is a cache-management op: no source tree, no build. This script
-# owns the experimental tier — it is the only thing that writes to it, so it is
-# also what empties it.
-if [[ ${CLEAR_CACHE} -eq 1 ]]; then
-  _machine=$(command uname -m)
-  case "${_machine}" in
-    arm64)  _arch_label="arm" ;;
-    x86_64) _arch_label="intel" ;;
-    *)      _arch_label="${_machine}" ;;
-  esac
-  _exp_dir="${TARGET}/proven-experimental/${_arch_label}"
-  if [[ -d "${_exp_dir}" ]]; then
-    echo "==> Clearing experimental cache for ${_arch_label}..."
-    command rm -rf "${_exp_dir}"
-    echo "==> Cleared. Future builds use the proven cache only."
-  else
-    echo "==> No experimental cache for ${_arch_label}."
-  fi
-  exit 0
-fi
+# --- Architecture ---
+MACHINE_ARCH=$(uname -m)
+case "${MACHINE_ARCH}" in
+  arm64)  ARCH_LABEL="arm" ;;
+  x86_64) ARCH_LABEL="intel" ;;
+  *)      ARCH_LABEL="${MACHINE_ARCH}" ;;
+esac
 
-if [[ -z "${SRC}" ]]; then
-  echo "ERROR: source path required" >&2
+# --- Modes that do not build ---
+case "${ACTION}" in
+  clear-cache) exp_cache_clear "${ARCH_LABEL}" || exit $?; exit 0 ;;
+  cache-drop)  exp_cache_drop "${ARCH_LABEL}" "${DROP_SPEC}" || exit $?; exit 0 ;;
+esac
+
+# --- Build mode ---
+if [[ -n "${SRC}" && -n "${PIN}" ]] || [[ -z "${SRC}" && -z "${PIN}" ]]; then
+  echo "ERROR: give exactly one of --source (try mode) or --pin (series mode)" >&2
   usage >&2
   exit 1
 fi
-
-# Absolutize source path
-SRC=${SRC:a}
-if [[ ! -d "${SRC}" ]]; then
-  echo "ERROR: source path does not exist: ${SRC}" >&2
+if [[ -n "${SRC}" ]]; then
+  MODE=try
+  if [[ -n "${WITH}" ]]; then
+    echo "ERROR: --with needs --pin; try mode builds a source tree as it is" >&2
+    exit 1
+  fi
+  SRC=${SRC:a}
+  if [[ ! -d "${SRC}" ]]; then
+    echo "ERROR: source path does not exist: ${SRC}" >&2
+    exit 1
+  fi
+else
+  MODE=series
+  if [[ -n "${SLUG}" ]]; then
+    echo "ERROR: --slug is try mode only; a series build is named by its pin and changes" >&2
+    exit 1
+  fi
+  echo "ERROR: series mode is not wired in yet" >&2
   exit 1
 fi
 
@@ -196,23 +228,15 @@ fi
 # configure fails without them. git submodule update is idempotent — fast
 # no-op if already initialized. Done in SRC (which has .git), not in the
 # rsync'd copy.
-if [[ -d "${SRC}/.git" ]] || [[ -f "${SRC}/.git" ]]; then
-  echo "==> Ensuring git submodules are initialized in ${SRC}..."
-  (cd "${SRC}" && git submodule update --init --recursive)
-else
-  echo "WARNING: ${SRC} is not a git checkout — skipping submodule init."
-  echo "         If build fails with missing libEBML/libMatroska/fmt, you need"
-  echo "         to populate lib/libebml, lib/libmatroska, lib/fmt manually." >&2
-fi
-
-# --- Architecture ---
-MACHINE_ARCH=$(uname -m)
-if [[ "${MACHINE_ARCH}" == "arm64" ]]; then
-  ARCH_LABEL="arm"
-elif [[ "${MACHINE_ARCH}" == "x86_64" ]]; then
-  ARCH_LABEL="intel"
-else
-  ARCH_LABEL="${MACHINE_ARCH}"
+if [[ "${MODE}" == try ]]; then
+  if [[ -d "${SRC}/.git" ]] || [[ -f "${SRC}/.git" ]]; then
+    echo "==> Ensuring git submodules are initialized in ${SRC}..."
+    (cd "${SRC}" && git submodule update --init --recursive)
+  else
+    echo "WARNING: ${SRC} is not a git checkout — skipping submodule init."
+    echo "         If build fails with missing libEBML/libMatroska/fmt, you need"
+    echo "         to populate lib/libebml, lib/libmatroska, lib/fmt manually." >&2
+  fi
 fi
 
 # --- Slug defaulting ---
@@ -563,7 +587,7 @@ if [[ ! -d "${PROVEN_DIR}" ]]; then
   # here would leave an experiment linked against the release tree. So the
   # remedy is to build the dependencies here, not to copy them in;
   # --restore-cache populates the release root and would not help.
-  if [[ ${REBUILD_DEPS} -eq 0 ]]; then
+  if [[ ${BUILD_MISSING} -eq 0 ]]; then
     echo "ERROR: no experimental dependency cache at ${PROVEN_DIR}" >&2
     echo "" >&2
     echo "  Experimental builds keep their own prefix, so they cannot borrow the" >&2
@@ -728,7 +752,7 @@ if [[ ${#drifting_caches[@]} -gt 0 ]]; then
   echo "" >&2
 fi
 if [[ ${#missing[@]} -gt 0 ]]; then
-  if [[ ${REBUILD_DEPS} -eq 1 ]]; then
+  if [[ ${BUILD_MISSING} -eq 1 ]]; then
     echo "==> ${#missing[@]} dep(s) will be built from source: ${missing_targets[*]}"
     echo "    (--rebuild-deps in effect; freshly-built deps will be promoted to" \
          "experimental cache with provenance manifests after build success.)"
@@ -1039,7 +1063,7 @@ DMG_FINAL_PATH="${BUILD_DIR}/${DMG_FINAL_NAME}"
 # and write a provenance manifest sidecar so future restore-time checks can
 # verify its origin.
 PROMOTED_DEPS=()
-if [[ ${REBUILD_DEPS} -eq 1 ]] && [[ ${#missing_targets[@]} -gt 0 ]]; then
+if [[ ${BUILD_MISSING} -eq 1 ]] && [[ ${#missing_targets[@]} -gt 0 ]]; then
   echo ""
   echo "==> Promoting freshly-built deps to experimental cache..."
   mkdir -p "${EXPERIMENTAL_DIR}"
@@ -1145,7 +1169,7 @@ cat > "${DMG_MANIFEST_PATH}" <<EOF
     "build_hash": $(_json_str "${BUILD_HASH}"),
     "version_name": $(_json_str "${VERSIONNAME}"),
     "mtx_version": $(_json_str "${MTX_VER}"),
-    "rebuild_deps_used": $([[ ${REBUILD_DEPS} -eq 1 ]] && echo "true" || echo "false")
+    "build_missing_used": $([[ ${BUILD_MISSING} -eq 1 ]] && echo "true" || echo "false")
   },
   "source": {
     "wrapper": {

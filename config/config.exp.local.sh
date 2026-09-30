@@ -10,17 +10,18 @@
 # experiment can never install over what a release build depends on.
 # MTX_EXP_ROOT is the single knob; everything else derives from it:
 #
-#   /opt/mtx-exp/prefix   install prefix; the experimental cache, the built
-#                         packages and the DocBook stylesheets all live beneath
-#                         it, because the cache round-trip requires it
+#   /opt/mtx-exp/prefix   install prefix; the built packages and the DocBook
+#                         stylesheets live beneath it, because the cache
+#                         round-trip requires it
 #   /opt/mtx-exp/build    compile workspace (upstream's CMPL)
 #   /opt/mtx-exp/stage    DESTDIR staging root used by myinstall.sh
 #   /opt/mtx-exp/src      source tarballs
+#   /opt/mtx-exp/cache    library builds, one folder per key (tools/exp/cache.zsh)
 #
 # Experimental builds cannot borrow the release cache: every cached package
 # records the prefix it was built under, so restoring release packages here
 # would point the experiment at the release tree. The first experimental build
-# compiles its own dependencies (--rebuild-deps).
+# compiles its own dependencies (--build-missing).
 export MTX_EXP_ROOT="${MTX_EXP_ROOT:-/opt/mtx-exp}"
 
 # The root must be absolute, and must neither equal, lie inside nor hold the
@@ -68,6 +69,7 @@ export SRCDIR="${MTX_EXP_ROOT}/src"
 export PACKAGE_DIR="${TARGET}/packages"
 export DOCBOOK_XSL_ROOT_DIR="${TARGET}/xsl-stylesheets"
 export STAGING_DIR="${MTX_EXP_ROOT}/stage"
+export EXP_CACHE_ROOT="${MTX_EXP_ROOT}/cache"
 
 # Ad-hoc code signing — required for macOS Sequoia 15.1+ which blocks
 # completely unsigned apps. The "-" identity signs without a certificate.
