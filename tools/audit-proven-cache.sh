@@ -8,7 +8,7 @@
 # nothing.
 #
 # Usage:
-#   ./tools/audit-proven-cache.sh            # every architecture present
+#   ./tools/audit-proven-cache.sh            # arm and intel, the two published
 #   ./tools/audit-proven-cache.sh arm        # one
 #
 # Exit: 0 all audited architectures are publishable · 1 at least one is not
@@ -39,7 +39,11 @@ audit_arch() {
   local -a tarballs missing_sidecar bad_name bad_oid bad_manifest orphans
   local tgz stem rec_hash rec_name oid m schema kind pkg prefix
 
-  [[ -d "${dir}" ]] || return 0
+  if [[ ! -d "${dir}" ]]; then
+    echo "==> proven/${arch}: MISSING — nothing published for this architecture"
+    problems=$(( problems + 1 ))
+    return 0
+  fi
   tarballs=("${dir}"/*.tar.gz(N))
   audited=$(( audited + 1 ))
 
@@ -78,12 +82,15 @@ audit_arch() {
       # CMake files as absolute paths, so a manifest that does not record one
       # cannot answer whether the package suits the tree restoring it. This is
       # the same question build-local.sh asks before restoring; asking it here
-      # means the publisher finds out instead of the consumer.
+      # means the publisher finds out instead of the consumer. Every tree that
+      # restores the published cache uses /opt/mtx/prefix.
       prefix=$(command grep -oE '"prefix"[[:space:]]*:[[:space:]]*"[^"]*"' "${m}" | command sed -E 's/.*"([^"]*)"$/\1/')
       [[ "${schema}" == "2" ]]            || bad_manifest+=("${stem}: schema_version=${schema:-<none>} (expected 2)")
       [[ "${kind}" == "proven_cache" ]]   || bad_manifest+=("${stem}: kind=${kind:-<none>}")
       [[ "${pkg}" == "${stem}" ]]         || bad_manifest+=("${stem}: manifest names ${pkg:-<none>}")
       [[ -n "${prefix}" ]]                || bad_manifest+=("${stem}: no build prefix recorded")
+      [[ -z "${prefix}" || "${prefix}" == "/opt/mtx/prefix" ]] \
+        || bad_manifest+=("${stem}: built under ${prefix} (expected /opt/mtx/prefix)")
     fi
   done
 
@@ -113,8 +120,8 @@ if [[ -n "$1" ]]; then
   fi
   audit_arch "$1"
 else
-  for d in "${SCRIPT_DIR}"/proven/*(/N); do
-    audit_arch "${d:t}"
+  for arch in arm intel; do
+    audit_arch "${arch}"
   done
 fi
 
