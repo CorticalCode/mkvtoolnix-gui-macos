@@ -1,6 +1,6 @@
 #!/bin/bash
 # Backfill SHA256 checksums for existing tarballs and DMGs that don't have one.
-# Idempotent: skips any file that already has a matching .sha256.
+# Idempotent: skips any file that already has a .sha256, without checking it.
 #
 # Scans:
 #   /opt/mtx/prefix/proven/{arm,intel}          (the canonical local proven cache)
