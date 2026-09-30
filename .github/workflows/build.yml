@@ -86,23 +86,21 @@ jobs:
           sudo chown "$(id -un)" /opt/mtx
           test -w /opt/mtx
 
-      # Layer 1: GitHub Actions cache (ephemeral, 7-day TTL)
-      - name: Restore dependency cache
-        id: dep-cache
+      # Layer 1: GitHub Actions cache (ephemeral, 7-day TTL) of the downloaded
+      # source tarballs. They sit outside the prefix, which every build wipes
+      # before it starts, so they survive to be used; packages in the prefix
+      # would not, which is why the dependencies come from layer 2 every run.
+      - name: Restore source tarball cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
-          path: |
-            /opt/mtx/prefix/packages
-            /opt/mtx/src
-          key: deps-${{ needs.check-release.outputs.version }}-${{ hashFiles('patches/*.patch', 'patches/qt-patches/*.patch', 'config/config.local.sh') }}
+          path: /opt/mtx/src
+          key: src-${{ needs.check-release.outputs.version }}
           restore-keys: |
-            deps-${{ needs.check-release.outputs.version }}-
-            deps-
+            src-
 
-      # Layer 2: Git LFS proven cache (if Actions cache missed)
+      # Layer 2: Git LFS proven cache
       # .lfsconfig excludes proven/ from auto-download, so we pull explicitly
       - name: Restore deps from LFS proven cache
-        if: steps.dep-cache.outputs.cache-hit != 'true'
         run: |
           # --restore-cache pulls the LFS objects, copies each package together
           # with its .sha256 and .manifest.json, checks every package has both,
