@@ -105,6 +105,10 @@ exp_cache_drop() {
   local arch="$1" spec="$2" lib prefix re='^[a-z_]+/[0-9a-f]{12,64}$'
   local -a hits
   _exp_cache_root_set || return 1
+  if [[ ! "$1" =~ ^[a-z0-9_]+$ ]]; then
+    print -u2 "ERROR: architecture '$1' is not a plain name (letters, digits, underscore)"
+    return 1
+  fi
   if [[ ! "${spec}" =~ ${re} ]]; then
     print -u2 "ERROR: name the entry as <library>/<key>, with at least 12 characters of the key (its folder under ${EXP_CACHE_ROOT}/${arch}/)"
     return 1
@@ -123,6 +127,10 @@ exp_cache_drop() {
 exp_cache_clear() {
   local dir
   _exp_cache_root_set || return 1
+  if [[ ! "$1" =~ ^[a-z0-9_]+$ ]]; then
+    print -u2 "ERROR: architecture '$1' is not a plain name (letters, digits, underscore)"
+    return 1
+  fi
   dir="${EXP_CACHE_ROOT}/$1"
   if [[ -d "${dir}" ]]; then
     command rm -rf "${dir}" || return 1
