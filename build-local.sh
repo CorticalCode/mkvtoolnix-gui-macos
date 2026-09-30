@@ -707,6 +707,32 @@ function run_restore_cache_mode {
     return 1
   fi
 
+  # The same goes for a manifest the build would refuse: validate_proven_cache
+  # accepts schema 2 only, and only packages built under this tree's prefix.
+  local -a mismatched=()
+  local schema prefix
+  for tgz in "${pointer_files[@]}"; do
+    stem="${tgz:t:r:r}"
+    schema=$(_manifest_int_field "${tgz}.manifest.json" "schema_version")
+    prefix=$(_manifest_field "${tgz}.manifest.json" "prefix")
+    if [[ "${schema}" != "2" ]]; then
+      mismatched+=("${stem}: schema_version=${schema:-<none>} (expected 2)")
+    elif [[ -z "${prefix}" || "${prefix:A}" != "${TARGET:A}" ]]; then
+      mismatched+=("${stem}: built under ${prefix:-<no prefix>}, not ${TARGET}")
+    fi
+  done
+  if [[ ${#mismatched[@]} -gt 0 ]]; then
+    echo "ERROR: proven/${ARCH_LABEL}/ holds packages the build would refuse:"
+    for stem in "${mismatched[@]}"; do
+      echo "    ${stem}"
+    done
+    echo "  Nothing was downloaded."
+    echo "  Build with './build-local.sh --full ${TAG:-<tag>}' instead. On the machine that"
+    echo "  owns this architecture, --full followed by --promote publishes a cache"
+    echo "  the build accepts."
+    return 1
+  fi
+
   # git-lfs is a separate program, not part of git. Without it the pull below
   # fails with git's own "not a git command" and nothing explains why.
   if ! git lfs version >/dev/null 2>&1; then

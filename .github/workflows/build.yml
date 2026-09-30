@@ -102,13 +102,16 @@ jobs:
       # .lfsconfig excludes proven/ from auto-download, so we pull explicitly
       - name: Restore deps from LFS proven cache
         run: |
-          # --restore-cache pulls the LFS objects, copies each package together
-          # with its .sha256 and .manifest.json, checks every package has both,
-          # and returns the working copy to pointers. Reusing it keeps this in
-          # step with the script rather than duplicating the layout here.
+          # --restore-cache checks, before downloading anything, that every
+          # package has its .sha256 and a .manifest.json the build accepts
+          # (schema and prefix), then pulls the LFS objects, copies each package
+          # with its sidecars, and returns the working copy to pointers. Reusing
+          # it keeps this in step with the script rather than duplicating the
+          # layout here.
           #
-          # Not fatal: a cache that cannot be populated leaves the local cache
-          # absent, and the build then compiles the dependencies from source.
+          # Not fatal: a cache that is refused or cannot be pulled leaves the
+          # local cache absent, and the build then compiles the dependencies
+          # from source.
           ./build-local.sh --restore-cache \
             || echo "Proven cache unavailable; dependencies will be built from source."
 
