@@ -216,15 +216,41 @@ else
     echo "ERROR: --slug is try mode only; a series build is named by its pin and changes" >&2
     exit 1
   fi
-  echo "ERROR: series mode is not wired in yet" >&2
-  exit 1
 fi
 
-# --- Sanity: source looks like mkvtoolnix ---
-if [[ ! -f "${SRC}/configure.ac" ]] || [[ ! -d "${SRC}/src/mkvtoolnix-gui" ]] || [[ ! -f "${SRC}/packaging/macos/build.sh" ]]; then
-  echo "ERROR: ${SRC} does not look like a mkvtoolnix source tree" >&2
-  echo "       Expected: configure.ac, src/mkvtoolnix-gui/, packaging/macos/build.sh" >&2
-  exit 1
+# --- Series mode: an exact upstream commit plus named changes ---
+# The pin, the changes and each branch's own commits are resolved here, before
+# anything is named or staged; the source is unpacked at the staging step.
+if [[ "${MODE}" == series ]]; then
+  if [[ -z "${MTX_EXP_UPSTREAM:-}" || ! -d "${MTX_EXP_UPSTREAM}" ]]; then
+    echo "ERROR: series mode reads the MKVToolNix clone named by MTX_EXP_UPSTREAM, which is not set to a directory" >&2
+    exit 1
+  fi
+  if [[ -n "${WITH}" && ( -z "${MTX_EXP_CHANGES:-}" || ! -d "${MTX_EXP_CHANGES}" ) ]]; then
+    echo "ERROR: --with reads change folders from MTX_EXP_CHANGES, which is not set to a directory" >&2
+    exit 1
+  fi
+  PIN_SHA=$(exp_resolve_pin "${MTX_EXP_UPSTREAM}" "${PIN}") || exit $?
+  exp_changes_load_list "${MTX_EXP_CHANGES:-}" "${WITH}" || exit $?
+  for name in "${EXP_CHANGES[@]}"; do
+    if [[ -n "${EXP_CHANGE_BRANCH[${name}]:-}" ]]; then
+      EXP_CHANGE_COMMITS[${name}]=$(exp_source_commits "${MTX_EXP_UPSTREAM}" "${EXP_CHANGE_BRANCH[${name}]}") || exit $?
+    fi
+  done
+  if [[ ${#EXP_CHANGES[@]} -gt 0 ]]; then
+    SLUG="${PIN_SHA[1,7]}-${(j:+:)EXP_CHANGES}"
+  else
+    SLUG="${PIN_SHA[1,7]}-baseline"
+  fi
+fi
+
+# --- Sanity: source looks like mkvtoolnix (try mode; a series pin is checked by the MTX_VER step) ---
+if [[ "${MODE}" == try ]]; then
+  if [[ ! -f "${SRC}/configure.ac" ]] || [[ ! -d "${SRC}/src/mkvtoolnix-gui" ]] || [[ ! -f "${SRC}/packaging/macos/build.sh" ]]; then
+    echo "ERROR: ${SRC} does not look like a mkvtoolnix source tree" >&2
+    echo "       Expected: configure.ac, src/mkvtoolnix-gui/, packaging/macos/build.sh" >&2
+    exit 1
+  fi
 fi
 
 # --- Ensure git submodules are populated ---
@@ -243,18 +269,26 @@ if [[ "${MODE}" == try ]]; then
   fi
 fi
 
-# --- Slug defaulting ---
-if [[ -z "${SLUG}" ]]; then
-  SLUG="${SRC:t}"
-  SLUG="${SLUG#mkvtoolnix-upstream-}"
+# --- Slug defaulting (try mode; a series build is named by its pin and changes) ---
+if [[ "${MODE}" == try ]]; then
+  if [[ -z "${SLUG}" ]]; then
+    SLUG="${SRC:t}"
+    SLUG="${SLUG#mkvtoolnix-upstream-}"
+  fi
+  # Sanitize: allow only [A-Za-z0-9_-]
+  SLUG="${SLUG//[^a-zA-Z0-9_-]/-}"
 fi
-# Sanitize: allow only [A-Za-z0-9_-]
-SLUG="${SLUG//[^a-zA-Z0-9_-]/-}"
 
-# --- MTX_VER from worktree's configure.ac ---
-MTX_VER=$(awk -F, '/AC_INIT/ { gsub("[][]", "", $2); print $2 }' "${SRC}/configure.ac")
+# --- MTX_VER from the source's configure.ac; in series mode, the pin's ---
+if [[ "${MODE}" == series ]]; then
+  MTX_VER=$(git -C "${MTX_EXP_UPSTREAM}" show "${PIN_SHA}:configure.ac" | awk -F, '/AC_INIT/ { gsub("[][]", "", $2); print $2 }') || exit $?
+  _ver_from="configure.ac at ${PIN} (${PIN_SHA[1,12]})"
+else
+  MTX_VER=$(awk -F, '/AC_INIT/ { gsub("[][]", "", $2); print $2 }' "${SRC}/configure.ac")
+  _ver_from="${SRC}/configure.ac"
+fi
 if [[ -z "${MTX_VER}" ]]; then
-  echo "ERROR: Could not derive MTX_VER from ${SRC}/configure.ac" >&2
+  echo "ERROR: Could not derive MTX_VER from ${_ver_from}" >&2
   exit 1
 fi
 
@@ -278,8 +312,12 @@ DEV_VER="$(( ${MTX_VER%%.*} + 1 ))pre"
 VERSIONNAME="${DEV_VER}-exp-${SLUG}-${BUILD_LABEL}-${BUILD_HASH}"
 
 echo "==> build-exp.sh"
-echo "    Source:      ${SRC}"
-echo "    Slug:        ${SLUG}"
+if [[ "${MODE}" == series ]]; then
+  echo "    Source:      ${PIN} (${PIN_SHA[1,12]}) with: ${EXP_CHANGES[*]:-no changes}"
+else
+  echo "    Source:      ${SRC}"
+fi
+echo "    Slug:       ${SLUG}"
 echo "    MTX_VER:     ${MTX_VER}"
 echo "    Arch:        ${MACHINE_ARCH} (${ARCH_LABEL})"
 echo "    WORK_DIR:    ${WORK_DIR}"
