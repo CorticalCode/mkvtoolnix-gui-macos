@@ -45,7 +45,7 @@ typeset -g EXP_TOOLCHAIN_ID=""
 # The libraries build.sh builds when given no targets, in its order, without
 # the uncached ones — read from its `if [[ -z $@ ]]; then` list.
 exp_build_order() {
-  local dir="$1" line name in_list=0 re='^  build_([a-z_]+)$'
+  local dir="$1" line name in_list=0 re='^  build_([a-z0-9_]+)$'
   local -a order=()
   while IFS= read -r line; do
     if [[ ${in_list} -eq 0 ]]; then
@@ -125,7 +125,7 @@ exp_recipe_hash() {
   setopt local_options pipe_fail
   local dir="$1" lib="$2" listing fn f part text="" hash
   local -a fns
-  listing=$(command grep -E "^function build_${lib}(_[a-z_]+)? \\{\$" "${dir}/build.sh") || true
+  listing=$(command grep -E "^function build_${lib}(_[a-z0-9_]+)? \\{\$" "${dir}/build.sh") || true
   fns=( ${(o)${${(f)listing}#function }% \{} )
   if (( ! ${fns[(Ie)build_${lib}]} )); then
     print -u2 "ERROR: build.sh has no function build_${lib}"

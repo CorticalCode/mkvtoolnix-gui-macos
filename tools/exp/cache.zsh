@@ -117,7 +117,7 @@ exp_cache_restore() {
 
 # exp_cache_drop <arch> <library>/<key or its first 12+ characters>
 exp_cache_drop() {
-  local arch="$1" spec="$2" lib prefix re='^[a-z_]+/[0-9a-f]{12,64}$'
+  local arch="$1" spec="$2" lib prefix re='^[a-z0-9_]+/[0-9a-f]{12,64}$'
   local -a hits
   _exp_cache_root_set || return 1
   if [[ ! "$1" =~ ^[a-z0-9_]+$ ]]; then
