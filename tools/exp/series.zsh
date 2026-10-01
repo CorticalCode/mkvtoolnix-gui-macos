@@ -189,6 +189,28 @@ exp_apply_staging_patch() {
   fi
 }
 
+# _exp_patch_gitlink <patch-text>
+# Prints the path of the first file whose header in the patch records mode
+# 160000 (a submodule's commit) and returns 0; returns 1 when none does. Only
+# the lines from the first "diff --git" on are read, so a commit message cannot
+# match.
+_exp_patch_gitlink() {
+  local line cur="" seen=0
+  for line in "${(@f)1}"; do
+    if [[ "${line}" == "diff --git a/"* ]]; then
+      cur="${${line#diff --git a/}%% b/*}"; seen=1; continue
+    fi
+    (( seen )) || continue
+    if [[ "${line}" == "index "*..*" 160000" || "${line}" == "new file mode 160000" \
+          || "${line}" == "deleted file mode 160000" || "${line}" == "old mode 160000" \
+          || "${line}" == "new mode 160000" ]]; then
+      print -r -- "${cur}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # exp_prepare_source <repo> <pin-sha> <dest> <changes-root>
 # Fills <dest>, which must not exist, with plain files: the pin's tree from
 # <repo>, each submodule's tree at the commit the pin records, from <repo>'s
@@ -197,7 +219,7 @@ exp_apply_staging_patch() {
 # written to <repo>.
 exp_prepare_source() {
   local LC_ALL=C   # patch files apply in the same order in every locale
-  local repo="$1" pin="$2" dest="$3" root="$4" gitdir listing line key sub_name sub_path entry sha mod name c f text err
+  local repo="$1" pin="$2" dest="$3" root="$4" gitdir listing line key sub_name sub_path entry sha mod name c f text err gitlink
   local -a commits modes
   if [[ -e "${dest}" ]]; then
     print -u2 "ERROR: ${dest} already exists"
@@ -268,6 +290,11 @@ exp_prepare_source() {
     done
     for f in "${root}/${name}"/*.patch(N); do
       text=$(command cat "${f}") || return 1
+      if gitlink=$(_exp_patch_gitlink "${text}"); then
+        print -u2 "ERROR: change ${name}: ${f:t} changes the commit of submodule ${gitlink}, which git apply would skip; a series build takes every submodule at the commit the pin records"
+        print -u2 "To build a submodule at another commit, build a worktree that has it in try mode (--source)"
+        return 1
+      fi
       if ! err=$(_exp_apply "${dest}" "${text}" 2>&1); then
         print -u2 "ERROR: change ${name}: ${f:t} does not apply at pin ${pin[1,12]}"
         print -u2 -r -- "${err}"
