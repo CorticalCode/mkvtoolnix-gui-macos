@@ -523,9 +523,9 @@ fi
 # --- Wipe the prefix, then assemble the libraries in build order ---
 # Each library is restored or built at its turn, so each build sees exactly
 # the libraries before it in the prefix, as a clean build would. Library
-# builds start from an empty environment apart from HOME, PATH, MTX_EXP_ROOT
-# and TMPDIR: build.sh reads config.sh and config.local.sh itself, so what it
-# sees is what the key hashed.
+# builds start from an empty environment apart from HOME, PATH, MTX_EXP_ROOT,
+# TMPDIR and ZDOTDIR: build.sh reads config.sh and config.local.sh itself, so
+# what it sees is what the key hashed.
 echo ""
 echo "==> Wiping ${TARGET}..."
 for item in "${TARGET}"/*(DN); do
@@ -544,7 +544,7 @@ for lib in "${EXP_ORDER[@]}"; do
   else
     echo "==> ${lib}: building ${key[1,12]}"
     (cd "${PACKAGING}" && command env -i HOME="${HOME}" PATH="${EXP_BASE_PATH}" \
-       MTX_EXP_ROOT="${MTX_EXP_ROOT}" ${TMPDIR:+TMPDIR="${TMPDIR}"} ./build.sh "${lib}")
+       ZDOTDIR="${EXP_ZDOTDIR}" MTX_EXP_ROOT="${MTX_EXP_ROOT}" ${TMPDIR:+TMPDIR="${TMPDIR}"} ./build.sh "${lib}")
     if [[ "${lib}" == docbook_xsl ]]; then
       pkg_file="${PACKAGE_DIR}/docbook-xsl.tar.gz"
       exp_archive_docbook "${DOCBOOK_XSL_ROOT_DIR}" "${pkg_file}" || exit $?

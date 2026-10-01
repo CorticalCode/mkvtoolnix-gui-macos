@@ -18,6 +18,12 @@ typeset -ga EXP_UNCACHED=(gpg shared_mime_info mkvtoolnix)
 typeset -ga EXP_KEY_VARS=(CC CPP CXX CXXCPP CFLAGS CXXFLAGS LDFLAGS QT_CXXFLAGS
                           MACOSX_DEPLOYMENT_TARGET QTVER TARGET)
 
+# ZDOTDIR for library builds and for reading their settings. build.sh and
+# myinstall.sh run under zsh, which reads ${ZDOTDIR:-${HOME}}/.zshenv first.
+# /var/empty is a root-owned folder macOS ships empty, so zsh finds no startup
+# file there and nothing is added to the environment a build is given.
+typeset -g EXP_ZDOTDIR=/var/empty
+
 typeset -ga EXP_ORDER=()
 typeset -gA EXP_KEY EXP_INPUT EXP_TARBALL
 typeset -g EXP_TOOLCHAIN_ID=""
@@ -114,14 +120,15 @@ exp_recipe_hash() {
 # exp_env_hash <packaging-dir>
 # Hashes the values of EXP_KEY_VARS once config.sh and config.local.sh are
 # read, in the order build.sh reads them, starting from an empty environment
-# apart from HOME, PATH and MTX_EXP_ROOT — the environment library builds
-# run in.
+# apart from HOME, PATH, MTX_EXP_ROOT, TMPDIR and ZDOTDIR — the environment
+# library builds run in.
 exp_env_hash() {
   setopt local_options pipe_fail
   local dir="$1" text hash
   local -a pass=()
   if [[ -n "${MTX_EXP_ROOT:-}" ]]; then pass+=("MTX_EXP_ROOT=${MTX_EXP_ROOT}"); fi
-  text=$(command env -i HOME="${HOME}" PATH="${PATH}" "${pass[@]}" /bin/zsh -c '
+  if [[ -n "${TMPDIR:-}" ]]; then pass+=("TMPDIR=${TMPDIR}"); fi
+  text=$(command env -i HOME="${HOME}" PATH="${PATH}" ZDOTDIR="${EXP_ZDOTDIR}" "${pass[@]}" /bin/zsh -c '
     source "$1/config.sh" || exit 1
     if [[ -f "$1/config.local.sh" ]]; then source "$1/config.local.sh" || exit 1; fi
     shift
