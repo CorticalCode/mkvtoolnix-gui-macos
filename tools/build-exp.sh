@@ -458,16 +458,11 @@ if [[ -z "${_staging_sha}" ]]; then
   echo "ERROR: could not hash ${STAGING_PATCH:t}" >&2
   exit 1
 fi
-if (cd "${FORK_BUILD_DIR}" && git apply --check -R "${STAGING_PATCH}" 2>/dev/null); then
-  _staging_state=already_present
+_staging_state=$(exp_apply_staging_patch "${FORK_BUILD_DIR}" "${STAGING_PATCH}") || exit $?
+if [[ "${_staging_state}" == already_present ]]; then
   echo "==> ${STAGING_PATCH:t}: already in the source"
-elif (cd "${FORK_BUILD_DIR}" && git apply --check "${STAGING_PATCH}"); then
-  (cd "${FORK_BUILD_DIR}" && git apply "${STAGING_PATCH}") || exit $?
-  _staging_state=applied
-  echo "==> ${STAGING_PATCH:t}: applied"
 else
-  echo "ERROR: ${STAGING_PATCH:t} does not apply to this source's packaging/macos/myinstall.sh" >&2
-  exit 1
+  echo "==> ${STAGING_PATCH:t}: applied"
 fi
 
 # --- Stage the overlay as packaging/macos/config.local.sh ---

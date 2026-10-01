@@ -168,6 +168,27 @@ _exp_apply() {
   fi
 }
 
+# exp_apply_staging_patch <source-dir> <patch-file>
+# Puts the staging patch (packaging/macos/myinstall.sh stages under
+# STAGING_DIR) in a staged source of either mode, and prints its state:
+# already_present when it reverses cleanly, applied when it applies; refuses a
+# source it does neither to. As in _exp_apply, GIT_CEILING_DIRECTORIES keeps
+# all three git apply runs from finding a repository above <source-dir>,
+# where a patch path outside the folder would be skipped with exit 0.
+exp_apply_staging_patch() {
+  local dest="$1" patch="${2:A}"
+  local -x GIT_CEILING_DIRECTORIES="${dest:A:h}"
+  if (cd "${dest}" && git apply --check -R "${patch}" 2>/dev/null); then
+    print -r -- already_present
+  elif (cd "${dest}" && git apply --check "${patch}"); then
+    (cd "${dest}" && git apply "${patch}") || return 1
+    print -r -- applied
+  else
+    print -u2 "ERROR: ${patch:t} does not apply to this source's packaging/macos/myinstall.sh"
+    return 1
+  fi
+}
+
 # exp_prepare_source <repo> <pin-sha> <dest> <changes-root>
 # Fills <dest>, which must not exist, with plain files: the pin's tree from
 # <repo>, each submodule's tree at the commit the pin records, from <repo>'s
