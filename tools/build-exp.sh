@@ -97,7 +97,7 @@ if [[ "${MTX_EXP_ROOT:A}/" == "${HOME:A}/"* ]]; then
   exit 1
 fi
 
-for _lib in keys cache series; do
+for _lib in keys cache series try; do
   source "${SCRIPT_DIR}/tools/exp/${_lib}.zsh" || exit $?
 done
 unset _lib
@@ -210,15 +210,7 @@ if [[ -n "${SRC}" ]]; then
     echo "ERROR: source path does not exist: ${SRC}" >&2
     exit 1
   fi
-  TRY_REF=""; TRY_SHA=""; TRY_DIRTY=""
-  if git -C "${SRC}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    TRY_REF=$(git -C "${SRC}" rev-parse --abbrev-ref HEAD) || exit $?
-    TRY_SHA=$(git -C "${SRC}" rev-parse HEAD) || exit $?
-    _try_status=$(git --no-optional-locks -C "${SRC}" status --porcelain --untracked-files=no --ignore-submodules=dirty) || exit $?
-    if [[ -n "${_try_status}" ]]; then
-      TRY_DIRTY=$(setopt pipe_fail; git -C "${SRC}" diff HEAD --binary | command shasum -a 256 | command cut -d' ' -f1) || exit $?
-    fi
-  fi
+  exp_try_record "${SRC}" || exit $?
 else
   MODE=series
   if [[ -n "${SLUG}" ]]; then
@@ -850,7 +842,7 @@ if [[ "${MODE}" == series ]]; then
   _SOURCE_JSON="{\"clone\":$(_json_str "${MTX_EXP_UPSTREAM:t}")}"
 else
   _PIN_JSON="null"
-  _SOURCE_JSON="{\"path_basename\":$(_json_str "${SRC:t}"),\"ref\":$(_json_str "${TRY_REF}"),\"sha\":$(_json_str "${TRY_SHA}"),\"uncommitted_diff_sha256\":$(_json_str "${TRY_DIRTY}")}"
+  _SOURCE_JSON="{\"path_basename\":$(_json_str "${SRC:t}"),\"ref\":$(_json_str "${EXP_TRY_REF}"),\"sha\":$(_json_str "${EXP_TRY_SHA}"),\"uncommitted_work_sha256\":$(_json_str "${EXP_TRY_DIRTY}")}"
 fi
 
 _PATCHES_JSON=$(_json_array "{\"name\":$(_json_str "patches/${STAGING_PATCH:t}"),\"sha256\":$(_json_str "${_staging_sha}"),\"state\":$(_json_str "${_staging_state}")}") || exit $?
