@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "kind": "proven_cache",
   "spec_name": "gpg",
   "package": "gnupg-1.4.23",
@@ -7,12 +7,13 @@
   "source_sha256": "c9462f17e651b6507848c08c430c791287cd75491f8b5a8b50c6ed46b12678ba",
   "configure_args_hash": "",
   "patch_state_hash": "none",
-  "built_at": "2026-09-18T06:39:37Z",
+  "prefix": "/opt/mtx/prefix",
+  "built_at": "2026-10-01T08:25:40Z",
   "built_by": {
-    "tool": "tools/refresh-deps.sh",
+    "tool": "build-local.sh",
     "upstream_tag": "release-102.0",
     "wrapper_branch": "main",
-    "wrapper_sha": "07eb720"
+    "wrapper_sha": "8dd78f4"
   },
-  "host": {"cpu_brand":"Apple M4 Pro","arch":"arm64","cores_total":14,"ram_gb":64,"macos_version":"27.0","clang_version":"21.0.0","sdk_version":"27.0"}
+  "host": {"cpu_brand":"Apple M4 Pro","arch":"arm64","cores_total":14,"ram_gb":64,"macos_version":"27.0.1","clang_version":"21.0.0","sdk_version":"27.0"}
 }

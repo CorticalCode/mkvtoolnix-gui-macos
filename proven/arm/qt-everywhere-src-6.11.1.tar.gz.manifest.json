@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "kind": "proven_cache",
   "spec_name": "qt",
   "package": "qt-everywhere-src-6.11.1",
@@ -7,12 +7,13 @@
   "source_sha256": "252acef8c5ae68074d91cadba2ee4a83465051bbb970dd26e8f0daa0f3904e03",
   "configure_args_hash": "a7330ea5227a",
   "patch_state_hash": "f337c6282479",
-  "built_at": "2026-09-18T06:39:37Z",
+  "prefix": "/opt/mtx/prefix",
+  "built_at": "2026-10-01T08:25:41Z",
   "built_by": {
-    "tool": "tools/refresh-deps.sh",
+    "tool": "build-local.sh",
     "upstream_tag": "release-102.0",
     "wrapper_branch": "main",
-    "wrapper_sha": "07eb720"
+    "wrapper_sha": "8dd78f4"
   },
-  "host": {"cpu_brand":"Apple M4 Pro","arch":"arm64","cores_total":14,"ram_gb":64,"macos_version":"27.0","clang_version":"21.0.0","sdk_version":"27.0"}
+  "host": {"cpu_brand":"Apple M4 Pro","arch":"arm64","cores_total":14,"ram_gb":64,"macos_version":"27.0.1","clang_version":"21.0.0","sdk_version":"27.0"}
 }
