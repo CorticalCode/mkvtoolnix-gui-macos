@@ -554,7 +554,10 @@ for lib in "${EXP_ORDER[@]}"; do
     exp_cache_store "${entry}" "${key}" "${pkg_file}" "${EXP_INPUT[${lib}]}" "$(_iso_utc)" "${EXP_TOOLCHAIN_ID}" || exit $?
     BUILT_LIBS+=("${lib}")
   fi
-  DEPS_JSON_PARTS+=("{\"library\":$(_json_str "${lib}"),\"key\":$(_json_str "${key}"),\"from\":$(_json_str "${LIB_FROM[${lib}]}")}")
+  # Which entry under this key the build used: a later drop and rebuild stores
+  # another under the same key.
+  manifest_sha=$(exp_cache_manifest_sha256 "${entry}") || exit $?
+  DEPS_JSON_PARTS+=("{\"library\":$(_json_str "${lib}"),\"key\":$(_json_str "${key}"),\"from\":$(_json_str "${LIB_FROM[${lib}]}"),\"manifest_sha256\":$(_json_str "${manifest_sha}")}")
 done
 
 # --- Generate ./configure via autogen.sh ---
@@ -755,8 +758,9 @@ DMG_FINAL_PATH="${BUILD_DIR}/${DMG_FINAL_NAME}"
 
 # --- Write DMG sidecar manifest ---
 # What a later comparison needs: the mode, the pin and changes a series build
-# was made from, each library's key and whether it was restored or built, the
-# toolchain, and the size of every program and library in the bundle. Every
+# was made from, each library's key, whether it was restored or built and the
+# SHA-256 of its cache entry's manifest.json, the toolchain, and the size of
+# every program and library in the bundle. Every
 # experimental source also has the packaging staging patch applied, recorded
 # under "patches" by name and SHA-256.
 _json_array() {

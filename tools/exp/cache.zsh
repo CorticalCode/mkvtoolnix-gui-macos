@@ -95,6 +95,21 @@ exp_cache_store() {
   command mv "${tmp}" "${entry}" || return 1
 }
 
+# exp_cache_manifest_sha256 <entry-dir>
+# The SHA-256 of the entry's manifest.json. A build manifest records it for
+# each library it used, so a comparison can tell that entry from one stored
+# later under the same key after a drop.
+exp_cache_manifest_sha256() {
+  setopt local_options pipe_fail
+  local sum
+  sum=$(command shasum -a 256 < "$1/manifest.json" | command cut -d' ' -f1) || sum=""
+  if [[ -z "${sum}" ]]; then
+    print -u2 "ERROR: cannot hash $1/manifest.json"
+    return 1
+  fi
+  print -r -- "${sum}"
+}
+
 # exp_cache_restore <entry-dir> <target>
 exp_cache_restore() {
   (cd "$2" && command tar xzf "$1/package.tar.gz")
