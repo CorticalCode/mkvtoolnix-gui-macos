@@ -153,6 +153,8 @@ VERIFY_SYMBOL=""
 BUILD_MISSING=0
 ACTION=build
 DROP_SPEC=""
+ACTIONS=()     # each cache action given, as it would be run on its own
+BUILD_OPTS=()  # each build option given
 _need() {
   if [[ $2 -lt $3 ]]; then
     echo "ERROR: $1 needs $(( $3 - 1 )) value(s)" >&2
@@ -161,15 +163,15 @@ _need() {
 }
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --source)        _need "$1" $# 2; SRC="$2"; shift ;;
-    --pin)           _need "$1" $# 2; PIN="$2"; shift ;;
-    --with)          _need "$1" $# 2; WITH="$2"; shift ;;
-    --slug)          _need "$1" $# 2; SLUG="$2"; shift ;;
-    --verify-symbol) _need "$1" $# 2; VERIFY_SYMBOL="$2"; shift ;;
-    --build-missing) BUILD_MISSING=1 ;;
+    --source)        _need "$1" $# 2; SRC="$2"; BUILD_OPTS+=("$1"); shift ;;
+    --pin)           _need "$1" $# 2; PIN="$2"; BUILD_OPTS+=("$1"); shift ;;
+    --with)          _need "$1" $# 2; WITH="$2"; BUILD_OPTS+=("$1"); shift ;;
+    --slug)          _need "$1" $# 2; SLUG="$2"; BUILD_OPTS+=("$1"); shift ;;
+    --verify-symbol) _need "$1" $# 2; VERIFY_SYMBOL="$2"; BUILD_OPTS+=("$1"); shift ;;
+    --build-missing) BUILD_MISSING=1; BUILD_OPTS+=("$1") ;;
     --rebuild-deps)  echo "ERROR: --rebuild-deps is now --build-missing" >&2; exit 1 ;;
-    --clear-cache)   ACTION=clear-cache ;;
-    --cache-drop)    _need "$1" $# 2; ACTION=cache-drop; DROP_SPEC="$2"; shift ;;
+    --clear-cache)   ACTION=clear-cache; ACTIONS+=("$1") ;;
+    --cache-drop)    _need "$1" $# 2; ACTION=cache-drop; DROP_SPEC="$2"; ACTIONS+=("$1 ${(q)2}"); shift ;;
     --help|-h)       usage; exit 0 ;;
     *)
       echo "ERROR: unexpected argument: $1 (a source tree is given with --source)" >&2
@@ -178,6 +180,22 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+# A run either builds or changes the cache, one way. Anything else is refused
+# here, before the cache is touched.
+if [[ ${#ACTIONS[@]} -gt 1 ]]; then
+  echo "ERROR: ${#ACTIONS[@]} cache actions were given; each changes the cache on its own, so run one at a time:" >&2
+  for _a in "${ACTIONS[@]}"; do
+    echo "         ${(q)0} ${_a}" >&2
+  done
+  exit 1
+fi
+if [[ ${#ACTIONS[@]} -eq 1 && ${#BUILD_OPTS[@]} -gt 0 ]]; then
+  echo "ERROR: ${ACTIONS[1]%% *} changes the cache and builds nothing, so it takes no build options (given: ${BUILD_OPTS[*]})." >&2
+  echo "       Run it on its own:" >&2
+  echo "         ${(q)0} ${ACTIONS[1]}" >&2
+  exit 1
+fi
 
 # --- Architecture ---
 MACHINE_ARCH=$(uname -m)
