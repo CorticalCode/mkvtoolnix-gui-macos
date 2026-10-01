@@ -523,9 +523,10 @@ fi
 # --- Wipe the prefix, then assemble the libraries in build order ---
 # Each library is restored or built at its turn, so each build sees exactly
 # the libraries before it in the prefix, as a clean build would. Library
-# builds start from an empty environment apart from HOME, PATH, MTX_EXP_ROOT,
-# TMPDIR and ZDOTDIR: build.sh reads config.sh and config.local.sh itself, so
-# what it sees is what the key hashed.
+# builds start from the environment exp_build_env sets and nothing else: the
+# one the keys read the settings in, so what build.sh sees once it has read
+# config.sh and config.local.sh is what the key hashed.
+exp_build_env || exit $?
 echo ""
 echo "==> Wiping ${TARGET}..."
 for item in "${TARGET}"/*(DN); do
@@ -543,8 +544,7 @@ for lib in "${EXP_ORDER[@]}"; do
     exp_cache_restore "${entry}" "${TARGET}" || exit $?
   else
     echo "==> ${lib}: building ${key[1,12]}"
-    (cd "${PACKAGING}" && command env -i HOME="${HOME}" PATH="${EXP_BASE_PATH}" \
-       ZDOTDIR="${EXP_ZDOTDIR}" MTX_EXP_ROOT="${MTX_EXP_ROOT}" ${TMPDIR:+TMPDIR="${TMPDIR}"} ./build.sh "${lib}")
+    (cd "${PACKAGING}" && command env -i "${EXP_BUILD_ENV[@]}" ./build.sh "${lib}")
     if [[ "${lib}" == docbook_xsl ]]; then
       pkg_file="${PACKAGE_DIR}/docbook-xsl.tar.gz"
       exp_archive_docbook "${DOCBOOK_XSL_ROOT_DIR}" "${pkg_file}" || exit $?

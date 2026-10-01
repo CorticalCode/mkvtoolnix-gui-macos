@@ -12,17 +12,30 @@
 # package, and mkvtoolnix is compiled every time.
 typeset -ga EXP_UNCACHED=(gpg shared_mime_info mkvtoolnix)
 
-# Variables a library recipe reads from config.sh and config.local.sh.
-# Parallelism settings are left out: they change how fast a build runs, not
-# what it makes.
-typeset -ga EXP_KEY_VARS=(CC CPP CXX CXXCPP CFLAGS CXXFLAGS LDFLAGS QT_CXXFLAGS
-                          MACOSX_DEPLOYMENT_TARGET QTVER TARGET)
+# Exported variables the settings hash leaves out; every other variable
+# exported once config.sh and config.local.sh are read is hashed by name and
+# value.
+#   DRAKETHREADS MAKEFLAGS    parallelism: how fast a build runs, not what it
+#                             makes
+#   PWD OLDPWD SHLVL _        the shell's own bookkeeping
+#   LOGNAME                   set by zsh to the account's name
+#   HOME PATH TMPDIR ZDOTDIR  passed to every build as they are
+#                             (exp_build_env); HOME and TMPDIR name folders of
+#                             this account and machine. A value config.sh
+#                             derives from one of them is exported under its
+#                             own name and hashed.
+typeset -ga EXP_ENV_UNHASHED=(DRAKETHREADS MAKEFLAGS PWD OLDPWD SHLVL _ LOGNAME
+                              HOME PATH TMPDIR ZDOTDIR)
 
 # ZDOTDIR for library builds and for reading their settings. build.sh and
 # myinstall.sh run under zsh, which reads ${ZDOTDIR:-${HOME}}/.zshenv first.
 # /var/empty is a root-owned folder macOS ships empty, so zsh finds no startup
 # file there and nothing is added to the environment a build is given.
 typeset -g EXP_ZDOTDIR=/var/empty
+
+# The NAME=value list, set by exp_build_env, that library builds start from
+# and that their settings are read and hashed in.
+typeset -ga EXP_BUILD_ENV=()
 
 typeset -ga EXP_ORDER=()
 typeset -gA EXP_KEY EXP_INPUT EXP_TARBALL
@@ -85,10 +98,29 @@ exp_function_text() {
   print -r -- "${text}"
 }
 
+# exp_top_level_text <build.sh>
+# build.sh outside its `function NAME {` ... `}` definitions: what it sets up
+# for every library before building any, and its build list.
+exp_top_level_text() {
+  local file="$1" text
+  text=$(command awk '
+    /^function [A-Za-z0-9_]+ [{]$/ { infn = 1 }
+    !infn { print }
+    infn && $0 == "}" { infn = 0 }
+    END {
+      if (infn) {
+        print "ERROR: a function in " FILENAME " does not end with a line holding only }" > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "${file}") || return 1
+  print -r -- "${text}"
+}
+
 # exp_recipe_hash <packaging-dir> <library>
 # Hashes how upstream's scripts build one library: build_<library> and its
 # build_<library>_* hooks, the shared build_package and build_tarball,
-# myinstall.sh, and the patches in <library>-patches/.
+# build.sh's top level, myinstall.sh, and the patches in <library>-patches/.
 exp_recipe_hash() {
   setopt local_options pipe_fail
   local dir="$1" lib="$2" listing fn f part text="" hash
@@ -103,6 +135,8 @@ exp_recipe_hash() {
     part=$(exp_function_text "${dir}/build.sh" "${fn}") || return 1
     text+="== function ${fn}"$'\n'"${part}"$'\n'
   done
+  part=$(exp_top_level_text "${dir}/build.sh") || return 1
+  text+="== top level of build.sh"$'\n'"${part}"$'\n'
   part=$(command cat "${dir}/myinstall.sh") || return 1
   text+="== file myinstall.sh"$'\n'"${part}"$'\n'
   for f in "${dir}/${lib}-patches"/*.patch(N); do
@@ -117,26 +151,56 @@ exp_recipe_hash() {
   print -r -- "${hash}"
 }
 
-# exp_env_hash <packaging-dir>
-# Hashes the values of EXP_KEY_VARS once config.sh and config.local.sh are
-# read, in the order build.sh reads them, starting from an empty environment
-# apart from HOME, PATH, MTX_EXP_ROOT, TMPDIR and ZDOTDIR — the environment
-# library builds run in.
-exp_env_hash() {
+# exp_build_env
+# Sets EXP_BUILD_ENV: HOME, PATH as tools/build-exp.sh was started with it
+# (EXP_BASE_PATH), ZDOTDIR, and MTX_EXP_ROOT and TMPDIR when set. Library
+# builds start from these alone, and exp_env_text reads the settings in them,
+# so a key hashes what a build sees.
+exp_build_env() {
+  if [[ -z "${EXP_BASE_PATH:-}" ]]; then
+    print -u2 "ERROR: EXP_BASE_PATH is not set; tools/build-exp.sh sets it to the PATH it was started with"
+    return 1
+  fi
+  EXP_BUILD_ENV=(HOME="${HOME}" PATH="${EXP_BASE_PATH}" ZDOTDIR="${EXP_ZDOTDIR}")
+  if [[ -n "${MTX_EXP_ROOT:-}" ]]; then EXP_BUILD_ENV+=(MTX_EXP_ROOT="${MTX_EXP_ROOT}"); fi
+  if [[ -n "${TMPDIR:-}" ]]; then EXP_BUILD_ENV+=(TMPDIR="${TMPDIR}"); fi
+}
+
+# exp_env_text <packaging-dir>
+# The settings a library build gets: every variable exported once config.sh
+# and config.local.sh are read, in the order build.sh reads them, in the
+# environment exp_build_env sets. One NAME=$'value' line each, sorted, without
+# EXP_ENV_UNHASHED.
+exp_env_text() {
   setopt local_options pipe_fail
-  local dir="$1" text hash
-  local -a pass=()
-  if [[ -n "${MTX_EXP_ROOT:-}" ]]; then pass+=("MTX_EXP_ROOT=${MTX_EXP_ROOT}"); fi
-  if [[ -n "${TMPDIR:-}" ]]; then pass+=("TMPDIR=${TMPDIR}"); fi
-  text=$(command env -i HOME="${HOME}" PATH="${PATH}" ZDOTDIR="${EXP_ZDOTDIR}" "${pass[@]}" /bin/zsh -c '
+  local dir="$1" out line text
+  local -a kept=()
+  exp_build_env || return 1
+  out=$(command env -i "${EXP_BUILD_ENV[@]}" /bin/zsh -c '
     source "$1/config.sh" || exit 1
     if [[ -f "$1/config.local.sh" ]]; then source "$1/config.local.sh" || exit 1; fi
-    shift
-    for v in "$@"; do print -r -- "${v}=${(P)v}"; done
-  ' exp-env "${dir}" "${EXP_KEY_VARS[@]}") || {
+    for _exp_v in ${(k)parameters[(R)*export*]}; do
+      print -r -- "${_exp_v}=${(qqqq)${(P)_exp_v}}"
+    done
+  ' exp-env "${dir}") || {
     print -u2 "ERROR: cannot read the build settings in ${dir}"
     return 1
   }
+  for line in "${(@f)out}"; do
+    if (( ! ${EXP_ENV_UNHASHED[(Ie)${line%%=*}]} )); then kept+=("${line}"); fi
+  done
+  text=$(print -rl -- "${kept[@]}" | LC_ALL=C command sort) || {
+    print -u2 "ERROR: cannot sort the build settings in ${dir}"
+    return 1
+  }
+  print -r -- "${text}"
+}
+
+# exp_env_hash <packaging-dir> — the SHA-256 of exp_env_text
+exp_env_hash() {
+  setopt local_options pipe_fail
+  local dir="$1" text hash
+  text=$(exp_env_text "${dir}") || return 1
   hash=$(print -rn -- "${text}" | command shasum -a 256 | command cut -d' ' -f1) || hash=""
   if [[ -z "${hash}" ]]; then
     print -u2 "ERROR: cannot compute the build settings hash for ${dir}"
