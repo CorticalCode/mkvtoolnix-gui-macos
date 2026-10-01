@@ -116,9 +116,11 @@ Modes:
   --source <path>     Try mode: build a source tree as it is, uncommitted edits
                       included, e.g. a worktree while working on a fix.
   --pin <ref>         Series mode: build an exact upstream commit (a branch, tag
-                      or SHA in the MKVToolNix clone named by MTX_EXP_UPSTREAM,
-                      e.g. upstream/main or origin/main for the latest) plus
-                      the changes named by --with. Without --with, the baseline.
+                      or SHA in the MKVToolNix clone named by MTX_EXP_UPSTREAM)
+                      plus the changes named by --with. Without --with, the
+                      baseline. For the latest, name a remote-tracking branch
+                      of upstream: upstream/main in a fork clone,
+                      origin/main in a plain clone of upstream.
   --with a,b,...      Changes by name, from MTX_EXP_CHANGES/<name>/. Order does
                       not matter. A change folder holds any of: a file branch
                       naming a branch whose own commits apply (the clone needs
