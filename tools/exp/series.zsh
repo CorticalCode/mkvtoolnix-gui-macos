@@ -109,9 +109,12 @@ exp_resolve_pin() {
 # exp_source_commits <repo> <branch>
 # The branch's own commits, oldest first: those in no ${EXP_UPSTREAM_REMOTE}
 # remote-tracking ref. A series build applies commits only; uncommitted work
-# in the branch's worktree is what try mode builds.
+# in the branch's worktree is what try mode builds. Each commit is applied as
+# its own patch, and a merge has none (format-patch emits another commit's
+# diff in its place), so a branch with a merge among its own is refused.
 exp_source_commits() {
-  local repo="$1" branch="$2" out
+  local repo="$1" branch="$2" out merges c
+  local -a short=()
   if ! git -C "${repo}" rev-parse --verify --quiet "refs/heads/${branch}^{commit}" >/dev/null; then
     print -u2 "ERROR: branch ${branch} not found in ${repo}"
     return 1
@@ -123,6 +126,13 @@ exp_source_commits() {
   out=$(git -C "${repo}" rev-list --reverse "refs/heads/${branch}" --not --remotes="${EXP_UPSTREAM_REMOTE}") || return 1
   if [[ -z "${out}" ]]; then
     print -u2 "ERROR: branch ${branch} has no commits of its own"
+    return 1
+  fi
+  merges=$(git -C "${repo}" rev-list --merges "refs/heads/${branch}" --not --remotes="${EXP_UPSTREAM_REMOTE}") || return 1
+  if [[ -n "${merges}" ]]; then
+    for c in ${(f)merges}; do short+=("${c[1,12]}"); done
+    print -u2 "ERROR: branch ${branch} has merge commits among its own (${(j:, :)short}); a series build applies a branch's commits one at a time as patches, and a merge is not one"
+    print -u2 "To fix it, rebase the branch onto the pin, then rebuild"
     return 1
   fi
   print -r -- "${out}"
@@ -167,7 +177,7 @@ _exp_apply() {
 exp_prepare_source() {
   local LC_ALL=C   # patch files apply in the same order in every locale
   local repo="$1" pin="$2" dest="$3" root="$4" gitdir listing line key sub_name sub_path entry sha mod name c f text err
-  local -a commits
+  local -a commits modes
   if [[ -e "${dest}" ]]; then
     print -u2 "ERROR: ${dest} already exists"
     return 1
@@ -215,6 +225,18 @@ exp_prepare_source() {
     fi
     commits=( ${(f)EXP_CHANGE_COMMITS[${name}]:-} )
     for c in "${commits[@]}"; do
+      # A submodule's commit is a gitlink (mode 160000). git apply skips a
+      # gitlink change on plain files and exits 0, so the commit's own record
+      # is read for one before its patch is applied.
+      listing=$(git -C "${repo}" diff-tree -r --root --no-commit-id "${c}") || return 1
+      for line in "${(@f)listing}"; do
+        modes=( ${=${line%%$'\t'*}} )
+        if [[ "${modes[1]}" == :160000 || "${modes[2]}" == 160000 ]]; then
+          print -u2 "ERROR: change ${name}: commit ${c[1,12]} changes the commit of submodule ${line#*$'\t'}, which git apply would skip; a series build takes every submodule at the commit the pin records"
+          print -u2 "To build a submodule at another commit, build a worktree that has it in try mode (--source)"
+          return 1
+        fi
+      done
       text=$(git -C "${repo}" format-patch -1 --stdout "${c}") || return 1
       if ! err=$(_exp_apply "${dest}" "${text}" 2>&1); then
         print -u2 "ERROR: change ${name}: commit ${c[1,12]} does not apply at pin ${pin[1,12]}"
