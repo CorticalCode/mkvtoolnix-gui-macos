@@ -96,6 +96,10 @@ if [[ "${MTX_EXP_ROOT:A}/" == "${HOME:A}/"* ]]; then
   echo "       Use the default root: export MTX_EXP_ROOT=/opt/mtx-exp (or unset MTX_EXP_ROOT)" >&2
   exit 1
 fi
+# The root and prefix as checked; the staged configuration, read again before
+# building, must leave them so (exp_check_root).
+_EXP_ROOT_CHECKED="${MTX_EXP_ROOT:A}"
+_EXP_TARGET_CHECKED="${TARGET:A}"
 
 for _lib in keys cache series try; do
   source "${SCRIPT_DIR}/tools/exp/${_lib}.zsh" || exit $?
@@ -496,6 +500,7 @@ source "${PACKAGING}/config.sh"
 source "${STAGED_CONFIG}"
 setopt ${=_SAVED_OPTS} 2>/dev/null
 set -e
+exp_check_root "${_EXP_ROOT_CHECKED}" "${_EXP_TARGET_CHECKED}" || exit $?
 export PATH="${TARGET}/bin:$PATH"
 export DYLD_LIBRARY_PATH="${TARGET}/lib:${DYLD_LIBRARY_PATH:-}"
 export CMPL TARGET SRCDIR MTX_VER

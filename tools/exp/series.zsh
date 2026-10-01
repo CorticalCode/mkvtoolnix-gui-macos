@@ -277,6 +277,26 @@ exp_check_staged_config() {
   fi
 }
 
+# exp_check_root <root> <prefix>
+# <root> and <prefix> are MTX_EXP_ROOT and TARGET, symlinks resolved, as
+# tools/build-exp.sh checked them at startup. It reads the staged config.sh
+# and the overlay again before building, and the overlay derives every build
+# location from MTX_EXP_ROOT, so a root exported there would move the prefix,
+# the workspace and the cache past those checks: refuse unless both are still
+# what was checked. Run in either mode, before keys, wipe or build.
+exp_check_root() {
+  local root="$1" prefix="$2" root_now="" prefix_now=""
+  [[ -n "${MTX_EXP_ROOT:-}" ]] && root_now="${MTX_EXP_ROOT:A}"
+  [[ -n "${TARGET:-}" ]] && prefix_now="${TARGET:A}"
+  if [[ -z "${root}" || -z "${prefix}" || "${root_now}" != "${root}" || "${prefix_now}" != "${prefix}" ]]; then
+    print -u2 "ERROR: reading the staged packaging/macos/config.sh and config.local.sh moved the experimental build locations:"
+    print -u2 "         MTX_EXP_ROOT  checked at startup: ${root:-<unset>}  now: ${root_now:-<unset>}"
+    print -u2 "         TARGET        checked at startup: ${prefix:-<unset>}  now: ${prefix_now:-<unset>}"
+    print -u2 "       A change, or the source's packaging/macos/config.sh, must not set MTX_EXP_ROOT or the build locations; remove that setting, then rebuild"
+    return 1
+  fi
+}
+
 # exp_check_patch_dirs <packaging-dir>
 # A <x>-patches/ folder patches library <x>. Only the libraries in EXP_ORDER
 # have a key, so a patch for any other would change a build without moving any
