@@ -210,6 +210,15 @@ if [[ -n "${SRC}" ]]; then
     echo "ERROR: source path does not exist: ${SRC}" >&2
     exit 1
   fi
+  TRY_REF=""; TRY_SHA=""; TRY_DIRTY=""
+  if git -C "${SRC}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    TRY_REF=$(git -C "${SRC}" rev-parse --abbrev-ref HEAD) || exit $?
+    TRY_SHA=$(git -C "${SRC}" rev-parse HEAD) || exit $?
+    _try_status=$(git --no-optional-locks -C "${SRC}" status --porcelain --untracked-files=no --ignore-submodules=dirty) || exit $?
+    if [[ -n "${_try_status}" ]]; then
+      TRY_DIRTY=$(setopt pipe_fail; git -C "${SRC}" diff HEAD --binary | command shasum -a 256 | command cut -d' ' -f1) || exit $?
+    fi
+  fi
 else
   MODE=series
   if [[ -n "${SLUG}" ]]; then
@@ -317,7 +326,7 @@ if [[ "${MODE}" == series ]]; then
 else
   echo "    Source:      ${SRC}"
 fi
-echo "    Slug:       ${SLUG}"
+echo "    Slug:        ${SLUG}"
 echo "    MTX_VER:     ${MTX_VER}"
 echo "    Arch:        ${MACHINE_ARCH} (${ARCH_LABEL})"
 echo "    WORK_DIR:    ${WORK_DIR}"
@@ -745,54 +754,125 @@ command cp "${DMG_PATH}" "${BUILD_DIR}/${DMG_FINAL_NAME}"
 DMG_FINAL_PATH="${BUILD_DIR}/${DMG_FINAL_NAME}"
 
 # --- Write DMG sidecar manifest ---
-# Captures full build provenance: source refs, deps used, host machine specs
-# (non-identifying), patches, timing, verification results. Sits alongside
-# the DMG and its .sha256 in build/.
-# Experimental builds apply no wrapper patches; changes live in the source tree.
-PATCHES_JSON="[]"
-
-_BUNDLED_LIBS_JSON="["
-_first_lib=1
-if [[ -d "${APP_BUNDLE}/Contents/MacOS/libs" ]]; then
-  for lib in "${APP_BUNDLE}"/Contents/MacOS/libs/*.dylib(N); do
-    [[ -f "$lib" && ! -L "$lib" ]] || continue
-    libname="${lib:t}"
-    [[ ${_first_lib} -eq 1 ]] && _first_lib=0 || _BUNDLED_LIBS_JSON+=", "
-    _BUNDLED_LIBS_JSON+=$(_json_str "${libname}")
+# What a later comparison needs: the mode, the pin and changes a series build
+# was made from, each library's key and whether it was restored or built, the
+# toolchain, and the size of every program and library in the bundle. Every
+# experimental source also has the packaging staging patch applied, recorded
+# under "patches" by name and SHA-256.
+_json_array() {
+  local out="[" first=1 e
+  for e in "$@"; do
+    if [[ ${first} -eq 1 ]]; then first=0; else out+=", "; fi
+    out+="${e}"
   done
-fi
-_BUNDLED_LIBS_JSON+="]"
+  print -rn -- "${out}]"
+}
 
-_DEPS_JSON="["
-_first_dep=1
-for d in "${DEPS_JSON_PARTS[@]}"; do
-  [[ ${_first_dep} -eq 1 ]] && _first_dep=0 || _DEPS_JSON+=", "
-  _DEPS_JSON+="${d}"
+# Byte count of one file; fails unless every stage succeeded and the count is a number.
+_file_bytes() {
+  setopt local_options pipe_fail
+  local n
+  n=$(command wc -c < "$1" | command tr -d ' ') || return 1
+  [[ "${n}" == <-> ]] || return 1
+  print -r -- "${n}"
+}
+
+# Byte count of every regular file under a directory; same guarantee.
+_tree_bytes() {
+  setopt local_options pipe_fail
+  local n
+  n=$(command find "$1" -type f -exec cat {} + | command wc -c | command tr -d ' ') || return 1
+  [[ "${n}" == <-> && "${n}" -gt 0 ]] || return 1
+  print -r -- "${n}"
+}
+
+_found_files=$(command find "${APP_BUNDLE}/Contents/MacOS" -type f -print0) || {
+  echo "ERROR: could not list ${APP_BUNDLE}/Contents/MacOS" >&2
+  exit 1
+}
+_file_parts=()
+for f in "${(@0)_found_files}"; do
+  [[ -n "${f}" ]] || continue
+  _file_kind=$(command file -b "${f}") || {
+    echo "ERROR: could not identify ${f}" >&2
+    exit 1
+  }
+  [[ "${_file_kind}" == *Mach-O* ]] || continue
+  _file_size=$(_file_bytes "${f}") || {
+    echo "ERROR: could not measure ${f}" >&2
+    exit 1
+  }
+  _file_parts+=("{\"path\":$(_json_str "${f#${APP_BUNDLE}/}"),\"bytes\":${_file_size}}")
 done
-_DEPS_JSON+="]"
+if [[ ${#_file_parts[@]} -eq 0 ]]; then
+  echo "ERROR: found no programs or libraries in ${APP_BUNDLE}/Contents/MacOS to measure" >&2
+  exit 1
+fi
+_FILES_JSON=$(_json_array "${(o)_file_parts[@]}") || exit $?
 
-_dmg_size_bytes=$(command wc -c < "${DMG_FINAL_PATH}" | command tr -d ' ')
+_lib_parts=()
+for lib in "${APP_BUNDLE}"/Contents/MacOS/libs/*.dylib(N); do
+  [[ -f "${lib}" && ! -L "${lib}" ]] || continue
+  _lib_parts+=("$(_json_str "${lib:t}")")
+done
+_BUNDLED_LIBS_JSON=$(_json_array "${(o)_lib_parts[@]}") || exit $?
+_DEPS_JSON=$(_json_array "${DEPS_JSON_PARTS[@]}") || exit $?
+
+_change_parts=()
+for name in "${EXP_CHANGES[@]}"; do
+  _commit_parts=()
+  for c in ${(f)EXP_CHANGE_COMMITS[${name}]:-}; do
+    _commit_parts+=("$(_json_str "${c}")")
+  done
+  _commits_json=$(_json_array "${_commit_parts[@]}") || exit $?
+  _change_parts+=("{\"name\":$(_json_str "${name}"),\"hash\":$(_json_str "${EXP_CHANGE_HASH[${name}]}"),\"commits\":${_commits_json}}")
+done
+_CHANGES_JSON=$(_json_array "${_change_parts[@]}") || exit $?
+
+if [[ "${MODE}" == series ]]; then
+  _PIN_JSON="{\"ref\":$(_json_str "${PIN}"),\"sha\":$(_json_str "${PIN_SHA}")}"
+  _SOURCE_JSON="{\"clone\":$(_json_str "${MTX_EXP_UPSTREAM:t}")}"
+else
+  _PIN_JSON="null"
+  _SOURCE_JSON="{\"path_basename\":$(_json_str "${SRC:t}"),\"ref\":$(_json_str "${TRY_REF}"),\"sha\":$(_json_str "${TRY_SHA}"),\"uncommitted_diff_sha256\":$(_json_str "${TRY_DIRTY}")}"
+fi
+
+_staging_sha=$(command shasum -a 256 "${STAGING_PATCH}" | command awk '{print $1}')
+if [[ -z "${_staging_sha}" ]]; then
+  echo "ERROR: could not hash ${STAGING_PATCH:t}" >&2
+  exit 1
+fi
+_PATCHES_JSON=$(_json_array "{\"name\":$(_json_str "patches/${STAGING_PATCH:t}"),\"sha256\":$(_json_str "${_staging_sha}")}") || exit $?
+
+_dmg_size_bytes=$(_file_bytes "${DMG_FINAL_PATH}") || {
+  echo "ERROR: could not measure ${DMG_FINAL_PATH}" >&2
+  exit 1
+}
 _dmg_sha=$(command shasum -a 256 "${DMG_FINAL_PATH}" | command awk '{print $1}')
-_app_kb=$(command du -sk "${APP_BUNDLE}" | command awk '{print $1}')
-_app_bytes=$(( _app_kb * 1024 ))
+if [[ -z "${_dmg_sha}" ]]; then
+  echo "ERROR: could not hash ${DMG_FINAL_PATH}" >&2
+  exit 1
+fi
+_app_bytes=$(_tree_bytes "${APP_BUNDLE}") || {
+  echo "ERROR: could not measure ${APP_BUNDLE}" >&2
+  exit 1
+}
 
-_wrapper_branch=$(git -C "${SCRIPT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-_wrapper_sha=$(git -C "${SCRIPT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
-_wrapper_subj=$(git -C "${SCRIPT_DIR}" log -1 --format='%s' 2>/dev/null || echo "")
-_fork_basename="${SRC:t}"
-_fork_ref=$(git -C "${SRC}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "detached")
-_fork_sha=$(git -C "${SRC}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
-_fork_subj=$(git -C "${SRC}" log -1 --format='%s' 2>/dev/null || echo "")
-
-_finished_at=$(_iso_utc)
-_duration=${SECONDS}
-_started_iso="${BUILD_START_ISO}"
+_wrapper_branch=$(git -C "${SCRIPT_DIR}" rev-parse --abbrev-ref HEAD) || exit $?
+_wrapper_sha=$(git -C "${SCRIPT_DIR}" rev-parse --short HEAD) || exit $?
+_wrapper_subj=$(git -C "${SCRIPT_DIR}" log -1 --format='%s') || exit $?
+_HOST_JSON=$(_host_json) || exit $?
+_FINISHED_AT=$(_iso_utc) || exit $?
 
 DMG_MANIFEST_PATH="${BUILD_DIR}/${DMG_FINAL_NAME}.manifest.json"
 cat > "${DMG_MANIFEST_PATH}" <<EOF
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "kind": "experimental_build",
+  "mode": $(_json_str "${MODE}"),
+  "pin": ${_PIN_JSON},
+  "changes": ${_CHANGES_JSON},
+  "toolchain": $(_json_str "${EXP_TOOLCHAIN_ID}"),
   "dmg": {
     "filename": $(_json_str "${DMG_FINAL_NAME}"),
     "size_bytes": ${_dmg_size_bytes},
@@ -800,8 +880,8 @@ cat > "${DMG_MANIFEST_PATH}" <<EOF
   },
   "app": {
     "size_bytes": ${_app_bytes},
-    "size_kb": ${_app_kb},
     "bundle_name": $(_json_str "${APP_BUNDLE:t}"),
+    "files": ${_FILES_JSON},
     "bundled_libs": ${_BUNDLED_LIBS_JSON},
     "qt_version_in_binary": $(_json_str "${BUILT_QT:-unknown}")
   },
@@ -820,20 +900,15 @@ cat > "${DMG_MANIFEST_PATH}" <<EOF
       "sha": $(_json_str "${_wrapper_sha}"),
       "subject": $(_json_str "${_wrapper_subj}")
     },
-    "experimental": {
-      "path_basename": $(_json_str "${_fork_basename}"),
-      "ref": $(_json_str "${_fork_ref}"),
-      "sha": $(_json_str "${_fork_sha}"),
-      "subject": $(_json_str "${_fork_subj}")
-    }
+    "experimental": ${_SOURCE_JSON}
   },
-  "patches": ${PATCHES_JSON},
+  "patches": ${_PATCHES_JSON},
   "deps": ${_DEPS_JSON},
-  "host": $(_host_json),
+  "host": ${_HOST_JSON},
   "build_timing": {
-    "started_at": $(_json_str "${_started_iso}"),
-    "finished_at": $(_json_str "${_finished_at}"),
-    "duration_seconds": ${_duration}
+    "started_at": $(_json_str "${BUILD_START_ISO}"),
+    "finished_at": $(_json_str "${_FINISHED_AT}"),
+    "duration_seconds": ${SECONDS}
   },
   "verification": {
     "verify_symbol": $(_json_str "${VERIFY_SYMBOL:-}"),
@@ -861,6 +936,11 @@ echo "  DMG:          ${BUILD_DIR}/${DMG_FINAL_NAME}"
 echo "  SHA256:       ${BUILD_DIR}/${DMG_FINAL_NAME}.sha256"
 echo "  Manifest:     ${BUILD_DIR}/${DMG_FINAL_NAME}.manifest.json"
 echo "  Log:          ${LOG_FILE}"
+echo "  Mode:         ${MODE}"
+if [[ "${MODE}" == series ]]; then
+  echo "  Pin:          ${PIN} (${PIN_SHA[1,12]})"
+  echo "  Changes:      ${EXP_CHANGES[*]:-none (baseline)}"
+fi
 if [[ ${#BUILT_LIBS[@]} -gt 0 ]]; then
   echo "  Built and cached: ${BUILT_LIBS[*]} → ${EXP_CACHE_ROOT}/${ARCH_LABEL}"
 fi
