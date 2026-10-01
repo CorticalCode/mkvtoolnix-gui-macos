@@ -37,6 +37,12 @@ exp_try_record() {
   listing=$(git -C "${src}" ls-files -z --others --exclude-standard) || return 1
   for f in "${(@0)listing}"; do
     [[ -n "${f}" ]] || continue
+    # git lists an untracked repository inside the tree as its folder and does
+    # not look inside; reading a folder hashes nothing, though it is staged.
+    if [[ ! -f "${src}/${f}" ]]; then
+      print -u2 "ERROR: cannot record the untracked ${src}/${f}: not a file (a repository inside the source tree?); move it out of the tree or make it a submodule"
+      return 1
+    fi
     if ! sum=$(command shasum -a 256 < "${src}/${f}" | command cut -d' ' -f1) || [[ -z "${sum}" ]]; then
       print -u2 "ERROR: cannot hash the untracked file ${src}/${f}"
       return 1
