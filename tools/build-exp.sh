@@ -129,7 +129,8 @@ Modes:
 Libraries:
   Each library build is cached in MTX_EXP_ROOT/cache under a key of everything
   that shaped it. A build restores what it can and, while anything is missing,
-  stops before wiping or building anything and lists what is missing.
+  stops with the prefix not wiped and no library built, and lists what is
+  missing.
   --build-missing     Build the libraries the cache lacks, and keep them.
   --cache-drop L/KEY  Remove one entry (at least 12 characters of the key).
   --clear-cache       Remove this architecture's whole cache.
@@ -452,7 +453,7 @@ for lib in "${EXP_ORDER[@]}"; do
     rc=$?
     if [[ ${rc} -ne 1 ]]; then
       echo "ERROR: the cache entry for ${lib} is damaged and was not used. Remove it with:" >&2
-      echo "         $0 --cache-drop ${lib}/${key}" >&2
+      echo "         ${(q)0} --cache-drop ${lib}/${key}" >&2
       exit 1
     fi
     LIB_FROM[${lib}]=built
@@ -468,7 +469,7 @@ if [[ ${#MISSING[@]} -gt 0 && ${BUILD_MISSING} -eq 0 ]]; then
   done
   echo "       The prefix was not wiped and no library was built. To build them now" >&2
   echo "       and keep them for later runs, run:" >&2
-  echo "         $0 ${(@q)_EXP_ARGV} --build-missing" >&2
+  echo "         ${(q)0} ${(@q)_EXP_ARGV} --build-missing" >&2
   exit 1
 fi
 
@@ -511,7 +512,8 @@ done
 
 # --- Generate ./configure via autogen.sh ---
 # Git checkouts don't include a pre-generated `configure`; release tarballs do.
-# autogen.sh produces it via autoconf + automake (both present in proven cache).
+# autogen.sh produces it via autoconf + automake (from the prefix libraries
+# assembled above).
 echo ""
 echo "==> Running autogen.sh to generate ./configure..."
 if [[ ! -x "${FORK_BUILD_DIR}/autogen.sh" ]]; then
@@ -536,6 +538,7 @@ cd "${FORK_BUILD_DIR}/packaging/macos"
 # build_configured_mkvtoolnix embeds via qt_resources_macos.qrc. It is not one of
 # the cached libraries, and the prefix wipe removed any prior install, so build it
 # explicitly here, before configured_mkvtoolnix.
+( unset NO_EXTRACTION; ./build.sh shared_mime_info )
 
 echo ""
 # Skip build_mkvtoolnix → retrieve_verified_source_tarball gate (fails on
