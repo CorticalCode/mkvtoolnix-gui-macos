@@ -117,21 +117,59 @@ exp_top_level_text() {
   print -r -- "${text}"
 }
 
-# exp_recipe_hash <packaging-dir> <library>
-# Hashes how upstream's scripts build one library: build_<library> and its
-# build_<library>_* hooks, the shared build_package and build_tarball,
-# build.sh's top level, myinstall.sh, and the patches in <library>-patches/.
-exp_recipe_hash() {
-  setopt local_options pipe_fail
-  local dir="$1" lib="$2" listing fn f part text="" hash
-  local -a fns
-  listing=$(command grep -E "^function build_${lib}(_[a-z0-9_]+)? \\{\$" "${dir}/build.sh") || true
-  fns=( ${(o)${${(f)listing}#function }% \{} )
-  if (( ! ${fns[(Ie)build_${lib}]} )); then
+# exp_recipe_functions <packaging-dir> <library>
+# The build.sh functions one library's build runs, one per line, in the order
+# build.sh defines them: build_<library> and its build_<library>_* hooks, the
+# shared build_package and build_tarball, and every function whose name
+# appears as a word in the text of one already included, until none is added.
+# build.sh's top level is not searched: its build list names every library's
+# function, MKVToolNix's and the DMG's included.
+exp_recipe_functions() {
+  local dir="$1" lib="$2" listing rc fn name part
+  local -a all queue
+  local -A included
+  listing=$(command grep -E '^function [A-Za-z0-9_]+ \{$' "${dir}/build.sh"); rc=$?
+  if (( rc > 1 )); then
+    print -u2 "ERROR: cannot read the functions in ${dir}/build.sh"
+    return 1
+  fi
+  all=( ${${${(f)listing}#function }% \{} )
+  for name in "${all[@]}"; do
+    if [[ "${name}" =~ "^build_${lib}(_[a-z0-9_]+)?\$" ]]; then
+      included[${name}]=1; queue+=("${name}")
+    fi
+  done
+  if (( ! ${+included[build_${lib}]} )); then
     print -u2 "ERROR: build.sh has no function build_${lib}"
     return 1
   fi
-  for fn in "${fns[@]}" build_package build_tarball; do
+  for name in build_package build_tarball; do
+    if (( ! ${+included[${name}]} )); then included[${name}]=1; queue+=("${name}"); fi
+  done
+  while (( ${#queue[@]} )); do
+    fn="${queue[1]}"; queue=( "${(@)queue[2,-1]}" )
+    part=$(exp_function_text "${dir}/build.sh" "${fn}") || return 1
+    for name in "${all[@]}"; do
+      if (( ! ${+included[${name}]} )) && [[ "${part}" =~ "(^|[^A-Za-z0-9_])${name}([^A-Za-z0-9_]|\$)" ]]; then
+        included[${name}]=1; queue+=("${name}")
+      fi
+    done
+  done
+  for name in "${all[@]}"; do
+    if (( ${+included[${name}]} )); then print -r -- "${name}"; fi
+  done
+  return 0
+}
+
+# exp_recipe_hash <packaging-dir> <library>
+# Hashes how upstream's scripts build one library: the functions
+# exp_recipe_functions names, build.sh's top level, myinstall.sh, and the
+# patches in <library>-patches/.
+exp_recipe_hash() {
+  setopt local_options pipe_fail
+  local dir="$1" lib="$2" listing fn f part text="" hash
+  listing=$(exp_recipe_functions "${dir}" "${lib}") || return 1
+  for fn in ${(f)listing}; do
     part=$(exp_function_text "${dir}/build.sh" "${fn}") || return 1
     text+="== function ${fn}"$'\n'"${part}"$'\n'
   done
