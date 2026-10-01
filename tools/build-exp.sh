@@ -499,7 +499,12 @@ exp_check_root "${_EXP_ROOT_CHECKED}" "${_EXP_TARGET_CHECKED}" || exit $?
 export PATH="${TARGET}/bin:$PATH"
 export DYLD_LIBRARY_PATH="${TARGET}/lib:${DYLD_LIBRARY_PATH:-}"
 export CMPL TARGET SRCDIR MTX_VER
-export NO_EXTRACTION=1  # critical: source already staged, don't let build_package wipe+re-extract
+# build_package, NO_EXTRACTION's one reader in build.sh, neither wipes nor
+# re-extracts a source under CMPL while it is set. configured_mkvtoolnix and
+# dmg, the build.sh steps run with it set, do not call build_package, and
+# library builds start from exp_build_env; it is set so that a step that did
+# call it could not replace the staged source.
+export NO_EXTRACTION=1
 
 echo "==> Build environment:"
 echo "    CMPL:        ${CMPL}"
@@ -609,9 +614,8 @@ fi
 
 # --- Compile ---
 # The libraries are already in the prefix (assembly above), so they are not
-# built here. NO_EXTRACTION is unset for shared_mime_info, which extracts its
-# own tarball from ${SRCDIR}, and set for build_mkvtoolnix, which would wipe the
-# staged source if allowed to extract.
+# built here. shared_mime_info is built with NO_EXTRACTION unset: its
+# build_package extracts its own tarball from ${SRCDIR}.
 echo ""
 cd "${FORK_BUILD_DIR}/packaging/macos"
 
