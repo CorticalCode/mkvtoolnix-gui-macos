@@ -261,6 +261,22 @@ exp_prepare_source() {
   done
 }
 
+# exp_check_staged_config <source-dir>
+# tools/build-exp.sh stages the wrapper's config/config.exp.local.sh as
+# packaging/macos/config.local.sh, replacing whatever is there. One that the
+# changes put in the source — a packaging/ folder, a .patch or a commit — would
+# be recorded with the build and have no effect on it; refuse it. For series
+# builds: a try build's tree may hold one left by a release build, and staging
+# replaces it there as intended.
+exp_check_staged_config() {
+  local f="$1/packaging/macos/config.local.sh"
+  if [[ -e "${f}" || -L "${f}" ]]; then
+    print -u2 "ERROR: the source prepared from the pin and its changes holds packaging/macos/config.local.sh (${f}); the build replaces that file with the wrapper's config/config.exp.local.sh, so what it sets would have no effect"
+    print -u2 "To fix it, put the settings in packaging/macos/config.sh instead: an edited copy in the change's packaging/ folder, or a .patch"
+    return 1
+  fi
+}
+
 # exp_check_patch_dirs <packaging-dir>
 # A <x>-patches/ folder patches library <x>. Only the libraries in EXP_ORDER
 # have a key, so a patch for any other would change a build without moving any

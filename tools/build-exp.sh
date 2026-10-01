@@ -426,6 +426,8 @@ if [[ "${MODE}" == series ]]; then
   # changes applied: no repository in it and nothing to exclude.
   echo "==> Preparing ${PIN} (${PIN_SHA[1,12]}) with: ${EXP_CHANGES[*]:-no changes}, in ${FORK_BUILD_DIR}..."
   exp_prepare_source "${MTX_EXP_UPSTREAM}" "${PIN_SHA}" "${FORK_BUILD_DIR}" "${MTX_EXP_CHANGES:-}" || exit $?
+  # The overlay staged below replaces packaging/macos/config.local.sh.
+  exp_check_staged_config "${FORK_BUILD_DIR}" || exit $?
 else
   echo "==> Staging source to ${FORK_BUILD_DIR}..."
   mkdir -p "${FORK_BUILD_DIR}"
