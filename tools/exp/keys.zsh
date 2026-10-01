@@ -67,23 +67,29 @@ exp_build_order() {
   print -l -- "${order[@]}"
 }
 
+# A line that ends a `function NAME {` definition: } at the start of the line,
+# followed by nothing, by spaces or tabs, or by spaces or tabs and a # comment.
+# zsh reads `}#` as one word, not as the end of the function.
+typeset -g EXP_FN_CLOSER=$'^[}]([ \t]+#.*)?[ \t]*$'
+
 # exp_function_text <build.sh> <function>
 # One function's definition as written. Upstream writes each as
-# `function NAME {` through a line holding only `}`; the text must end there
-# and parse on its own, which catches a body that ends early or never ends.
+# `function NAME {` through a closing line (EXP_FN_CLOSER); the text must end
+# there and parse on its own, which catches a body that ends early or never
+# ends.
 exp_function_text() {
   local file="$1" fn="$2" text
-  text=$(command awk -v fn="${fn}" '
+  text=$(command awk -v fn="${fn}" -v closer="${EXP_FN_CLOSER}" '
     $0 == "function " fn " {" { p = 1 }
     p { print }
-    p && $0 == "}" { exit }
+    p && $0 ~ closer { exit }
   ' "${file}") || return 1
   if [[ -z "${text}" ]]; then
     print -u2 "ERROR: function ${fn} not found in ${file}"
     return 1
   fi
-  if [[ "${text##*$'\n'}" != "}" ]]; then
-    print -u2 "ERROR: function ${fn} in ${file} does not end with a line holding only }"
+  if [[ ! "${text##*$'\n'}" =~ ${EXP_FN_CLOSER} ]]; then
+    print -u2 "ERROR: function ${fn} in ${file} does not end with a line holding } (and at most a # comment)"
     return 1
   fi
   local -a heads=( ${(M)${(f)text}:#function *} )
@@ -99,17 +105,29 @@ exp_function_text() {
 }
 
 # exp_top_level_text <build.sh>
-# build.sh outside its `function NAME {` ... `}` definitions: what it sets up
-# for every library before building any, and its build list.
+# build.sh outside its function definitions (`function NAME {` through a
+# closing line, EXP_FN_CLOSER): what it sets up for every library before
+# building any, and its build list. A function header while a function is
+# still open means the open one has no line read here as its end, and the
+# lines in between would be left out unseen; that is refused, as is a
+# function still open at the end of the file.
 exp_top_level_text() {
   local file="$1" text
-  text=$(command awk '
-    /^function [A-Za-z0-9_]+ [{]$/ { infn = 1 }
-    !infn { print }
-    infn && $0 == "}" { infn = 0 }
-    END {
+  text=$(command awk -v closer="${EXP_FN_CLOSER}" '
+    /^function [A-Za-z0-9_]+ [{]$/ {
       if (infn) {
-        print "ERROR: a function in " FILENAME " does not end with a line holding only }" > "/dev/stderr"
+        print "ERROR: function " name " in " FILENAME " does not end before function " $2 " begins at line " NR "; a function ends with a line holding } (and at most a # comment)" > "/dev/stderr"
+        bad = 1
+        exit 1
+      }
+      infn = 1; name = $2
+    }
+    !infn { print }
+    infn && $0 ~ closer { infn = 0 }
+    END {
+      if (bad) exit 1
+      if (infn) {
+        print "ERROR: function " name " in " FILENAME " does not end: no line holding } (and at most a # comment) closes it" > "/dev/stderr"
         exit 1
       }
     }
