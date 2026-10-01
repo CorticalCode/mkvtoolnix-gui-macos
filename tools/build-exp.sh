@@ -227,6 +227,16 @@ else
   fi
 fi
 
+# --- The wrapper this build runs from ---
+# Read before anything is staged, so a commit made while the build runs is not
+# recorded as the one it was built from. Dirty: the scripts, overlay or patches
+# differ from that commit.
+_wrapper_branch=$(git -C "${SCRIPT_DIR}" rev-parse --abbrev-ref HEAD) || exit $?
+_wrapper_sha=$(git -C "${SCRIPT_DIR}" rev-parse --short HEAD) || exit $?
+_wrapper_subj=$(git -C "${SCRIPT_DIR}" log -1 --format='%s') || exit $?
+_wrapper_status=$(git --no-optional-locks -C "${SCRIPT_DIR}" status --porcelain -- tools config patches) || exit $?
+if [[ -n "${_wrapper_status}" ]]; then _wrapper_dirty=true; else _wrapper_dirty=false; fi
+
 # --- Series mode: an exact upstream commit plus named changes ---
 # The pin, the changes and each branch's own commits are resolved here, before
 # anything is named or staged; the source is unpacked at the staging step.
@@ -425,10 +435,17 @@ fi
 
 # --- Package staging under STAGING_DIR, as release builds do ---
 STAGING_PATCH="${SCRIPT_DIR}/patches/myinstall-staging-dir.patch"
+_staging_sha=$(setopt pipe_fail; command shasum -a 256 < "${STAGING_PATCH}" | command cut -d' ' -f1) || exit $?
+if [[ -z "${_staging_sha}" ]]; then
+  echo "ERROR: could not hash ${STAGING_PATCH:t}" >&2
+  exit 1
+fi
 if (cd "${FORK_BUILD_DIR}" && git apply --check -R "${STAGING_PATCH}" 2>/dev/null); then
+  _staging_state=already_present
   echo "==> ${STAGING_PATCH:t}: already in the source"
 elif (cd "${FORK_BUILD_DIR}" && git apply --check "${STAGING_PATCH}"); then
-  (cd "${FORK_BUILD_DIR}" && git apply "${STAGING_PATCH}")
+  (cd "${FORK_BUILD_DIR}" && git apply "${STAGING_PATCH}") || exit $?
+  _staging_state=applied
   echo "==> ${STAGING_PATCH:t}: applied"
 else
   echo "ERROR: ${STAGING_PATCH:t} does not apply to this source's packaging/macos/myinstall.sh" >&2
@@ -743,26 +760,21 @@ if [[ -d "${APP_BUNDLE}/Contents/MacOS/libs" ]]; then
     | while read -r l; do echo "    $(basename "${l}")"; done
 fi
 
-# --- Counter commit + DMG naming ---
-# BUILD_NUM was predicted up-front (stable across retries); commit it now that
-# the build succeeded. Previous value stays unchanged on any failure.
-BUILD_DIR="${SCRIPT_DIR}/build"
-mkdir -p "${BUILD_DIR}"
-
-echo "${BUILD_NUM}" > "${BUILD_COUNTER_FILE}.tmp" && command mv "${BUILD_COUNTER_FILE}.tmp" "${BUILD_COUNTER_FILE}"
-
-DMG_FINAL_NAME="MKVToolNix-${DEV_VER}-${ARCH_LABEL}-${BUILD_LABEL}-${SLUG}-${BUILD_HASH}.dmg"
-command cp "${DMG_PATH}" "${BUILD_DIR}/${DMG_FINAL_NAME}"
-(cd "${BUILD_DIR}" && shasum -a 256 "${DMG_FINAL_NAME}" > "${DMG_FINAL_NAME}.sha256")
-DMG_FINAL_PATH="${BUILD_DIR}/${DMG_FINAL_NAME}"
-
-# --- Write DMG sidecar manifest ---
+# --- Build manifest ---
+# Every value is taken before the DMG is copied and the build number used, so
+# a failure here leaves neither a DMG without a manifest nor a spent number.
 # What a later comparison needs: the mode, the pin and changes a series build
 # was made from, each library's key, whether it was restored or built and the
 # SHA-256 of its cache entry's manifest.json, the toolchain, and the size of
-# every program and library in the bundle. Every
-# experimental source also has the packaging staging patch applied, recorded
-# under "patches" by name and SHA-256.
+# every program and library in the bundle. The wrapper is recorded as it was
+# when the build started; the packaging staging patch, applied to every
+# experimental source, as it was at the staging step: by name and SHA-256, and
+# whether it was applied or already in the source.
+BUILD_DIR="${SCRIPT_DIR}/build"
+DMG_FINAL_NAME="MKVToolNix-${DEV_VER}-${ARCH_LABEL}-${BUILD_LABEL}-${SLUG}-${BUILD_HASH}.dmg"
+DMG_FINAL_PATH="${BUILD_DIR}/${DMG_FINAL_NAME}"
+DMG_MANIFEST_PATH="${DMG_FINAL_PATH}.manifest.json"
+
 _json_array() {
   local out="[" first=1 e
   for e in "$@"; do
@@ -841,20 +853,15 @@ else
   _SOURCE_JSON="{\"path_basename\":$(_json_str "${SRC:t}"),\"ref\":$(_json_str "${TRY_REF}"),\"sha\":$(_json_str "${TRY_SHA}"),\"uncommitted_diff_sha256\":$(_json_str "${TRY_DIRTY}")}"
 fi
 
-_staging_sha=$(command shasum -a 256 "${STAGING_PATCH}" | command awk '{print $1}')
-if [[ -z "${_staging_sha}" ]]; then
-  echo "ERROR: could not hash ${STAGING_PATCH:t}" >&2
-  exit 1
-fi
-_PATCHES_JSON=$(_json_array "{\"name\":$(_json_str "patches/${STAGING_PATCH:t}"),\"sha256\":$(_json_str "${_staging_sha}")}") || exit $?
+_PATCHES_JSON=$(_json_array "{\"name\":$(_json_str "patches/${STAGING_PATCH:t}"),\"sha256\":$(_json_str "${_staging_sha}"),\"state\":$(_json_str "${_staging_state}")}") || exit $?
 
-_dmg_size_bytes=$(_file_bytes "${DMG_FINAL_PATH}") || {
-  echo "ERROR: could not measure ${DMG_FINAL_PATH}" >&2
+_dmg_size_bytes=$(_file_bytes "${DMG_PATH}") || {
+  echo "ERROR: could not measure ${DMG_PATH}" >&2
   exit 1
 }
-_dmg_sha=$(command shasum -a 256 "${DMG_FINAL_PATH}" | command awk '{print $1}')
+_dmg_sha=$(setopt pipe_fail; command shasum -a 256 < "${DMG_PATH}" | command cut -d' ' -f1) || exit $?
 if [[ -z "${_dmg_sha}" ]]; then
-  echo "ERROR: could not hash ${DMG_FINAL_PATH}" >&2
+  echo "ERROR: could not hash ${DMG_PATH}" >&2
   exit 1
 fi
 _app_bytes=$(_tree_bytes "${APP_BUNDLE}") || {
@@ -862,14 +869,11 @@ _app_bytes=$(_tree_bytes "${APP_BUNDLE}") || {
   exit 1
 }
 
-_wrapper_branch=$(git -C "${SCRIPT_DIR}" rev-parse --abbrev-ref HEAD) || exit $?
-_wrapper_sha=$(git -C "${SCRIPT_DIR}" rev-parse --short HEAD) || exit $?
-_wrapper_subj=$(git -C "${SCRIPT_DIR}" log -1 --format='%s') || exit $?
 _HOST_JSON=$(_host_json) || exit $?
 _FINISHED_AT=$(_iso_utc) || exit $?
 
-DMG_MANIFEST_PATH="${BUILD_DIR}/${DMG_FINAL_NAME}.manifest.json"
-cat > "${DMG_MANIFEST_PATH}" <<EOF
+mkdir -p "${BUILD_DIR}" || exit $?
+command cat > "${DMG_MANIFEST_PATH}.tmp" <<EOF || exit $?
 {
   "schema_version": 2,
   "kind": "experimental_build",
@@ -902,7 +906,8 @@ cat > "${DMG_MANIFEST_PATH}" <<EOF
     "wrapper": {
       "branch": $(_json_str "${_wrapper_branch}"),
       "sha": $(_json_str "${_wrapper_sha}"),
-      "subject": $(_json_str "${_wrapper_subj}")
+      "subject": $(_json_str "${_wrapper_subj}"),
+      "dirty": ${_wrapper_dirty}
     },
     "experimental": ${_SOURCE_JSON}
   },
@@ -925,6 +930,21 @@ cat > "${DMG_MANIFEST_PATH}" <<EOF
   }
 }
 EOF
+
+# --- DMG, its checksum and manifest, then the build number ---
+# BUILD_NUM was predicted up front (stable across retries) and is used last,
+# once the DMG, its checksum and its manifest are in place; on any failure
+# before that the previous value stays.
+command cp "${DMG_PATH}" "${DMG_FINAL_PATH}" || exit $?
+(cd "${BUILD_DIR}" && command shasum -a 256 "${DMG_FINAL_NAME}" > "${DMG_FINAL_NAME}.sha256") || exit $?
+_copy_sha=$(command cut -d' ' -f1 < "${DMG_FINAL_PATH}.sha256") || exit $?
+if [[ "${_copy_sha}" != "${_dmg_sha}" ]]; then
+  echo "ERROR: ${DMG_FINAL_NAME} (${_copy_sha:-no checksum}) does not match the DMG it was copied from (${_dmg_sha})" >&2
+  exit 1
+fi
+command mv "${DMG_MANIFEST_PATH}.tmp" "${DMG_MANIFEST_PATH}" || exit $?
+print -r -- "${BUILD_NUM}" > "${BUILD_COUNTER_FILE}.tmp" || exit $?
+command mv "${BUILD_COUNTER_FILE}.tmp" "${BUILD_COUNTER_FILE}" || exit $?
 echo ""
 echo "==> Wrote DMG manifest sidecar: ${DMG_MANIFEST_PATH:t}"
 
