@@ -4,7 +4,6 @@
 #
 # Scans:
 #   /opt/mtx/prefix/proven/{arm,intel}          (the canonical local proven cache)
-#   /opt/mtx-exp/prefix/proven-experimental/{arm,intel}
 #   <repo>/build                      (internal dev DMGs)
 #   <repo>/release                    (release-ready DMGs)
 #
@@ -37,13 +36,10 @@ _target_from() {
     printf '%s' "$_t"
 }
 _rel_target="$(_target_from "$SCRIPT_DIR/config/config.local.sh")"
-_exp_target="$(_target_from "$SCRIPT_DIR/config/config.exp.local.sh")"
 
 SCAN_DIRS=(
   "$_rel_target/proven/arm"
   "$_rel_target/proven/intel"
-  "$_exp_target/proven-experimental/arm"
-  "$_exp_target/proven-experimental/intel"
   "$SCRIPT_DIR/build"
   "$SCRIPT_DIR/release"
 )

@@ -46,9 +46,9 @@ _required_tools=(
   # POSIX core (every macOS install)
   awk grep sed find sort tr wc du xargs cat shasum file uname mktemp ls head
   # always present on macOS dev installs
-  date stat rsync perl
+  date stat rsync perl git tar bc
   # macOS-specific (script is macOS-only by design; fail fast elsewhere)
-  sw_vers sysctl xcrun clang hdiutil codesign strings
+  sw_vers sysctl xcrun clang hdiutil codesign strings otool
 )
 for _t in "${_required_tools[@]}"; do
   if ! command -v "$_t" >/dev/null 2>&1; then
@@ -662,7 +662,7 @@ if [[ ! -f "${BINARY}" ]]; then
 fi
 
 # --- Patch-presence verification ---
-# Goes beyond "is the string in the binary" — checks that the fork's changes
+# Goes beyond "is the string in the binary" — checks that the source's changes
 # survived compilation end-to-end. Still a smoke test (can't prove behavior
 # from inspection alone), but catches cases where the code string is present
 # yet the integration is broken.
@@ -676,7 +676,7 @@ if [[ -n "${VERIFY_SYMBOL}" ]]; then
     echo "    PASS: '${VERIFY_SYMBOL}' appears ${symbol_count}x in binary"
   else
     echo "    FAIL: '${VERIFY_SYMBOL}' NOT found in binary." >&2
-    echo "          Build completed but the fork's code is missing." >&2
+    echo "          Build completed but the changed code is missing." >&2
     echo "          DO NOT test this DMG." >&2
     exit 2
   fi
@@ -690,8 +690,8 @@ if [[ -n "${VERIFY_SYMBOL}" ]]; then
   echo "    INFO: source tree had ${source_count} references; binary has ${symbol_count} (compiler may dedup)"
   if [[ ${source_count} -eq 0 ]]; then
     echo "    FAIL: staged source has ZERO references to '${VERIFY_SYMBOL}'." >&2
-    echo "          The rsync may have excluded the modified files, or the worktree is" >&2
-    echo "          missing the patch. DO NOT test this DMG." >&2
+    echo "          Staging may have excluded the modified files, or the source is" >&2
+    echo "          missing the change. DO NOT test this DMG." >&2
     exit 2
   fi
 fi
@@ -722,7 +722,7 @@ elif [[ ${arch_errors} -gt 0 ]]; then
   VERIFY_ISSUES=$((VERIFY_ISSUES + arch_errors))
 fi
 
-# 2. Size sanity (fork builds may differ from production, so wider range)
+# 2. Size sanity (experimental builds may differ from release builds, so a wider range)
 # Summing bytes by reading them avoids asking stat for a size, which is spelled
 # differently on BSD and GNU.
 app_bytes=$(command find "${APP_BUNDLE}" -type f -exec cat {} + 2>/dev/null | command wc -c | command tr -d ' ')
@@ -758,7 +758,7 @@ if [[ -n "${BUILT_QT}" ]]; then
 fi
 
 # 5. Distinct Qt versions bundled in libs/ — must be exactly 1. More than 1
-# indicates the restore step extracted overlapping versions (the Fix 2 bug).
+# indicates the restore step extracted overlapping versions.
 if [[ -d "${APP_BUNDLE}/Contents/MacOS/libs" ]]; then
   qt_versions=$(command find "${APP_BUNDLE}/Contents/MacOS/libs" -name 'libQt6Core.*.dylib' \
     -not -type l 2>/dev/null \
@@ -998,7 +998,7 @@ echo "  VERSIONNAME:  ${VERSIONNAME}  (shown as \"v${MTX_VER} ('${VERSIONNAME}')
 echo ""
 echo "  Verification:"
 if [[ -n "${VERIFY_SYMBOL}" ]]; then
-  echo "    ${VERIFY_SYMBOL}: PRESENT (fork code compiled in)"
+  echo "    ${VERIFY_SYMBOL}: PRESENT (changed code compiled in)"
 fi
 echo "    Architecture: ${arch_errors} failures / ${arch_checked} checked"
 echo "    App size:     ${size_mb} MB"

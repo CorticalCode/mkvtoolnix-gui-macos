@@ -16,9 +16,9 @@ unalias -a 2>/dev/null || true  # Prevent .zshenv aliases from leaking into scri
 # --- Startup tool probe ---
 # Verify required external tools are reachable in PATH before doing real work.
 # Without this, a missing tool surfaces mid-build with a cryptic pipe error;
-# here it surfaces immediately with the tool's name. Same probe as
-# tools/build-exp.sh — duplicated inline rather than sourced from a shared
-# helper to keep each script self-contained.
+# here it surfaces immediately with the tool's name. tools/build-exp.sh has
+# its own probe for the tools it uses — each script lists its own, inline
+# rather than sourced from a shared helper, to stay self-contained.
 #
 # Note on `unalias -a` (line above): only affects THIS script's subshell.
 # Your interactive aliases in the parent shell are unaffected.
@@ -64,16 +64,14 @@ fi
 echo "==> Shell: zsh ${ZSH_VERSION}, arch: ${MACHINE_ARCH} (${ARCH_LABEL})"
 
 function wipe_workspace {
-  echo "==> Wiping workspace (preserving proven/, proven-experimental/, source/, and upstream clone)..."
+  echo "==> Wiping workspace (preserving proven/, source/, and upstream clone)..."
 
-  # Clean TARGET (/opt/mtx/prefix/) — preserve proven cache, experimental cache, and source tarballs
+  # Clean TARGET (/opt/mtx/prefix/) — preserve the proven cache and source tarballs
   local preserve_proven="${TARGET}/proven"
-  local preserve_experimental="${TARGET}/proven-experimental"
   local preserve_source="${TARGET}/source"
 
   for item in "${TARGET}"/*; do
     [[ "${item}" == "${preserve_proven}" ]] && continue
-    [[ "${item}" == "${preserve_experimental}" ]] && continue
     [[ "${item}" == "${preserve_source}" ]] && continue
     echo "    Removing ${item:t}/"
     command rm -rf "${item}"
@@ -318,11 +316,9 @@ _spec_index_for_package() {
   return 1
 }
 
-# Writes a provenance manifest beside a promoted package. The schema mirrors the
-# dep_cache manifests tools/build-exp.sh writes so one reader handles both; what
-# differs is the kind and the tool that produced it. dylib_count is deliberately
-# not recorded — in the experimental writer it counts ${TARGET}/lib rather than
-# the tarball, which is not what the field name suggests.
+# Writes a provenance manifest beside a promoted package: what it was built
+# from, with which patches, under which prefix, and by which tool.
+# _validate_proven_manifest reads it back when a cache is restored.
 _write_proven_manifest() {
   local spec_name="$1" package="$2" tarball="$3" source_sha="$4" out="$5"
   local args_hash="" patch_hash wrapper_branch wrapper_sha

@@ -408,7 +408,7 @@ echo ""
 echo "==> Preparing the workspace..."
 for item in "${TARGET}"/*; do
   case "${item:t}" in
-    proven|proven-experimental|source) continue ;;
+    proven|source) continue ;;
   esac
   command rm -rf "${item}"
 done
