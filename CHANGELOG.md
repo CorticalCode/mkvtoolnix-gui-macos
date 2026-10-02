@@ -236,7 +236,7 @@ mkvtoolnix compile flags differ:
 `-flto=thin -Os` is scoped to the mkvtoolnix compile only; deps stay at `-O2`. No
 functional change. This is the single active wrapper patch for v99.
 
-Also in this round:
+Also in this release:
 - **build-local.sh adapted to release-99.0's macOS artifact naming**
   (`APP_BUNDLE_NAME` / `DMG_REVISION`). The new DMG name
   (`MKVToolNix-${MTX_VER}-${DMG_REVISION}-${machine}.dmg`) and fixed
@@ -566,7 +566,7 @@ Proven dependency cache is now opt-in. Cloning the repo no longer downloads ~534
 
 **Known limitation:** On clones that predate `.lfsconfig`, `--cleanup-lfs` cannot automatically restore pointer files due to a Git index optimization. The script detects this and prints manual fix instructions. See [docs/lfs-migration.md](docs/lfs-migration.md) for the one-time migration steps.
 
-**Multi-agent review:** Three rounds of cross-provider review (Codex + Gemini) identified and fixed: function-before-define crash, unreliable pointer detection, single-arch cleanup, circular clone dependency, interrupted pull recovery, partial restore on stale cache, unbounded binary reads, documentation inconsistencies, and the Git index optimization that prevents automatic pointer restoration on existing clones.
+**Fixed:** function-before-define crash, unreliable pointer detection, single-arch cleanup, circular clone dependency, interrupted pull recovery, partial restore on stale cache, unbounded binary reads, documentation inconsistencies.
 
 ---
 
@@ -661,8 +661,7 @@ First combined Apple Silicon + Intel release with optimized builds.
 
 ### Script hardening (2026-04-14)
 
-- Multi-reviewer audit identified 33 issues across correctness, portability, and robustness
-- All 7 P1 and 14 P2 issues fixed: set -e safety, NULL_GLOB guards, alias isolation, clone tag verification, promote validation, verification hardening
+- Fixed: set -e safety, NULL_GLOB guards, alias isolation, clone tag verification, promote validation, verification hardening
 - Shell interpreter guard, improved error trapping, INT/TERM signal handling
 
 ### Build cache architecture (2026-04-14)
