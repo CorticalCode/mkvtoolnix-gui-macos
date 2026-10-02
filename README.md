@@ -81,7 +81,7 @@ The DMG will be at `release/MKVToolNix-XX.0-macos-<arch>.dmg` — `apple-silicon
 - `build-local.sh` — clones upstream, applies patches, runs the build, verifies
 - `config/config.local.sh` — config overlay: build locations, ad-hoc signing, optimization flags
 - `patches/` — fixes for the upstream build scripts ([details](PATCHES.md))
-- `tools/` — pinned mbunkus public key and fingerprint for tarball + tag verification, plus helper scripts: `check-upstream-tag-signing.sh` (periodic validation that upstream is still GPG-signing release tags), `refresh-deps.sh` (rebuild only the cached dependencies that no longer match a release tag), `build-exp.sh` (experimental builds from an arbitrary source tree), `audit-proven-cache.sh` (checks the published dependency cache is usable), and `backfill-sha256.sh` (regenerates missing hash sidecars)
+- `tools/` — pinned mbunkus public key and fingerprint for tarball + tag verification, plus helper scripts: `check-upstream-tag-signing.sh` (periodic validation that upstream is still GPG-signing release tags), `refresh-deps.sh` (rebuild only the cached dependencies that no longer match a release tag), `build-exp.sh` (experimental builds — a source tree as it is, or an upstream commit plus named changes — over a keyed dependency cache), `audit-proven-cache.sh` (checks the published dependency cache is usable), and `backfill-sha256.sh` (regenerates missing hash sidecars)
 - `.github/workflows/build.yml` — CI builds and publishes Apple Silicon DMGs
 - `.github/workflows/verify-mbunkus-key.yml` — monthly cross-check of the pinned key against three independent sources
 

@@ -1,29 +1,47 @@
 # Changelog
 
+## Experimental build series (2026-10-02)
+
+`tools/build-exp.sh` builds for comparison: an exact upstream commit plus named changes, with each
+dependency build cached by what went into it. Release builds are unaffected.
+
+- **Try and series modes.** `--source <tree>` builds a source tree as it is and records its commit
+  and a hash of its uncommitted work, submodules included. `--pin <ref> --with a,b` builds an
+  upstream commit from a local MKVToolNix clone with named change folders applied — a branch's own
+  commits, `.patch` files, a `packaging/` folder — so a change can be measured against the same pin
+  without it.
+- **Keyed library cache.** Each library build is stored under
+  `/opt/mtx-exp/cache/<arch>/<library>/<key>/`; the key covers its source, its recipe, every
+  exported setting, the architecture and the previous library's key, so a change rebuilds the
+  library it touches and those built after it. A missing entry stops the build before the prefix is
+  wiped and prints the command with `--build-missing`, which replaces `--rebuild-deps`.
+  `--cache-drop` removes one entry.
+- **Comparable records.** Each DMG's manifest (schema 2) records the mode, the pin and changes, each
+  library's key and whether it was restored or built, the toolchain, and the size of every program
+  and library in the bundle. Every run ends with one line saying whether it finished or failed.
+
 ## v102.0-b2026.09.2 (2026-09-18) — Current Release
 
 MKVToolNix 102.0 "Little Houses" — Apple Silicon (arm64) and Intel (x86_64).
 
 **Downloads:**
-- Apple Silicon (arm64): `MKVToolNix-102.0-macos-apple-silicon.dmg` — ~25.6 MB DMG (~75 MB app)
+- Apple Silicon (arm64): `MKVToolNix-102.0-macos-apple-silicon.dmg` — ~25.5 MB DMG (~75 MB app)
 - Intel (x86_64): `MKVToolNix-102.0-macos-intel.dmg` — ~27.5 MB DMG (~78 MB app)
 
 **Highlights:**
 - Fixes invisible check boxes on macOS 27 in lists such as the multiplexer's track list. Qt is built with
   `patches/qt-patches/qtbug-150017-item-view-check-indicator.patch`, @jdpurcell's fix from QTBUG-150017 and
   the same file MKVToolNix merged as `fd809b6c5` for its next release.
-- Same source as v102.0-b2026.09.1: the signed MKVToolNix 102.0 release tarball and the one wrapper patch
-  (`mkvtoolnix-size-opt`). Qt 6.11.1 and gnupg were rebuilt from source with the Qt patch and repromoted to
-  the local cache; every other dependency came from the proven cache.
+- Same signed MKVToolNix 102.0 release tarball as v102.0-b2026.09.1.
 - The cache guard now refuses a cached dependency whose recorded patch set differs from the tree's, which is
   what flagged Qt for the rebuild. Previously that mismatch was only a warning.
-- The DMG grew ~0.8 MB against b2026.09.1 because Qt was rebuilt with Xcode 27 rather than the Xcode 26 that
-  produced the cached copy. All 24 binaries arm64, no external library references.
+- Apple Silicon: full from-source rebuild of every dependency, then promoted; same dependency versions as
+  b2026.09.1. All 24 binaries arm64, no external library references.
 - Intel: full from-source rebuild of every dependency, then promoted; same dependency versions as
   b2026.09.1. All 24 binaries x86_64, no external library references.
-- Known gap: the repo's `proven/arm` copy still holds the pre-patch Qt, because `--promote` archives
-  only what a build compiled itself. A restore from it is refused rather than silently used, so the
-  Apple Silicon cache needs a from-source rebuild and a promote of its own.
+- The Apple Silicon DMG was replaced on 2026-10-01 by the full from-source rebuild above (SHA-256
+  `3c3dd70677bc…`; the one published from 2026-09-18 was `e59fd54cb8…`). The repo's `proven/arm` cache
+  was promoted from it.
 
 ## Qt patch for invisible check boxes on macOS 27 (2026-09-17)
 

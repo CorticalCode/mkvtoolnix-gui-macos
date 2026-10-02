@@ -2,21 +2,33 @@
 
 Helper scripts and trust artifacts for the wrapper build pipeline.
 
-All of these operate on the build root, which defaults to `/opt/mtx` and needs
-creating once per machine (`sudo mkdir -p /opt/mtx && sudo chown "$(id -un)"
-/opt/mtx`). Set `MTX_ROOT` to relocate the whole tree somewhere already owned.
+All of these except `build-exp.sh` operate on the build root, which defaults to
+`/opt/mtx` and needs creating once per machine
+(`sudo mkdir -p /opt/mtx && sudo chown "$(id -un)" /opt/mtx`). Set `MTX_ROOT`
+to relocate the whole tree somewhere already owned. `build-exp.sh` works under
+its own root, `MTX_EXP_ROOT` (default `/opt/mtx-exp`).
 
 ## Scripts
 
-- **`build-exp.sh`** — experimental build entry point. Compiles a source tree you
-  point it at (a worktree, a detached upstream snapshot) and owns the
-  `/opt/mtx-exp/prefix/proven-experimental/` dep cache: it fills that cache as it
-  builds and empties it with `--clear-cache`. It cannot borrow the release cache —
-  every cached package records the prefix it was built under, so release packages
-  would point an experiment at the release tree — so the first run needs
-  `--rebuild-deps` and compiles every dependency under the experimental prefix.
-  Later runs reuse what it leaves behind. Does not apply wrapper patches, and
-  never writes to `release/`.
+- **`build-exp.sh`** — experimental builds, never release artifacts. Try mode
+  (`--source <tree>`) builds a source tree as it is and records its commit and
+  a hash of its uncommitted work, submodules included. Series mode (`--pin <ref>
+  [--with a,b,...]`) builds an exact upstream commit from the MKVToolNix clone
+  named by `MTX_EXP_UPSTREAM`, plus change folders from `MTX_EXP_CHANGES`, each
+  holding any of a `branch` file, `*.patch` files and a `packaging/` folder.
+  Library builds are cached in `/opt/mtx-exp/cache/<arch>/<library>/<key>/`; a
+  key covers the library's source, its recipe (its `build.sh` function and
+  hooks, the helpers they call, its patches, `build.sh`'s top level,
+  `myinstall.sh`), every exported setting, the architecture and the previous
+  library's key. The toolchain is recorded, not keyed. A cache miss stops the
+  build and prints the same command with `--build-missing`; `--clear-cache`
+  empties this architecture's cache, `--cache-drop <library>/<key-prefix>` one
+  entry. The root is `MTX_EXP_ROOT` (default `/opt/mtx-exp`), refused inside the
+  home folder or overlapping the release root. DMGs go to `build/`, never
+  `release/`, each with a schema-2 `.manifest.json`; every run ends with one
+  line saying whether it finished or failed. See
+  [`docs/build-workflow.md`](../docs/build-workflow.md#experimental-builds) and
+  `--help`.
 - **`refresh-deps.sh <tag>`** — rebuilds only the cached dependencies whose
   recorded source no longer matches a release tag, in upstream's build order,
   and repromotes just those. Run it when `build-local.sh` refuses a cache over

@@ -4,7 +4,7 @@ Living document tracking every modification made to build MKVToolNix on macOS (A
 
 ## Build status
 
-**v102.0-b2026.09.2** (rel007, Apple Silicon, 2026-09-18) adds the Qt source patch **`qt-patches/qtbug-150017-item-view-check-indicator.patch`** for the macOS 27 check boxes, so Qt 6.11.1 and gnupg were rebuilt from source and repromoted to the local cache. Same signed 102.0 source as b2026.09.1 otherwise. Intel followed on 2026-09-28 (rel009) with a full from-source rebuild of every dependency and a repromoted cache; the wrapper patches still apply cleanly and dependency versions are unchanged.
+**v102.0-b2026.09.2** (2026-09-18) adds the Qt source patch **`qt-patches/qtbug-150017-item-view-check-indicator.patch`** for the macOS 27 check boxes. Same signed 102.0 source as b2026.09.1 otherwise. Both release DMGs are full from-source rebuilds of every dependency with a repromoted cache: Intel rel009 (2026-09-28) and Apple Silicon rel008 (2026-10-01), which replaced the first Apple Silicon build, rel007. The wrapper patches still apply cleanly and dependency versions are unchanged.
 
 **v102.0** built and verified (Apple Silicon + Intel). No dependency changes from v101 — upstream's `packaging/macos/specs.sh` is byte-identical between `release-101.0` and `release-102.0`, so Qt stays 6.11.1. The single active wrapper patch (**`mkvtoolnix-size-opt`**) still applies cleanly; zero Qt source patches. Apple Silicon restored from the proven cache; no promotion needed. Intel rebuilt every dependency from source and promoted the result — its cached dependencies predated the provenance manifests the build now requires, so the cache itself was republished. Dependency versions are unchanged either way.
 
