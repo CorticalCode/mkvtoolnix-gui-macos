@@ -234,7 +234,6 @@ if [[ -n "${SRC}" ]]; then
     echo "ERROR: source path does not exist: ${SRC}" >&2
     exit 1
   fi
-  exp_try_record "${SRC}" || exit $?
 else
   MODE=series
   if [[ -n "${SLUG}" ]]; then
@@ -302,6 +301,13 @@ if [[ "${MODE}" == try ]]; then
     echo "         If build fails with missing libEBML/libMatroska/fmt, you need"
     echo "         to populate lib/libebml, lib/libmatroska, lib/fmt manually." >&2
   fi
+fi
+
+# --- What the try build's manifest records about the source ---
+# Read after the submodule update, which can move a submodule to the commit its
+# parent records, so the record describes the tree that is staged.
+if [[ "${MODE}" == try ]]; then
+  exp_try_record "${SRC}" || exit $?
 fi
 
 # --- Slug defaulting (try mode; a series build is named by its pin and changes) ---
