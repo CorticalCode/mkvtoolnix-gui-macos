@@ -1,2 +1,15 @@
 pre-commit:
-  jobs: []
+  jobs:
+    - name: require-local-config
+      run: test -f lefthook-local.yml || exit 1
+commit-msg:
+  jobs:
+    - name: require-local-config
+      run: test -f lefthook-local.yml || exit 1
+pre-push:
+  jobs:
+    - name: require-local-config
+      files: echo README.md
+      run: |
+        : {files}
+        test -f lefthook-local.yml || exit 1
