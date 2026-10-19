@@ -2,19 +2,19 @@
 
 ## v103.0-b2026.10.1 (2026-10-18) — Current Release
 
-MKVToolNix 103.0 "The Darkness" — Apple Silicon (arm64); Intel (x86_64) to follow.
+MKVToolNix 103.0 "The Darkness" — Apple Silicon (arm64) and Intel (x86_64).
 
 **Downloads:**
 - Apple Silicon (arm64): `MKVToolNix-103.0-macos-apple-silicon.dmg` — ~24.8 MB DMG (~75 MB app)
-- Intel (x86_64): 🚧 building
+- Intel (x86_64): `MKVToolNix-103.0-macos-intel.dmg` — ~27.6 MB DMG (~78 MB app)
 
 **Highlights:**
 - Built from the signed MKVToolNix 103.0 release tarball. No dependency changes: upstream's
   `packaging/macos/specs.sh` is byte-identical between `release-102.0` and `release-103.0`, so Qt stays 6.11.1.
 - MKVToolNix 103.0 ships the macOS 27 check box fix itself, in `packaging/macos/qt-patches/`: the same file as
   this repo's `patches/qt-patches/` copy. The Qt in the proven cache already carries it.
-- Every dependency was restored from the proven cache; only MKVToolNix was compiled. All 24 binaries arm64, no
-  external library references.
+- On both architectures every dependency was restored from the proven cache; only MKVToolNix was compiled. All
+  24 binaries arm64 on Apple Silicon and x86_64 on Intel, no external library references.
 
 ## Experimental build series (2026-10-02)
 

@@ -4,7 +4,7 @@ Living document tracking every modification made to build MKVToolNix on macOS (A
 
 ## Build status
 
-**v103.0-b2026.10.1** (rel009, Apple Silicon, 2026-10-18): no dependency changes from v102 — upstream's `packaging/macos/specs.sh` is byte-identical between `release-102.0` and `release-103.0`, so Qt stays 6.11.1. MKVToolNix 103.0 ships the QTBUG-150017 Qt patch itself (`packaging/macos/qt-patches/`), byte-identical to `qt-patches/qtbug-150017-item-view-check-indicator.patch` here. Restored from the proven cache; no promotion needed. Intel still to come.
+**v103.0-b2026.10.1** (rel009, Apple Silicon, 2026-10-18): no dependency changes from v102 — upstream's `packaging/macos/specs.sh` is byte-identical between `release-102.0` and `release-103.0`, so Qt stays 6.11.1. MKVToolNix 103.0 ships the QTBUG-150017 Qt patch itself (`packaging/macos/qt-patches/`), byte-identical to `qt-patches/qtbug-150017-item-view-check-indicator.patch` here. Apple Silicon (rel009) and Intel (rel010) were both restored from their proven caches; no promotion needed.
 
 **v102.0-b2026.09.2** (2026-09-18) adds the Qt source patch **`qt-patches/qtbug-150017-item-view-check-indicator.patch`** for the macOS 27 check boxes. Same signed 102.0 source as b2026.09.1 otherwise. Both release DMGs are full from-source rebuilds of every dependency with a repromoted cache: Intel rel009 (2026-09-28) and Apple Silicon rel008 (2026-10-01), which replaced the first Apple Silicon build, rel007. The wrapper patches still apply cleanly and dependency versions are unchanged.
 
@@ -41,6 +41,7 @@ Previous release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build proces
 | **v102 rel007 (Qt patch)** | 25.6 MB | 75.0 MB | 6.11.1 | ARM, verified, Qt rebuilt from source with the QTBUG-150017 patch (Xcode 27) |
 | **v102 rel009 (Qt patch, Intel)** | 27.5 MB | 78.4 MB | 6.11.1 | Intel, verified, full from-source rebuild including the QTBUG-150017 patch |
 | **v103 rel009 (source bump)** | 24.8 MB | 75.1 MB | 6.11.1 | ARM, verified, restored from proven cache; deps unchanged from v102 |
+| **v103 rel010 (source bump, Intel)** | 27.6 MB | 78.4 MB | 6.11.1 | Intel, verified, restored from proven cache; deps unchanged from v102 |
 
 ---
 
