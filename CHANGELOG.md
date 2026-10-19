@@ -1,5 +1,21 @@
 # Changelog
 
+## v103.0-b2026.10.1 (2026-10-18) — Current Release
+
+MKVToolNix 103.0 "The Darkness" — Apple Silicon (arm64); Intel (x86_64) to follow.
+
+**Downloads:**
+- Apple Silicon (arm64): `MKVToolNix-103.0-macos-apple-silicon.dmg` — ~24.8 MB DMG (~75 MB app)
+- Intel (x86_64): 🚧 building
+
+**Highlights:**
+- Built from the signed MKVToolNix 103.0 release tarball. No dependency changes: upstream's
+  `packaging/macos/specs.sh` is byte-identical between `release-102.0` and `release-103.0`, so Qt stays 6.11.1.
+- MKVToolNix 103.0 ships the macOS 27 check box fix itself, in `packaging/macos/qt-patches/`: the same file as
+  this repo's `patches/qt-patches/` copy. The Qt in the proven cache already carries it.
+- Every dependency was restored from the proven cache; only MKVToolNix was compiled. All 24 binaries arm64, no
+  external library references.
+
 ## Experimental build series (2026-10-02)
 
 `tools/build-exp.sh` builds for comparison: an exact upstream commit plus named changes, with each
@@ -20,7 +36,7 @@ dependency build cached by what went into it. Release builds are unaffected.
   library's key and whether it was restored or built, the toolchain, and the size of every program
   and library in the bundle. Every run ends with one line saying whether it finished or failed.
 
-## v102.0-b2026.09.2 (2026-09-18) — Current Release
+## v102.0-b2026.09.2 (2026-09-18)
 
 MKVToolNix 102.0 "Little Houses" — Apple Silicon (arm64) and Intel (x86_64).
 
