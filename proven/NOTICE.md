@@ -26,7 +26,7 @@ MKVToolNix source code.
 | | |
 |---|---|
 | **Project** | MKVToolNix |
-| **Version** | 102.0 (build target; `proven/` does not bundle MKVToolNix binaries) |
+| **Version** | 103.0 (build target; `proven/` does not bundle MKVToolNix binaries) |
 | **Author** | Moritz Bunkus & contributors |
 | **License** | GPL-2.0-or-later |
 | **Upstream** | https://mkvtoolnix.download |
@@ -106,6 +106,4 @@ If you believe any attribution here is missing, incorrect, or stale, please
 open an issue at
 https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues and we will fix it.
 
-Last updated: 2026-09-28 — build target to 102.0; dropped curl, which the wrapper does not
-cache and the application does not bundle; Qt module list trimmed to the libraries actually
-shipped in the `.app`.
+Last updated: 2026-10-18 — build target to 103.0; dependency versions unchanged from 102.0.
