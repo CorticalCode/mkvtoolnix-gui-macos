@@ -82,3 +82,39 @@ _exp_try_work() {
     _exp_try_work "${top}" "${rel:+${rel}/}${sub}" || return 1
   done
 }
+
+# exp_try_save <top> <dest>
+# Writes the uncommitted work exp_try_record hashes as files under <dest>: for
+# the tree and each checked-out submodule with changes, <name>.diff (git diff
+# HEAD --binary) and, when it has untracked files that are not ignored,
+# <name>.untracked.tar. <name> is "source" for the tree and "source__<path>"
+# for a submodule, its slashes as "__". Writes nothing for a clean tree.
+exp_try_save() {
+  local src="$1" dest="$2"
+  _exp_try_save "${src}" "" "${dest}" || return 1
+}
+
+_exp_try_save() {
+  setopt local_options pipe_fail
+  local top="$1" rel="$2" dest="$3" dir name changes listing entry sub
+  local -a untracked
+  dir="${top}${rel:+/${rel}}"
+  name="source${rel:+__${rel//\//__}}"
+  changes=$(git --no-optional-locks -C "${dir}" status --porcelain --untracked-files=all --ignore-submodules=dirty) || return 1
+  if [[ -n "${changes}" ]]; then
+    command mkdir -p "${dest}" || return 1
+    git --no-optional-locks -C "${dir}" diff HEAD --binary --ignore-submodules=dirty > "${dest}/${name}.diff" || return 1
+    listing=$(git --no-optional-locks -C "${dir}" ls-files -z --others --exclude-standard) || return 1
+    untracked=( ${(0)listing} )
+    if (( ${#untracked} )); then
+      command tar -cf "${dest}/${name}.untracked.tar" -C "${dir}" -- "${untracked[@]}" || return 1
+    fi
+  fi
+  listing=$(git --no-optional-locks -C "${dir}" ls-files -z --stage) || return 1
+  for entry in "${(@0)listing}"; do
+    [[ "${entry}" == "160000 "* ]] || continue
+    sub="${entry#*$'\t'}"
+    [[ -e "${dir}/${sub}/.git" ]] || continue
+    _exp_try_save "${top}" "${rel:+${rel}/}${sub}" "${dest}" || return 1
+  done
+}

@@ -458,7 +458,8 @@ for _f in "${EXP_BUILD_FOLDER}"/attempt-<->.log(N); do
   _n=${${_f:t:r}#attempt-}
   (( _n > _last )) && _last=${_n}
 done
-run_log_rename "${EXP_BUILD_FOLDER}/attempt-$(( _last + 1 )).log" || exit $?
+EXP_ATTEMPT=$(( _last + 1 ))
+run_log_rename "${EXP_BUILD_FOLDER}/attempt-${EXP_ATTEMPT}.log" || exit $?
 unset _f _n _last
 # Experimental builds target the next upstream release, so label them
 # <next-major>pre derived from the source version (99.0 -> 100pre).
@@ -544,6 +545,12 @@ if (( ${#_stale} )); then
 fi
 unset _stale
 run_check_root "${MTX_EXP_ROOT}" || exit $?
+# The uncommitted work of a try build, saved once the root check has passed and
+# before the source is staged, so it is what this build compiles.
+if [[ "${MODE}" == try && -n "${EXP_TRY_DIRTY}" ]]; then
+  echo "==> Saving the uncommitted work in ${SRC} to ${EXP_BUILD_FOLDER}/attempt-${EXP_ATTEMPT}.uncommitted/"
+  exp_try_save "${SRC}" "${EXP_BUILD_FOLDER}/attempt-${EXP_ATTEMPT}.uncommitted" || exit $?
+fi
 run_remove "${MTX_EXP_ROOT}" "build/${FORK_BUILD_DIR:t}" || exit $?
 run_remove "${MTX_EXP_ROOT}" "build/dmg-${MTX_VER}" || exit $?
 if [[ "${MODE}" == series ]]; then
