@@ -7,8 +7,9 @@ release build root, which defaults to `/opt/mtx` and needs creating once per
 machine (`sudo mkdir -p /opt/mtx && sudo chown "$(id -un)" /opt/mtx`). Set
 `MTX_ROOT` to relocate the whole tree somewhere already owned. `build-exp.sh`
 works under its own root, `MTX_EXP_ROOT` (default `/opt/mtx-exp`).
-`audit-proven-cache.sh` reads the repository's `proven/`, and
-`check-upstream-tag-signing.sh` uses neither root.
+`adopt-entries.sh` takes either root as its argument; `audit-proven-cache.sh`
+reads the repository's `proven/`, and `check-upstream-tag-signing.sh` uses
+neither root.
 
 ## Scripts
 
@@ -26,11 +27,15 @@ works under its own root, `MTX_EXP_ROOT` (default `/opt/mtx-exp`).
   build and prints the same command with `--build-missing`; `--clear-cache`
   empties this architecture's cache, `--cache-drop <library>/<key-prefix>` one
   entry. The root is `MTX_EXP_ROOT` (default `/opt/mtx-exp`), refused inside the
-  home folder or overlapping the release root. DMGs go to `build/`, never
-  `release/`, each with a schema-2 `.manifest.json`; every run ends with one
-  line saying whether it finished or failed. See
+  home folder or overlapping the release root. Each build's DMG goes to its
+  own folder, `build/exp/<build-id>/`, never `release/`, with its `.sha256` and
+  a schema-2 `.manifest.json`; every run ends with one line saying whether it
+  finished or failed. See
   [`docs/build-workflow.md`](../docs/build-workflow.md#experimental-builds) and
   `--help`.
+- **`adopt-entries.sh <root> [--adopt]`** — lists the entries of a build root (`/opt/mtx`,
+  `/opt/mtx-exp`) that no build recorded creating; builds stop on them rather than remove them.
+  `--adopt` records them as build output after you have looked at each.
 - **`refresh-deps.sh <tag>`** — rebuilds the cached dependencies from the
   first one whose cached build no longer matches a release tag (source, patch
   set) through the end of upstream's build order, and repromotes all of those.

@@ -78,7 +78,7 @@ source "${SCRIPT_DIR}/config/config.local.sh"
 # WORK_DIR here only locates the upstream source clone below; the compile
 # workspace the child build.sh uses is CMPL, from the overlay. An environment
 # override is therefore safe and cannot make the two disagree — unlike in
-# build-local.sh, where WORK_DIR is the workspace that gets wiped.
+# build-local.sh, where WORK_DIR is the workspace that gets cleaned.
 WORK_DIR=${WORK_DIR:-${CMPL:?config/config.local.sh must set CMPL}}
 TARGET=${TARGET:?config/config.local.sh must set TARGET}
 CLONE_DIR="${WORK_DIR}/mkvtoolnix-src"

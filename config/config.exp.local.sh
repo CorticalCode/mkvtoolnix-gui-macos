@@ -15,6 +15,9 @@
 #   /opt/mtx-exp/stage    DESTDIR staging root used by myinstall.sh
 #   /opt/mtx-exp/src      source tarballs
 #   /opt/mtx-exp/cache    library builds, one folder per key (tools/exp/cache.zsh)
+#   /opt/mtx-exp/run-records
+#                         one record per run of what it created and removed in
+#                         prefix, build and stage (tools/lib/run-record.zsh)
 #
 # Experimental builds cannot borrow the release cache: every cached package
 # records the prefix it was built under, so restoring release packages here
@@ -24,9 +27,10 @@ export MTX_EXP_ROOT="${MTX_EXP_ROOT:-/opt/mtx-exp}"
 
 # The root must be absolute, and must neither equal, lie inside nor hold the
 # release root (/opt/mtx, or MTX_ROOT when set): this file is read from more
-# than one working directory, and each track wipes its own prefix. Folders
-# that exist are compared with symlinks resolved. Written for zsh and bash
-# alike.
+# than one working directory, and each track cleans its own root by the run
+# records kept there, so overlapping roots could let one track remove the
+# other's build output. Folders that exist are compared with symlinks
+# resolved. Written for zsh and bash alike.
 _mtx_release_root="${MTX_ROOT:-/opt/mtx}"
 _mtx_real() {
   local p="$1"
@@ -52,7 +56,8 @@ if ! _mtx_exp=$(_mtx_real "${MTX_EXP_ROOT}") || ! _mtx_rel=$(_mtx_real "${_mtx_r
 fi
 if _mtx_within "${_mtx_exp}" "${_mtx_rel}" || _mtx_within "${_mtx_rel}" "${_mtx_exp}"; then
   echo "ERROR: MTX_EXP_ROOT (${_mtx_exp}) overlaps the release root (${_mtx_rel})." >&2
-  echo "       Each track wipes its own prefix, so one would destroy the other's." >&2
+  echo "       Each track cleans its own root by its run records; overlapping roots" >&2
+  echo "       could let one remove the other's build output." >&2
   echo "       Set MTX_EXP_ROOT or MTX_ROOT so that neither folder holds the other." >&2
   exit 1
 fi

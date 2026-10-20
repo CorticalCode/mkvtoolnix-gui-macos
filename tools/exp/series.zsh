@@ -331,7 +331,7 @@ exp_check_staged_config() {
 # and the overlay again before building, and the overlay derives every build
 # location from MTX_EXP_ROOT, so a root exported there would move the prefix,
 # the workspace and the cache past those checks: refuse unless both are still
-# what was checked. Run in either mode, before keys, wipe or build.
+# what was checked. Run in either mode, before keys, cleaning or build.
 exp_check_root() {
   local root="$1" prefix="$2" root_now="" prefix_now=""
   [[ -n "${MTX_EXP_ROOT:-}" ]] && root_now="${MTX_EXP_ROOT:A}"

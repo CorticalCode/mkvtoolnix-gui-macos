@@ -1,5 +1,19 @@
 # Changelog
 
+## Build logs and cleaning (2026-10-20)
+
+- **Every log is kept.** Each run of `build-local.sh`, `tools/refresh-deps.sh` and
+  `tools/build-exp.sh` writes its own log in `logs/` from its first line, and a report beside it,
+  including failed and refused runs. Nothing deletes or overwrites a log.
+- **Builds remove only their own output.** Each run records what it created in the build root's
+  `run-records/`; a build removes only those entries and stops, with a list, on anything else except the
+  kept entries, `.DS_Store` files and logs. `tools/adopt-entries.sh` records existing entries once, after you have looked at them.
+- **Experimental builds keep a folder each**, `build/exp/<build-id>/`, with a log and report per
+  attempt and, for a try build, the uncommitted work it compiled. `--cache-drop` and
+  `--clear-cache` refuse to remove an entry a kept build used; the one exception is `--cache-drop`
+  of an entry whose package does not match its checksum, which it removes and says which kept
+  builds used it.
+
 ## CI release check (2026-10-18)
 
 - **The newest-tag lookup tries three times and says why it failed.** When no tag is given, CI

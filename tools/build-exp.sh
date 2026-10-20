@@ -3,8 +3,8 @@
 #
 # Try mode builds a source tree as it is; series mode builds an exact upstream
 # commit plus named changes, so its builds can be compared. Library builds are
-# cached by a key of their inputs (tools/exp/). DMGs go to build/; release/ is
-# never touched. See --help.
+# cached by a key of their inputs (tools/exp/). Each build's DMG goes to its
+# own folder, build/exp/<build-id>/; release/ is never touched. See --help.
 
 if [[ -z "${ZSH_VERSION}" ]]; then
   echo "ERROR: This script requires zsh. Run it with: ./tools/build-exp.sh" >&2
@@ -166,7 +166,8 @@ Usage:
   ./tools/build-exp.sh --cache-drop <library>/<key> | --clear-cache
 
 Experimental MKVToolNix builds under MTX_EXP_ROOT (default /opt/mtx-exp).
-DMGs go to build/; release/ is never touched.
+Each build's DMG goes to its own folder, build/exp/<build-id>/; release/ is
+never touched.
 
 Modes:
   --source <path>     Try mode: build a source tree as it is, uncommitted edits
@@ -187,7 +188,7 @@ Modes:
 Libraries:
   Each library build is cached in MTX_EXP_ROOT/cache under a key of everything
   that shaped it. A build restores what it can and, while anything is missing,
-  stops with the prefix not wiped and no library built, and lists what is
+  stops with the prefix not cleaned and no library built, and lists what is
   missing.
   --build-missing     Build the libraries the cache lacks, and keep them.
   --cache-drop L/KEY  Remove one entry (at least 12 characters of the key).
@@ -678,13 +679,13 @@ if [[ ${#MISSING[@]} -gt 0 && ${BUILD_MISSING} -eq 0 ]]; then
   for lib in "${MISSING[@]}"; do
     echo "         ${lib}  ${EXP_KEY[${lib}][1,12]}  not cached" >&2
   done
-  echo "       The prefix was not wiped and no library was built. To build them now" >&2
+  echo "       The prefix was not cleaned and no library was built. To build them now" >&2
   echo "       and keep them for later runs, run:" >&2
   echo "         ${(q)0} ${(@q)_EXP_ARGV} --build-missing" >&2
   exit 1
 fi
 
-# --- Wipe the prefix, then assemble the libraries in build order ---
+# --- Clean the prefix, then assemble the libraries in build order ---
 # Each library is restored or built at its turn, so each build sees exactly
 # the libraries before it in the prefix, as a clean build would. Library
 # builds start from the environment exp_build_env sets and nothing else: the
@@ -748,8 +749,8 @@ cd "${FORK_BUILD_DIR}/packaging/macos"
 
 # Build the shared-mime-info dep (#6248): it installs the FreeDesktop MIME DB that
 # build_configured_mkvtoolnix embeds via qt_resources_macos.qrc. It is not one of
-# the cached libraries, and the prefix wipe removed any prior install, so build it
-# explicitly here, before configured_mkvtoolnix.
+# the cached libraries, and cleaning the prefix removed any earlier install, so
+# build it explicitly here, before configured_mkvtoolnix.
 ( unset NO_EXTRACTION; ./build.sh shared_mime_info )
 
 echo ""

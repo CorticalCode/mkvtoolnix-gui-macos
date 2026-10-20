@@ -19,6 +19,8 @@
 #   build/   compile workspace (upstream's CMPL)
 #   src/     downloaded source tarballs
 #   stage/   DESTDIR staging root used by myinstall.sh
+#   run-records/  one record per run of what it created and removed in
+#            prefix/, build/ and stage/ (tools/lib/run-record.zsh)
 #
 # PACKAGE_DIR and DOCBOOK_XSL_ROOT_DIR stay under TARGET because the cache
 # round-trip depends on it: the docbook package is created relative to TARGET
@@ -29,9 +31,11 @@ export MTX_ROOT="${MTX_ROOT:-/opt/mtx}"
 
 # The root must be absolute, and must neither equal, lie inside nor hold the
 # experimental root (/opt/mtx-exp, or MTX_EXP_ROOT when set): this file is
-# read from more than one working directory, and each track wipes its own
-# prefix. Folders that exist are compared with symlinks resolved. Written for
-# zsh and bash alike: tools/backfill-sha256.sh reads this file with bash.
+# read from more than one working directory, and each track cleans its own
+# root by the run records kept there, so overlapping roots could let one
+# track remove the other's build output. Folders that exist are compared with
+# symlinks resolved. Written for zsh and bash alike: tools/backfill-sha256.sh
+# reads this file with bash.
 _mtx_exp_root="${MTX_EXP_ROOT:-/opt/mtx-exp}"
 _mtx_real() {
   local p="$1"
@@ -57,7 +61,8 @@ if ! _mtx_rel=$(_mtx_real "${MTX_ROOT}") || ! _mtx_exp=$(_mtx_real "${_mtx_exp_r
 fi
 if _mtx_within "${_mtx_rel}" "${_mtx_exp}" || _mtx_within "${_mtx_exp}" "${_mtx_rel}"; then
   echo "ERROR: MTX_ROOT (${_mtx_rel}) overlaps the experimental root (${_mtx_exp})." >&2
-  echo "       Each track wipes its own prefix, so one would destroy the other's." >&2
+  echo "       Each track cleans its own root by its run records; overlapping roots" >&2
+  echo "       could let one remove the other's build output." >&2
   echo "       Set MTX_ROOT or MTX_EXP_ROOT so that neither folder holds the other." >&2
   exit 1
 fi

@@ -6,7 +6,7 @@ The build system caches compiled dependencies so that subsequent builds only nee
 
 When you run `./build-local.sh release-XX.0`:
 
-1. The workspace (`/opt/mtx/prefix/`) is wiped clean, except the proven cache beneath it. Downloaded source tarballs live outside it at `/opt/mtx/src/` and are never in scope
+1. The workspace (`/opt/mtx/prefix/`) is cleaned: what earlier builds recorded making is removed, the proven cache beneath it stays, and an entry no build recorded stops the build before anything is removed. Downloaded source tarballs live outside it at `/opt/mtx/src/` and are never in scope
 2. Each cached package is checked twice before anything is extracted: its **`.sha256` sidecar** proves the file is intact, and its **`.manifest.json`** proves it was built from the source tarball this release tag declares, with the patch set this tree carries, under the prefix this tree installs to. A mismatch on any of the three, a missing sidecar, or a missing manifest aborts the build (see [trust-model.md §6](trust-model.md) for context).
 3. If all dependencies are found, only shared-mime-info and MKVToolNix are built from source
 4. If any are missing, a full build from source runs automatically

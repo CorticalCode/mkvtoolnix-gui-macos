@@ -169,10 +169,12 @@ Options:
 
 Default behavior:
   Checks the proven cache against the tag. If every package matches,
-  wipes the workspace, restores them, and builds shared-mime-info and
-  mkvtoolnix. If any package is missing, wipes the workspace and builds
-  everything from source. If any contradicts the tag, stops before
-  wiping and names what to run.
+  cleans recorded build output, restores them, and builds
+  shared-mime-info and mkvtoolnix. If any package is missing, cleans
+  and builds everything from source. If any contradicts the tag, stops
+  before cleaning and names what to run. An entry no build recorded
+  stops the run; tools/adopt-entries.sh records it after you have
+  looked.
 
 Environment:
   MTX_ROOT          Build root (default: /opt/mtx). Everything derives from
@@ -878,7 +880,7 @@ function validate_proven_cache {
   #       2 cache contradicts the tag (caller must stop)
   #
   # Reads only, and runs before clean_workspace: a refusal is a question for a
-  # person, and handing them a wiped tree costs them the workspace they had.
+  # person, and handing them a cleaned tree costs them the workspace they had.
   local proven_dir="${TARGET}/proven/${ARCH_LABEL}"
   local pkg idx spec sha vmsg vrc
   local -a missing=() present=() refused=() drifted=()
@@ -934,7 +936,7 @@ function validate_proven_cache {
 
   # A refusal outranks an incomplete cache, so this is weighed before the
   # missing count. The other order lets one absent package hide a present one
-  # that contradicts the tag: the caller sees 1, wipes, and rebuilds from source
+  # that contradicts the tag: the caller sees 1, cleans, and rebuilds from source
   # instead of stopping to ask.
   if [[ ${#refused[@]} -gt 0 ]]; then
     echo ""
@@ -1637,7 +1639,7 @@ case "${BUILD_MODE}" in
     if [[ ${cache_rc} -eq 2 ]]; then
       # Refusal, not absence. Demoting to a full build here would paper over a
       # cache that disagrees with the tag; the message above says what to run.
-      # Nothing has been wiped yet, so the existing workspace survives.
+      # Nothing has been cleaned yet, so the existing workspace survives.
       exit 1
     fi
     clean_workspace

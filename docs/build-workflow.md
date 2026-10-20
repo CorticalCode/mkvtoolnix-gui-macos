@@ -62,11 +62,11 @@ flowchart TD
     RC3 --> RC4["Clean up repo LFS objects"]
     RC4 --> RC5(("Exit<br/><i>cache ready</i>"))
 
-    MODE -->|--full| F1["Wipe workspace"]
+    MODE -->|--full| F1["Clean recorded build output"]
     F1 --> F2["Build ALL deps from source"]
     F2 --> POST
 
-    MODE -->|default / auto| A1["Wipe workspace"]
+    MODE -->|default / auto| A1["Clean recorded build output"]
     A1 --> A2{"/opt/mtx/prefix/proven/{arch}/<br/>has all packages?"}
     A2 -->|Yes| A3["Restore deps from cache"]
     A3 --> A4["Build shared-mime-info<br/>and mkvtoolnix"]
@@ -246,7 +246,7 @@ These files are **tracked in git on purpose**, so the counter persists across ma
 - Production: `MKVToolNix-{ver}-{arch}-rel{NNN}-{branch}.dmg`
 - Experimental: `MKVToolNix-{ver}-{arch}-exp{NNN}-{slug}-{hash}.dmg`
 
-This correlates binaries with entries in `build-report-{tag}.txt`, which helps when diagnosing failures across machines. Builds before 2026-05-06 used a single combined `.build-counter-{arm,intel}` with a `b{NNN}` prefix; pre-rename DMGs in `build/` retain those filenames as historical record.
+This correlates binaries with entries in the build reports in `logs/`, which helps when diagnosing failures across machines. Builds before 2026-05-06 used a single combined `.build-counter-{arm,intel}` with a `b{NNN}` prefix; pre-rename DMGs in `build/` retain those filenames as historical record.
 
 ### Resetting the counter
 
@@ -260,11 +260,34 @@ rm .build-counter-arm-exp .build-counter-intel-exp
 
 The counter then restarts at 1 and increments locally from there. **Do not push resets back to this repo** — doing so would collide with the maintainer's build numbering.
 
+## Logs and run records
+
+Every run of `build-local.sh`, `tools/refresh-deps.sh` and `tools/build-exp.sh` except `--help`
+(`-h`) writes its own log in `logs/` (`MTX_LOG_DIR`) from its first line, and a report beside it
+on every exit, whether it builds, fails or is refused; `tools/adopt-entries.sh --adopt` writes a
+log and no report, and listing without `--adopt` writes neither. No script deletes or
+overwrites a log. A log is renamed in two places: a release build that gets a build number renames
+it to match its DMG, in the same folder; an experimental build moves it, once the build has a
+number, into `build/exp/<build-id>/` (`EXP_KEPT_BUILDS_DIR`) as `attempt-<n>.log`, with the report
+beside it as `attempt-<n>.report.txt`. An experimental run refused before that keeps its log in
+`logs/`.
+
+Each run that works on a build root also keeps a record in its `run-records/`: the entries of
+`prefix/`, `build/` and `stage/` it created and removed.
+
+A build removes only entries a record says a build created, printing each. Anything else —
+something you put there, or what a run that was killed outright made — stops the build before it
+removes anything, with a list. Three kinds of entry never stop a run: the kept entries
+`prefix/proven` (the release cache) and `build/mkvtoolnix-src` (the release clone), which a build
+leaves where they are; `.DS_Store` files; and upstream's own logs in `build/`
+(`build-*.log`, `build-report-*.txt`), which the check moves to the logs folder. `./tools/adopt-entries.sh <root>` shows
+the entries that do stop a run; after looking at each, `--adopt` records them as build output.
+
 ## Experimental Builds
 
 `tools/build-exp.sh` compiles MKVToolNix from something other than a signed release: a worktree
 with a fix in progress, or an upstream commit with named changes applied. Its DMGs are for testing
-and comparison. They go to `build/` as `MKVToolNix-{next}pre-{arch}-exp{NNN}-{slug}-{hash}.dmg`
+and comparison. Each goes to its build's folder, `build/exp/<build-id>/`, as `MKVToolNix-{next}pre-{arch}-exp{NNN}-{slug}-{hash}.dmg`
 (`{next}` is the source's major version plus one), never to `release/`, each with a `.sha256` and
 a schema-2 `.manifest.json` recording the mode, the pin and changes, each library's key and whether
 it was restored or built, the toolchain, and the size of every program and library in the bundle.
@@ -282,14 +305,15 @@ sudo mkdir -p /opt/mtx-exp && sudo chown "$(id -un)" /opt/mtx-exp
 
 | Folder | Holds |
 |--------|-------|
-| `prefix/` | The install prefix that libraries and MKVToolNix build against; wiped before each build assembles its libraries |
-| `build/` | The compile workspace (upstream's `CMPL`) and the build logs |
+| `prefix/` | The install prefix that libraries and MKVToolNix build against; cleaned before each build assembles its libraries |
+| `build/` | The compile workspace (upstream's `CMPL`) |
 | `stage/` | Each library's install, before it is packaged |
 | `src/` | Downloaded source tarballs |
 | `cache/` | Library builds, one entry per key |
+| `run-records/` | What each run created and removed; never removed |
 
 The root must be an absolute path, and is refused inside the home folder or when it equals, lies
-inside or holds the release root (`/opt/mtx`, or `MTX_ROOT` when set): each track wipes its own
+inside or holds the release root (`/opt/mtx`, or `MTX_ROOT` when set): each track cleans its own
 prefix. `build-local.sh` never reads the experimental root, and an experimental build never borrows
 the release cache, because every cached package records the prefix it was built under.
 
@@ -311,7 +335,7 @@ when. The key is a SHA-256 of:
 The toolchain is recorded with each entry and in each build manifest, not keyed, so an Xcode update
 does not empty the cache. An entry is written to a temporary folder and renamed into place, and is
 never overwritten. Every entry a build will use is checked against its checksum before the prefix is
-wiped; a damaged one stops the build, which names the `--cache-drop` command that removes it.
+cleaned; a damaged one stops the build, which names the `--cache-drop` command that removes it.
 `shared-mime-info` and MKVToolNix itself are compiled on every build and not cached.
 
 ### How a build assembles
@@ -319,16 +343,18 @@ wiped; a damaged one stops the build, which names the `--cache-drop` command tha
 1. Stage the source, by mode (below), with the wrapper's `config/config.exp.local.sh` as
    `packaging/macos/config.local.sh`.
 2. Compute every library's key, in `build.sh`'s build order.
-3. If any key has no entry, stop: the prefix is not wiped and nothing is built. The build lists
+3. If any key has no entry, stop: the prefix is not cleaned and nothing is built. The build lists
    what is missing and prints the same command with `--build-missing`, which builds the missing
    libraries and keeps them.
-4. Wipe the prefix.
+4. Clean the prefix and the stage folder: remove what earlier builds recorded creating. (Anything
+   no build recorded has already stopped the build, listed, at the root check that runs before the
+   source is staged; `./tools/adopt-entries.sh` records it after you have looked.)
 5. In build order, restore each library from its entry or build and store it, so each library sees
    exactly the ones before it, as in a clean build. Library builds start from an environment
    holding only `HOME`, the `PATH` the script was started with, `TMPDIR`, `MTX_EXP_ROOT`, and a
    `ZDOTDIR` with no zsh startup files, so what `build.sh` sees is what the key hashed.
 6. Build `shared-mime-info`, MKVToolNix and the DMG, verify them, and write the DMG, its checksum
-   and its manifest to `build/`. The build number advances only once all three are in place.
+   and its manifest to `build/exp/<build-id>/`, beside each attempt's log and report. The build number advances only once all three are in place.
 
 ### Try mode and series mode
 
@@ -337,7 +363,9 @@ worktree while working on a fix. In a git checkout it first checks out each subm
 the tree records (`git submodule update --init --recursive`). When the folder is the top of a
 repository, the manifest records its branch and commit and a SHA-256 of its uncommitted work:
 tracked changes and untracked files that are not ignored, in the tree and in every submodule checked
-out in it. `--slug` names the DMG; the default is the folder's name.
+out in it. Each attempt also saves that work in its build's folder, as `attempt-<n>.uncommitted/`:
+per repository with changes, a `.diff` and, when it has untracked files, an `.untracked.tar`.
+`--slug` names the DMG; the default is the folder's name.
 
 **Series mode**, `--pin <ref> [--with a,b,...]`, builds an exact upstream commit plus named
 changes, so the same pin can be compared with and without a change. `MTX_EXP_UPSTREAM` names a

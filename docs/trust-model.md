@@ -140,7 +140,7 @@ This build chain is designed to resist:
 - **Mirror compromise of dependency sites** (Qt's mirrors, boost's, etc.) — caught by SHA256 against `specs.sh`
 - **In-transit modification** (HTTPS plus checksums)
 - **Build environment contamination** (Homebrew leak detection)
-- **Stale build artifacts** (workspace wipe before each build)
+- **Stale build artifacts** (each build first removes what earlier builds recorded making, and stops on any entry no build recorded)
 - **Local tampering with cached dependencies** (SHA256 sidecar verification on restore)
 
 It is **not** designed to resist:

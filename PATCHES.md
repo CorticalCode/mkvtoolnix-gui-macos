@@ -265,7 +265,7 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 ## Build script fixes (in `build-local.sh`)
 
-**Proven cache architecture:** Compiled dependency packages are stored in an architecture-specific proven cache (`/opt/mtx/prefix/proven/arm/` or `/opt/mtx/prefix/proven/intel/`). Each build wipes the workspace (everything under `/opt/mtx/prefix/` except the `proven/` cache beneath it; downloaded source tarballs live outside at `/opt/mtx/src/`), restores from the proven cache for the current architecture, and only builds what's missing. If all deps are available, only mkvtoolnix and shared-mime-info (which has no cacheable package) are rebuilt (minutes instead of hours). A full rebuild from source is available with `--full`.
+**Proven cache architecture:** Compiled dependency packages are stored in an architecture-specific proven cache (`/opt/mtx/prefix/proven/arm/` or `/opt/mtx/prefix/proven/intel/`). Each build cleans the workspace (it removes the entries earlier builds recorded creating under `/opt/mtx/{prefix,build,stage}/`, and stops on any others; the `proven/` cache beneath `prefix/` and the release clone `build/mkvtoolnix-src` stay; downloaded source tarballs live outside at `/opt/mtx/src/`), restores from the proven cache for the current architecture, and only builds what's missing. If all deps are available, only mkvtoolnix and shared-mime-info (which has no cacheable package) are rebuilt (minutes instead of hours). A full rebuild from source is available with `--full`.
 
 **Promotion workflow:** After a successful build and manual testing, `--promote` archives the current proven cache to Git LFS, atomically swaps in the new packages, and commits. Uses directory-swap for atomicity — interruption at any point leaves either old or new proven intact. Each promoted package gets a `.manifest.json` recording the source tarball it was built from. A smart-restore build legitimately leaves `packages/` incomplete, which promotion reports as a successful no-op when the cache already covers the tag.
 
@@ -275,7 +275,7 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 **Post-build verification:** Checks Qt version in binary, architecture of all binaries and dylibs, duplicate dylib scan, size sanity (60-95 MB range), Homebrew/external library leak detection, and bundle inventory. Each check fails closed: an absent input (no dylibs found, no `otool` output) is reported as a failure rather than a clean result. If verification does not pass, promotion is blocked **and** the release-named DMG is withheld — only the internal `build/` copy is written, for diagnosis.
 
-**Pre-build verification:** the Qt version is derived from `specs.sh` at the signed release tag, so there is no pin to drift, and the upstream source tarball's OpenPGP signature is verified before upstream's `build.sh` runs. Stale build directories are cleaned up for all dependencies. The built binary's Qt version is checked after the build.
+**Pre-build verification:** the Qt version is derived from `specs.sh` at the signed release tag, so there is no pin to drift, and the upstream source tarball's OpenPGP signature is verified before upstream's `build.sh` runs. The built binary's Qt version is checked after the build.
 
 **EXPECTED_PACKAGES derived from specs.sh:** Package names are extracted dynamically from upstream's `spec_*` variables after sourcing specs.sh. Fails fast if any spec variable is missing (catches upstream renames). Eliminates version drift between specs.sh and the build script.
 
@@ -283,7 +283,7 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 **DocBook XSL in cache:** Archived and restored alongside compiled packages.
 
-**Error handling:** ERR trap prints line number and exit code on any command failure. Build output tee'd to timestamped log file. Build report with summary written after each build. Patch application distinguishes "already applied" from "genuinely broken."
+**Error handling:** ERR trap prints line number and exit code on any command failure. Every run writes its own log in `logs/` from its first line, and a report beside it on every exit, failed and refused runs included. Patch application distinguishes "already applied" from "genuinely broken."
 
 **`command <tool>` throughout:** macOS zsh aliases `cp` to `cp -i`, and a Homebrew-first PATH can put GNU versions of `find`, `stat`, and `sed` ahead of the BSD ones. Calling tools via `command` bypasses aliases, and the scripts avoid flags that differ between the BSD and GNU implementations, so either set works.
 
@@ -328,4 +328,4 @@ This patch combines two changes to the same file to avoid context conflicts when
 - Added stale Qt directory cleanup before extraction
 - Added post-build check: confirms Qt version in the built binary
 
-**Lesson:** Stale build artifacts can silently produce incorrect builds. Version changes must be validated end-to-end, not just at the download step. The build cache architecture now wipes the workspace before every build, preventing this class of error.
+**Lesson:** Stale build artifacts can silently produce incorrect builds. Version changes must be validated end-to-end, not just at the download step. The build cache architecture cleans the workspace of earlier builds' output before every build, preventing this class of error.

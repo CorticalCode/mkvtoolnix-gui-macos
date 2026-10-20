@@ -119,7 +119,7 @@ jobs:
           test -w /opt/mtx
 
       # Layer 1: GitHub Actions cache (ephemeral, 7-day TTL) of the downloaded
-      # source tarballs. They sit outside the prefix, which every build wipes
+      # source tarballs. They sit outside the prefix, which every build cleans
       # before it starts, so they survive to be used; packages in the prefix
       # would not, which is why the dependencies come from layer 2 every run.
       - name: Restore source tarball cache
