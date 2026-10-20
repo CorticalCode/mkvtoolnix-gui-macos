@@ -20,6 +20,48 @@ setopt NULL_GLOB
 unalias -a 2>/dev/null || true
 
 SCRIPT_DIR=${0:a:h:h}
+source "${SCRIPT_DIR}/tools/lib/run-record.zsh" || exit 1
+# Every run except --help keeps a log of its own from here on, and a report
+# beside it (tools/lib/run-record.zsh). A dry run keeps no run record.
+if (( ! ${argv[(Ie)--help]} && ! ${argv[(Ie)-h]} )); then
+  _run_mode=rebuild
+  (( ${argv[(Ie)--dry-run]} )) && _run_mode=dry-run
+  run_log_start "${MTX_LOG_DIR:-${SCRIPT_DIR}/logs}" refresh-deps "${_run_mode}" || exit 1
+fi
+# The packages repromoted into the cache so far, for the report.
+typeset -a REPROMOTED_PACKAGES=()
+_refresh_report() {
+  local rc="$1" report
+  [[ -n "${RUN_LOG}" ]] || return 0
+  report=$(run_report_path)
+  {
+    print -r -- "Dependency refresh report"
+    print -r -- "Tag: ${TAG:-none}"
+    print -r -- "Mode: ${_run_mode}"
+    print -r -- "Planned: ${REBUILD_PACKAGES[*]:-nothing}"
+    print -r -- "Repromoted: ${REPROMOTED_PACKAGES[*]:-nothing}"
+    if (( rc == 0 )); then print -r -- "Result: ok"; else print -r -- "Result: failed (exit ${rc})"; fi
+    print -r -- "Log: ${RUN_LOG}"
+  } > "${report}" || { print -r -- "WARNING: could not write ${report}"; return 0; }
+  print -r -- "==> Report: ${report}"
+  print -r -- "==> Log: ${RUN_LOG}"
+}
+# _refresh_finish <exit-status> — the run's finish: the report, then the
+# record's close. It runs once, from the EXIT trap or from TRAPZERR
+# (tools/lib/run-record.zsh, run_finish), which finishes a run that set -e ends
+# inside a function, where zsh skips the EXIT trap. Neither step may stop the
+# other under set -e; each prints its own errors.
+_refresh_finish() {
+  _refresh_report "$1" || true
+  run_record_close "$1" || true
+  sleep 0.1
+}
+trap 'run_finish _refresh_finish $?' EXIT
+TRAPZERR() {
+  local rc=$?
+  run_finish_zerr _refresh_finish "${rc}" || true
+}
+trap 'echo "==> Interrupted."; exit 130' INT TERM HUP
 UPSTREAM_URL="https://codeberg.org/mbunkus/mkvtoolnix.git"
 # Build locations come from the config overlay — the same file the build copies
 # into the upstream tree — so this tool refreshes packages in the tree the
@@ -63,6 +105,15 @@ done
 if [[ -z "${TAG}" ]]; then
   echo "ERROR: release tag required (e.g. release-101.0)" >&2
   exit 1
+fi
+
+if [[ "${TARGET:A}" != "${MTX_ROOT:A}/prefix" ]]; then
+  echo "ERROR: TARGET (${TARGET}) must be ${MTX_ROOT}/prefix." >&2
+  exit 1
+fi
+if [[ ${DRY_RUN} -eq 0 ]]; then
+  run_record_open "${MTX_ROOT}" refresh-deps.sh rebuild || exit 1
+  run_check_root "${MTX_ROOT}" || exit 1
 fi
 
 MACHINE_ARCH=$(uname -m)
@@ -422,12 +473,7 @@ fi
 # build_<dep> functions link against what is already installed in the prefix.
 echo ""
 echo "==> Preparing the workspace..."
-for item in "${TARGET}"/*; do
-  case "${item:t}" in
-    proven|source) continue ;;
-  esac
-  command rm -rf "${item}"
-done
+run_clean_area "${MTX_ROOT}" prefix || exit 1
 mkdir -p "${TARGET}/include" "${TARGET}/lib" "${TARGET}/bin" "${PACKAGE_DIR}"
 
 echo "==> Restoring the cached dependencies built before ${EXPECTED_PACKAGES[$FIRST_STALE]}..."
@@ -495,10 +541,15 @@ echo ""
 echo "==> Repromoting ${#REBUILD_PACKAGES[@]} rebuilt package(s)..."
 for pkg in "${REBUILD_PACKAGES[@]}"; do
   built="${PACKAGE_DIR}/${pkg}.tar.gz"
+  if [[ -f "${PROVEN_DIR}/${pkg}.tar.gz" ]]; then
+    echo "    replacing ${pkg} (old sha256 $(shasum -a 256 < "${PROVEN_DIR}/${pkg}.tar.gz" | cut -d' ' -f1))"
+  fi
   command cp "${built}" "${PROVEN_DIR}/${pkg}.tar.gz"
   (cd "${PROVEN_DIR}" && shasum -a 256 "${pkg}.tar.gz" > "${pkg}.tar.gz.sha256")
+  echo "    new sha256 $(cut -d' ' -f1 < "${PROVEN_DIR}/${pkg}.tar.gz.sha256")"
   _refresh_write_manifest "${pkg}" "${PROVEN_DIR}/${pkg}.tar.gz.manifest.json"
   echo "    promoted ${pkg} (+ .sha256, + .manifest.json)"
+  REPROMOTED_PACKAGES+=("${pkg}")
 done
 
 echo ""

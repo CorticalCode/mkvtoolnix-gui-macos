@@ -13,6 +13,79 @@ set -e
 setopt NULL_GLOB  # Unmatched globs expand to nothing instead of aborting
 unalias -a 2>/dev/null || true  # Prevent .zshenv aliases from leaking into script
 
+SCRIPT_DIR=${0:a:h}
+source "${SCRIPT_DIR}/tools/lib/run-record.zsh" || exit 1
+
+# Every run except --help keeps a log of its own from here on, and a report
+# beside it, whatever the exit path (tools/lib/run-record.zsh).
+if (( ! ${argv[(Ie)--help]} && ! ${argv[(Ie)-h]} )); then
+  _run_mode=build
+  for _a in "$@"; do
+    case "${_a}" in
+      --full|--promote|--restore-cache|--cleanup-lfs) _run_mode="${_a#--}" ;;
+    esac
+  done
+  run_log_start "${MTX_LOG_DIR:-${SCRIPT_DIR}/logs}" build-local "${_run_mode}" || exit 1
+  unset _a
+fi
+BUILD_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+SECONDS=0
+
+# write_report <exit-status> — the build report, written beside the log on
+# every exit; its Result line says how the run ended.
+function write_report {
+  [[ -n "${RUN_LOG}" ]] || return 0
+  local rc="$1" report_file
+  report_file=$(run_report_path)
+  {
+    local elapsed=$SECONDS
+    local mins=$((elapsed / 60))
+    local secs=$((elapsed % 60))
+    echo "Build Report: MKVToolNix${VERSION:+ ${VERSION}}"
+    echo "Started: ${BUILD_START_TIME}"
+    echo "Finished: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "Elapsed: ${mins}m $(printf '%02d' ${secs})s"
+    echo "Architecture: ${MACHINE_ARCH} (${ARCH_LABEL})"
+    echo "Mode: ${BUILD_MODE:-${_run_mode}}"
+    echo "Build: ${BUILD_SUMMARY:-unknown}"
+    if (( rc == 0 )); then echo "Result: completed"; else echo "Result: FAILED (exit ${rc})"; fi
+    echo ""
+    case "${BUILD_MODE:-${_run_mode}}" in
+      build|auto|full|promote)
+        echo "Verification: $(if [[ "${VERIFY_PASSED}" == true ]]; then echo "PASSED"; else echo "FAILED"; fi)"
+        [[ -n "${BUILT_QT_VERSION}" ]] && echo "Qt version: ${BUILT_QT_VERSION} (expected ${QTVER})"
+        [[ -n "${size_mb}" ]] && echo "App size: ${size_mb} MB"
+        echo ""
+        ;;
+    esac
+    # Only files the run wrote: the release copy when one was made, the internal
+    # copy when it is in build/.
+    [[ -n "${DMG_RELEASE_NAME}" && "${release_emitted}" == true ]] && echo "Release: ${RELEASE_DIR}/${DMG_RELEASE_NAME}"
+    [[ -n "${DMG_NAME}" && -f "${BUILD_DIR}/${DMG_NAME}" ]] && echo "Internal: ${BUILD_DIR}/${DMG_NAME}"
+    echo "Log: ${RUN_LOG}"
+  } > "${report_file}" || return 1
+  echo "==> Build report: ${report_file}"
+  echo "==> Log: ${RUN_LOG}"
+}
+
+# _build_local_finish <exit-status> — the run's finish: the report, then the
+# record's close. It runs once, from the EXIT trap or from TRAPZERR below
+# (tools/lib/run-record.zsh, run_finish). Neither step may stop the other under
+# set -e; each prints its own errors.
+function _build_local_finish {
+  local rc="$1"
+  if (( rc == 0 )); then
+    BUILD_SUMMARY="${BUILD_SUMMARY:-${BUILD_MODE:-${_run_mode}}: completed}"
+  else
+    BUILD_SUMMARY="${BUILD_SUMMARY:-FAILED (exit ${rc})}"
+  fi
+  write_report ${rc} || true
+  run_record_close ${rc} || true
+  sleep 0.1  # allow tee to flush
+}
+trap 'run_finish _build_local_finish $?' EXIT
+trap 'echo "==> Interrupted."; exit 130' INT TERM HUP
+
 # --- Startup tool probe ---
 # Verify required external tools are reachable in PATH before doing real work.
 # Without this, a missing tool surfaces mid-build with a cryptic pipe error;
@@ -44,11 +117,15 @@ for _t in "${_required_tools[@]}"; do
 done
 unset _t _required_tools
 
+# A failure that set -e turns into the end of the run: says where, then
+# finishes the run, which zsh's EXIT trap skips when the failure is inside a
+# function. Each step goes on whatever the one before it did.
 TRAPZERR() {
-  echo "ERROR: build-local.sh failed at ${funcfiletrace[1]:-line ${LINENO}} (exit code $?)" >&2
+  local rc=$?
+  echo "ERROR: build-local.sh failed at ${funcfiletrace[1]:-line ${LINENO}} (exit code ${rc})" >&2 || true
+  run_finish_zerr _build_local_finish "${rc}" || true
 }
 
-SCRIPT_DIR=${0:a:h}
 UPSTREAM_URL="https://codeberg.org/mbunkus/mkvtoolnix.git"
 
 # Detect architecture
@@ -62,31 +139,14 @@ else
 fi
 echo "==> Shell: zsh ${ZSH_VERSION}, arch: ${MACHINE_ARCH} (${ARCH_LABEL})"
 
-function wipe_workspace {
-  echo "==> Wiping workspace (preserving proven/, source/, and upstream clone)..."
-
-  # Clean TARGET (/opt/mtx/prefix/) — preserve the proven cache and source tarballs
-  local preserve_proven="${TARGET}/proven"
-  local preserve_source="${TARGET}/source"
-
-  for item in "${TARGET}"/*; do
-    [[ "${item}" == "${preserve_proven}" ]] && continue
-    [[ "${item}" == "${preserve_source}" ]] && continue
-    echo "    Removing ${item:t}/"
-    command rm -rf "${item}"
-  done
-
-  # Clean WORK_DIR (/opt/mtx/build/) — preserve upstream clone and active log
-  local preserve_clone="${WORK_DIR}/mkvtoolnix-src"
-
-  for item in "${WORK_DIR}"/*; do
-    [[ "${item}" == "${preserve_clone}" ]] && continue
-    [[ "${item}" == "${LOG_FILE}" ]] && continue
-    echo "    Removing ${item:t}"
-    command rm -rf "${item}"
-  done
-
-  # Recreate essential directories
+# Removes what earlier runs made in the build root's prefix, work folder and
+# staging folder: only entries a run record says a build created, each one
+# printed (tools/lib/run-record.zsh). The release cache and the clone stay.
+function clean_workspace {
+  echo "==> Cleaning the workspace (only what earlier builds recorded creating)..."
+  run_clean_area "${MTX_ROOT}" prefix || exit 1
+  run_clean_area "${MTX_ROOT}" build || exit 1
+  run_clean_area "${MTX_ROOT}" stage || exit 1
   mkdir -p "${TARGET}/include" "${TARGET}/lib" "${TARGET}/bin" "${PACKAGE_DIR}"
   echo "==> Workspace clean."
 }
@@ -817,7 +877,7 @@ function validate_proven_cache {
   # Exit: 0 usable · 1 cache incomplete (caller may demote to a full build)
   #       2 cache contradicts the tag (caller must stop)
   #
-  # Reads only, and runs before wipe_workspace: a refusal is a question for a
+  # Reads only, and runs before clean_workspace: a refusal is a question for a
   # person, and handing them a wiped tree costs them the workspace they had.
   local proven_dir="${TARGET}/proven/${ARCH_LABEL}"
   local pkg idx spec sha vmsg vrc
@@ -886,9 +946,9 @@ function validate_proven_cache {
       echo "    (plus ${#missing[@]} package(s) absent, listed above)"
     fi
     echo ""
-    echo "  Nothing was extracted, and the dependency prefix and proven/ are"
-    echo "  intact. The upstream clone and the per-package build directories"
-    echo "  were already reset earlier in this run."
+    echo "  Nothing was extracted or cleaned: the dependency prefix, proven/ and"
+    echo "  the work folder are as they were, apart from the upstream clone, which"
+    echo "  this run reset and patched."
     # A schema or prefix refusal is a property of how the cache was built, not
     # of which packages drifted, so the per-dependency remedies cannot clear
     # it: re-pulling from LFS returns the same manifests, and refresh-deps
@@ -1030,6 +1090,22 @@ function _publish_cache_to_repo {
   (cd "${SCRIPT_DIR}" && git add -A "proven/${ARCH_LABEL}/" && { git diff --cached --quiet || git commit -m "${subject}" -- "proven/${ARCH_LABEL}/"; })
 }
 
+# _promote_staging_free <target> <arch> — 0 when no earlier promote left its
+# staging folder (proven-<arch>-new) or its swapped-out cache (proven-<arch>-old)
+# behind; otherwise names each one found, since promoting over either would mix
+# that run's files into the cache.
+function _promote_staging_free {
+  local leftover found=0
+  for leftover in "$1/proven-$2-new" "$1/proven-$2-old"; do
+    if [[ -e "${leftover}" ]]; then
+      echo "ERROR: ${leftover} is left from an earlier promote that did not finish." >&2
+      echo "       Look at it, move it to the Trash, then promote again." >&2
+      found=1
+    fi
+  done
+  (( found == 0 ))
+}
+
 function do_promote {
   local proven_dir="${TARGET}/proven/${ARCH_LABEL}"
   local packages_dir="${PACKAGE_DIR}"
@@ -1131,6 +1207,8 @@ function do_promote {
 
   echo "==> Promoting ${#EXPECTED_PACKAGES[@]} packages + docbook-xsl (${ARCH_LABEL})..."
 
+  _promote_staging_free "${TARGET}" "${ARCH_LABEL}" || exit 1
+
   # Step 1: Archive current proven to LFS
   local proven_files=("${proven_dir}"/*.tar.gz)
   if [[ -d "${proven_dir}" ]] && [[ ${#proven_files[@]} -gt 0 ]]; then
@@ -1162,8 +1240,8 @@ function do_promote {
   (cd "${proven_new}" && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
   _write_cache_manifests "${proven_new}"
 
-  # Step 3: Atomic swap — clean up stale old dir first to prevent nesting
-  command rm -rf "${TARGET}/proven-${ARCH_LABEL}-old"
+  # Step 3: Atomic swap — no stale -old dir to nest into: _promote_staging_free
+  # refused one before step 1
   if [[ -d "${proven_dir}" ]]; then
     command mv "${proven_dir}" "${TARGET}/proven-${ARCH_LABEL}-old"
   fi
@@ -1171,9 +1249,7 @@ function do_promote {
   command mv "${proven_new}" "${proven_dir}"
 
   # Step 4: Cleanup old
-  if [[ -d "${TARGET}/proven-${ARCH_LABEL}-old" ]]; then
-    command rm -rf "${TARGET}/proven-${ARCH_LABEL}-old"
-  fi
+  run_remove_made "${MTX_ROOT}" "prefix/proven-${ARCH_LABEL}-old" || exit 1
 
   # Step 5: Update LFS with new proven. Sync repo_proven to EXACTLY the promoted
   # set — prune any tracked package no longer present (e.g. a version-bumped
@@ -1244,6 +1320,9 @@ done
 if [[ "${BUILD_MODE}" == restore-cache ]]; then
   check_build_root || exit 1
 fi
+if [[ "${BUILD_MODE}" == (cleanup-lfs|restore-cache) && -d "${MTX_ROOT}" ]]; then
+  run_record_open "${MTX_ROOT}" build-local.sh "${BUILD_MODE}" || exit 1
+fi
 
 # Handle --cleanup-lfs early (no tag, clone, or specs needed)
 if [[ "${BUILD_MODE}" == "cleanup-lfs" ]]; then
@@ -1279,58 +1358,23 @@ if [[ "${DOCBOOK_XSL_ROOT_DIR:A}" != "${TARGET:A}/"* ]]; then
   exit 1
 fi
 
+# The cleaning below works on MTX_ROOT's prefix/, build/ and stage/; the
+# overlay puts TARGET and WORK_DIR there, and a run that finds them elsewhere
+# stops before changing anything.
+if [[ "${TARGET:A}" != "${MTX_ROOT:A}/prefix" || "${WORK_DIR:A}" != "${MTX_ROOT:A}/build" ]]; then
+  echo "ERROR: TARGET (${TARGET}) and WORK_DIR (${WORK_DIR}) must be ${MTX_ROOT}/prefix and ${MTX_ROOT}/build." >&2
+  exit 1
+fi
+run_record_open "${MTX_ROOT}" build-local.sh "${BUILD_MODE}" || exit 1
+run_check_root "${MTX_ROOT}" || exit 1
+
 # Ensure required directories exist
-mkdir -p "${TARGET}/include" "${TARGET}/lib" "${PACKAGE_DIR}" "${WORK_DIR}"
-
-# Start logging — capture everything from here onward (including the build header)
-LOG_FILE="${WORK_DIR}/build-${VERSION}-$(date +%Y%m%d-%H%M%S).log"
-exec > >(tee "${LOG_FILE}") 2>&1
-BUILD_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')
-SECONDS=0
-
-# write_report <exit-status> — the build report, written by the EXIT trap below;
-# its Result line says how the run ended.
-function write_report {
-  local rc="$1" report_file="${WORK_DIR}/build-report-${VERSION}.txt"
-  {
-    local elapsed=$SECONDS
-    local mins=$((elapsed / 60))
-    local secs=$((elapsed % 60))
-    echo "Build Report: MKVToolNix ${VERSION}"
-    echo "Started: ${BUILD_START_TIME}"
-    echo "Finished: $(date '+%Y-%m-%d %H:%M:%S')"
-    echo "Elapsed: ${mins}m $(printf '%02d' ${secs})s"
-    echo "Architecture: ${MACHINE_ARCH} (${ARCH_LABEL})"
-    echo "Mode: ${BUILD_MODE}"
-    echo "Build: ${BUILD_SUMMARY:-unknown}"
-    if (( rc == 0 )); then echo "Result: completed"; else echo "Result: FAILED (exit ${rc})"; fi
-    echo ""
-    echo "Verification: $(if [[ "${VERIFY_PASSED}" == true ]]; then echo "PASSED"; else echo "FAILED"; fi)"
-    [[ -n "${BUILT_QT_VERSION}" ]] && echo "Qt version: ${BUILT_QT_VERSION} (expected ${QTVER})"
-    [[ -n "${size_mb}" ]] && echo "App size: ${size_mb} MB"
-    echo ""
-    # Only files the run wrote: the release copy when one was made, the internal
-    # copy when it is in build/.
-    [[ -n "${DMG_RELEASE_NAME}" && "${release_emitted}" == true ]] && echo "Release: ${RELEASE_DIR}/${DMG_RELEASE_NAME}"
-    [[ -n "${DMG_NAME}" && -f "${BUILD_DIR}/${DMG_NAME}" ]] && echo "Internal: ${BUILD_DIR}/${DMG_NAME}"
-    [[ -n "${LOG_NAME}" ]] && echo "Log: ${LOG_DIR}/${LOG_NAME}"
-    echo "Build log: ${LOG_FILE}"
-  } > "${report_file}"
-  echo "==> Build report: ${report_file}"
-}
-
-# Write build report on exit (success or failure)
-trap '_rc=$?; {
-  BUILD_SUMMARY="${BUILD_SUMMARY:-FAILED (script exited unexpectedly)}"
-  write_report ${_rc}
-  sleep 0.1  # allow tee to flush
-}' EXIT
-trap 'echo "==> Interrupted."; exit 130' INT TERM HUP
+mkdir -p "${WORK_DIR}"
 
 echo "==> Building MKVToolNix ${VERSION} for ${MACHINE_ARCH} (${ARCH_LABEL})"
 echo "==> Mode: ${BUILD_MODE}"
 echo "==> Work directory: ${WORK_DIR}"
-echo "==> Logging to ${LOG_FILE}"
+echo "==> Logging to ${RUN_LOG}"
 
 # Clone upstream at the specified tag (or verify existing clone matches)
 CLONE_DIR="${WORK_DIR}/mkvtoolnix-src"
@@ -1342,6 +1386,7 @@ else
   CURRENT_TAG=$(git -C "${CLONE_DIR}" describe --tags --exact-match 2>/dev/null || true)
   if [[ "${CURRENT_TAG}" != "${TAG}" ]]; then
     echo "==> Clone exists but is on ${CURRENT_TAG:-unknown}, need ${TAG}. Re-cloning..."
+    echo "    Removing ${CLONE_DIR}"
     command rm -rf "${CLONE_DIR}"
     git clone --depth 1 --branch "${TAG}" "${UPSTREAM_URL}" "${CLONE_DIR}"
   else
@@ -1349,8 +1394,11 @@ else
   fi
 fi
 
-# Reset source tree for clean patch application
+# Reset source tree for clean patch application; the log lists what it discards
 cd "${CLONE_DIR}"
+echo "==> Resetting the clone; discarding:"
+git status --porcelain | sed 's/^/    /'
+git clean -n -d | sed 's/^/    /'
 git checkout -- .
 git clean -fd -q  # Remove untracked files from prior runs (qt-patches, config overlay, etc.)
 
@@ -1559,20 +1607,6 @@ if [[ -z "${DOCBOOK_TARBALL}" ]]; then
   exit 1
 fi
 
-# Clean stale build directories — derive glob prefixes from EXPECTED_PACKAGES
-echo "==> Cleaning stale build directories..."
-for pkg in "${EXPECTED_PACKAGES[@]}"; do
-  # Extract the name prefix before the version (e.g., "autoconf" from "autoconf-2.69")
-  pkg_prefix="${pkg%%-[0-9]*}"
-  [[ "${pkg_prefix}" == "${pkg}" ]] && pkg_prefix="${pkg%%_[0-9]*}"  # handle boost_1_88_0
-  for stale_dir in "${WORK_DIR}/${pkg_prefix}"*; do
-    if [[ -d "${stale_dir}" ]] && [[ "${stale_dir:t}" != "${pkg}" ]]; then
-      echo "    Removing stale: ${stale_dir:t}"
-      command rm -rf "${stale_dir}"
-    fi
-  done
-done
-
 # --- Build ---
 
 cd "${CLONE_DIR}/packaging/macos"
@@ -1581,7 +1615,7 @@ case "${BUILD_MODE}" in
   full)
     echo "==> Full build (all dependencies + mkvtoolnix from source)..."
     BUILD_SUMMARY="Full build from source"
-    wipe_workspace
+    clean_workspace
     _record_deps_from_source
     ./build.sh
     ;;
@@ -1606,7 +1640,7 @@ case "${BUILD_MODE}" in
       # Nothing has been wiped yet, so the existing workspace survives.
       exit 1
     fi
-    wipe_workspace
+    clean_workspace
     if [[ ${cache_rc} -eq 0 ]]; then
       restore_from_proven
       BUILD_SUMMARY="Restored from proven, built shared-mime-info and mkvtoolnix"
@@ -1832,7 +1866,7 @@ fi
 # --- Name and copy DMG ---
 
 BUILD_COUNTER_FILE="${SCRIPT_DIR}/.build-counter-${ARCH_LABEL}-rel"
-LOG_DIR="${SCRIPT_DIR}/logs"
+LOG_DIR="${RUN_LOGS_DIR}"
 mkdir -p "${BUILD_DIR}" "${RELEASE_DIR}" "${LOG_DIR}"
 
 # Upstream's DMG carries ${DMG_REVISION}+machine suffixes (release-99.0), so use
@@ -1840,13 +1874,13 @@ mkdir -p "${BUILD_DIR}" "${RELEASE_DIR}" "${LOG_DIR}"
 DMG_PATH="${ACTUAL_DMG:-${WORK_DIR}/MKVToolNix-${VERSION}.dmg}"
 
 if [[ -f "${DMG_PATH}" ]]; then
-  # Increment global build counter (atomic write via temp+mv)
+  # The next build number; the counter itself is written once the log has its
+  # numbered name.
   if [[ -f "${BUILD_COUNTER_FILE}" ]]; then
     BUILD_NUM=$(( $(cat "${BUILD_COUNTER_FILE}") + 1 ))
   else
     BUILD_NUM=1
   fi
-  echo "${BUILD_NUM}" > "${BUILD_COUNTER_FILE}.tmp" && command mv "${BUILD_COUNTER_FILE}.tmp" "${BUILD_COUNTER_FILE}"
 
   # Get current git branch name for the label (sanitize slashes for filename)
   BRANCH=$(cd "${SCRIPT_DIR}" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
@@ -1857,8 +1891,12 @@ if [[ -f "${DMG_PATH}" ]]; then
   DMG_NAME="MKVToolNix-${VERSION}-${ARCH_LABEL}-${BUILD_LABEL}-${BRANCH}.dmg"
   DMG_RELEASE_NAME="MKVToolNix-${VERSION}-macos-${ARCH_LABEL}.dmg"
   LOG_NAME="MKVToolNix-${VERSION}-${ARCH_LABEL}-${BUILD_LABEL}-${BRANCH}.log"
+  # The log is renamed first: a refused rename stops the run before the counter
+  # moves and before any DMG is copied.
+  run_log_rename "${LOG_DIR}/${LOG_NAME}" || exit 1
+  # Advance the global build counter (atomic write via temp+mv)
+  echo "${BUILD_NUM}" > "${BUILD_COUNTER_FILE}.tmp" && command mv "${BUILD_COUNTER_FILE}.tmp" "${BUILD_COUNTER_FILE}"
   command cp "${DMG_PATH}" "${BUILD_DIR}/${DMG_NAME}"
-  command cp "${LOG_FILE}" "${LOG_DIR}/${LOG_NAME}"
   (cd "${BUILD_DIR}" && shasum -a 256 "${DMG_NAME}" > "${DMG_NAME}.sha256")
   if _write_build_manifest "${BUILD_DIR}/${DMG_NAME}.manifest.json" "${BUILD_DIR}/${DMG_NAME}"; then
     MANIFEST_WRITTEN="${BUILD_DIR}/${DMG_NAME}.manifest.json"
@@ -1873,6 +1911,9 @@ if [[ -f "${DMG_PATH}" ]]; then
   #     still written so the failure can be examined.
   release_emitted=false
   if [[ "${BRANCH}" == "main" ]] && [[ "${VERIFY_PASSED}" == true ]]; then
+    if [[ -f "${RELEASE_DIR}/${DMG_RELEASE_NAME}" ]]; then
+      echo "    Replacing ${RELEASE_DIR}/${DMG_RELEASE_NAME} (sha256 $(shasum -a 256 < "${RELEASE_DIR}/${DMG_RELEASE_NAME}" | cut -d' ' -f1))"
+    fi
     command cp "${DMG_PATH}" "${RELEASE_DIR}/${DMG_RELEASE_NAME}"
     (cd "${RELEASE_DIR}" && shasum -a 256 "${DMG_RELEASE_NAME}" > "${DMG_RELEASE_NAME}.sha256")
     release_emitted=true
