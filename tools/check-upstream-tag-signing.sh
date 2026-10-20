@@ -2,9 +2,9 @@
 # tools/check-upstream-tag-signing.sh
 #
 # Probes whether the upstream MKVToolNix codeberg repo signs its release tags
-# with the pinned mbunkus key. Run before deploying git verify-tag in
-# build-local.sh — if upstream doesn't sign tags, that block will fail closed
-# on every build.
+# with the pinned mbunkus key. build-local.sh and tools/refresh-deps.sh run
+# git verify-tag on every build and stop on an unsigned or wrongly signed
+# tag; this checks ahead of a build whether recent tags would pass.
 #
 # Also useful periodically: if mbunkus rotates his signing key (caught by
 # verify-mbunkus-key.yml), re-running this confirms the rotated key is still
@@ -165,22 +165,22 @@ echo "================================================================"
 if [[ "${all_ok}" == true ]]; then
     echo "RESULT: All checked tags are signed by the pinned mbunkus key."
     echo ""
-    echo "Recommendation: Safe to deploy git verify-tag in build-local.sh."
+    echo "Builds will accept these tags: git verify-tag in build-local.sh and"
+    echo "tools/refresh-deps.sh passes on them."
     exit 0
 elif [[ "${any_wrong_key}" == true ]]; then
     echo "RESULT: One or more tags signed by an UNEXPECTED key."
     echo ""
-    echo "This is unusual and warrants investigation before deploying anything."
+    echo "This is unusual and warrants investigation before changing anything."
     echo "Possible causes: subkey rotation, intermediate signing key, or"
     echo "                 upstream signing-key change not yet reflected in tools/."
     exit 1
 else
     echo "RESULT: One or more tags are NOT GPG-signed."
     echo ""
-    echo "Recommendation: Do NOT deploy git verify-tag — it would fail closed"
-    echo "                on unsigned tags. Pursue the alternative: extract"
-    echo "                packaging/macos/ from the verified source tarball"
-    echo "                and use that as the build script source rather than"
-    echo "                the codeberg clone."
+    echo "Builds will refuse these tags: git verify-tag in build-local.sh and"
+    echo "tools/refresh-deps.sh fails closed on them. Investigate before"
+    echo "changing anything."
+    echo "Fallback: take packaging/macos/ from the verified source tarball, not the clone."
     exit 1
 fi

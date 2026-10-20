@@ -295,7 +295,10 @@ fi
 if [[ "${MODE}" == try ]]; then
   if [[ -d "${SRC}/.git" ]] || [[ -f "${SRC}/.git" ]]; then
     echo "==> Ensuring git submodules are initialized in ${SRC}..."
-    (cd "${SRC}" && git submodule update --init --recursive)
+    (cd "${SRC}" && git submodule update --init --recursive) || {
+      echo "ERROR: git submodule update failed in ${SRC}; the tree cannot be built until its submodules are checked out" >&2
+      exit 1
+    }
   else
     echo "WARNING: ${SRC} is not a git checkout — skipping submodule init."
     echo "         If build fails with missing libEBML/libMatroska/fmt, you need"
@@ -335,6 +338,25 @@ fi
 
 # --- Paths come from the experimental overlay read at the top ---
 WORK_DIR="${CMPL}"
+# The root lives outside $HOME, so it takes one privileged step per machine to
+# create. Checked before anything is made in it, so that a missing root stops
+# the run with the commands, not a bare EACCES.
+if [[ ! -d "${MTX_EXP_ROOT}" ]]; then
+  echo "ERROR: build root ${MTX_EXP_ROOT} does not exist." >&2
+  echo "" >&2
+  echo "  It lives outside your home directory, so creating it needs one" >&2
+  echo "  privileged step per machine. Run these once, then run the same" >&2
+  echo "  command again:" >&2
+  echo "" >&2
+  echo "    sudo mkdir -p ${MTX_EXP_ROOT}" >&2
+  echo "    sudo chown \"\$(id -un)\" ${MTX_EXP_ROOT}" >&2
+  exit 1
+fi
+if [[ ! -w "${MTX_EXP_ROOT}" ]]; then
+  echo "ERROR: build root ${MTX_EXP_ROOT} is not writable by $(id -un)." >&2
+  echo "       sudo chown \"\$(id -un)\" ${MTX_EXP_ROOT}" >&2
+  exit 1
+fi
 
 # --- Predict build number and derive hash (deterministic from slug+num+ver) ---
 # Counter only increments on success, so a failed build's retry gets the same
@@ -430,7 +452,7 @@ if [[ -d "${FORK_BUILD_DIR}" ]]; then
   echo "    rm -rf ${FORK_BUILD_DIR:t} (prior experimental-build scratch)"
   command rm -rf "${FORK_BUILD_DIR}"
 fi
-command rm -rf "${WORK_DIR}/dmg-${MTX_VER}" "${WORK_DIR}/MKVToolNix-${MTX_VER}.dmg"
+command rm -rf "${WORK_DIR}/dmg-${MTX_VER}"
 if [[ "${MODE}" == series ]]; then
   # The pin's tree and its submodules, unpacked from the clone with the
   # changes applied: no repository in it and nothing to exclude.
