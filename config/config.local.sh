@@ -79,9 +79,9 @@ export SIGNATURE_IDENTITY="-"
 # Use more cores (default is 4)
 export DRAKETHREADS=12
 
-# Qt version is NOT pinned here — build-local.sh derives it automatically from
-# the source's packaging/macos/specs.sh (the single source of truth), so a stale
-# pin can no longer cause a wrong-Qt build and there's no manual bump per release.
+# Qt version is NOT pinned here — build-local.sh and tools/refresh-deps.sh
+# derive it from the source's packaging/macos/specs.sh (the single source of
+# truth), so there is no pin to go stale and no manual bump per release.
 
 # Optimization flags — upstream sets no -O level in CFLAGS/CXXFLAGS,
 # so autotools deps (Boost, FLAC, libogg, etc.) build at -O0 by default.

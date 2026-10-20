@@ -140,6 +140,20 @@ for spec_var in "${EXPECTED_SPEC_VARS[@]}"; do
 done
 EXPECTED_PACKAGES=("${EXPECTED_PACKAGES[@]/zlib-v/zlib-}")
 
+# Qt's version comes from specs.sh, as in build-local.sh: config.sh's QTVER
+# default need not match the Qt that specs.sh names, and build.sh reads
+# QTVER=${QTVER:-...}, so the value exported here is the one it builds.
+SPECS_QT_FILE="${spec_qt[1]}"
+QTVER="${SPECS_QT_FILE#qt-everywhere-src-}"
+QTVER="${QTVER%.tar.*}"
+export QTVER
+if [[ -z "${QTVER}" || "${SPECS_QT_FILE}" != "qt-everywhere-src-${QTVER}.tar."* ]]; then
+  echo "ERROR: could not derive the Qt version from specs.sh (spec_qt='${SPECS_QT_FILE}')." >&2
+  echo "       Upstream may have changed the Qt spec naming; check packaging/macos/specs.sh." >&2
+  exit 1
+fi
+echo "==> Qt version (derived from specs.sh): ${QTVER} (${SPECS_QT_FILE})"
+
 # --- Manifest helpers (duplicated per the self-contained-script policy) ------
 # JSON string escaper. Handles backslash, quote, newline, tab, CR.
 #
