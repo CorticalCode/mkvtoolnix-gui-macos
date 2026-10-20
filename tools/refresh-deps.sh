@@ -1,6 +1,7 @@
 #!/bin/zsh
-# Rebuild only the dependencies whose cached build no longer matches a release
-# tag, then repromote them. Leaves every other cached package untouched.
+# Rebuild the cached dependencies from the first one that no longer matches a
+# release tag through the end of upstream's build order, then repromote them.
+# The dependencies before it, and docbook-xsl, are left as they are.
 #
 # build-local.sh refuses a cache that contradicts the tag and names the
 # offenders; this is what fixes them without a full from-source rebuild. It
@@ -48,7 +49,8 @@ while [[ -n $1 ]]; do
     --help|-h)
       echo "Usage: ./tools/refresh-deps.sh <release-tag> [--dry-run]"
       echo ""
-      echo "Rebuilds only the cached dependencies that no longer match the tag."
+      echo "Rebuilds the cached dependencies from the first one that no longer"
+      echo "matches the tag through the end of upstream's build order."
       echo "  --dry-run   Report what would be rebuilt and exit."
       exit 0
       ;;
@@ -154,7 +156,7 @@ if [[ -z "${QTVER}" || "${SPECS_QT_FILE}" != "qt-everywhere-src-${QTVER}.tar."* 
 fi
 echo "==> Qt version (derived from specs.sh): ${QTVER} (${SPECS_QT_FILE})"
 
-# --- Manifest helpers (duplicated per the self-contained-script policy) ------
+# --- Manifest helpers (copies of build-local.sh's; keep them identical) ------
 # JSON string escaper. Handles backslash, quote, newline, tab, CR.
 #
 # Replacement strings use `\\<char>` (2-char sequence) not `\\\<char>` (3-char).

@@ -2,11 +2,13 @@
 
 Helper scripts and trust artifacts for the wrapper build pipeline.
 
-All of these except `build-exp.sh` operate on the build root, which defaults to
-`/opt/mtx` and needs creating once per machine
-(`sudo mkdir -p /opt/mtx && sudo chown "$(id -un)" /opt/mtx`). Set `MTX_ROOT`
-to relocate the whole tree somewhere already owned. `build-exp.sh` works under
-its own root, `MTX_EXP_ROOT` (default `/opt/mtx-exp`).
+`build-local.sh`, `refresh-deps.sh` and `backfill-sha256.sh` work on the
+release build root, which defaults to `/opt/mtx` and needs creating once per
+machine (`sudo mkdir -p /opt/mtx && sudo chown "$(id -un)" /opt/mtx`). Set
+`MTX_ROOT` to relocate the whole tree somewhere already owned. `build-exp.sh`
+works under its own root, `MTX_EXP_ROOT` (default `/opt/mtx-exp`).
+`audit-proven-cache.sh` reads the repository's `proven/`, and
+`check-upstream-tag-signing.sh` uses neither root.
 
 ## Scripts
 
@@ -29,11 +31,11 @@ its own root, `MTX_EXP_ROOT` (default `/opt/mtx-exp`).
   line saying whether it finished or failed. See
   [`docs/build-workflow.md`](../docs/build-workflow.md#experimental-builds) and
   `--help`.
-- **`refresh-deps.sh <tag>`** — rebuilds only the cached dependencies whose
-  recorded source no longer matches a release tag, in upstream's build order,
-  and repromotes just those. Run it when `build-local.sh` refuses a cache over
-  drift; `--dry-run` reports what would be rebuilt without building. It does
-  **not** repair a cache refused over its format or its build prefix: it
+- **`refresh-deps.sh <tag>`** — rebuilds the cached dependencies from the
+  first one whose cached build no longer matches a release tag (source, patch
+  set) through the end of upstream's build order, and repromotes all of those.
+  Run it when `build-local.sh` refuses a cache over drift; `--dry-run` reports
+  what would be rebuilt without building. It does **not** repair a cache refused over its format or its build prefix: it
   rewrites only the spec packages, leaving docbook-xsl's manifest as it was,
   so the cache would still be refused afterwards. It says so and stops. The
   fix there is `--full` then `--promote`.

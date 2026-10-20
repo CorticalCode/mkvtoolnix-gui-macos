@@ -92,8 +92,9 @@ flowchart LR
   pinned fingerprint monthly against three independent sources:
   `bunkus.org`, Codeberg (`codeberg.org/mbunkus.gpg`), and
   `keys.openpgp.org`. Protects against silent drift in the pinned
-  fingerprint itself. Emails the maintainer on any disagreement;
-  never auto-updates.
+  fingerprint itself. Emails the maintainer on any disagreement, or
+  when two or more sources cannot be checked; one unreachable source
+  is only a warning. Never auto-updates.
 - **`tools/README.md`** — records when the public key was fetched,
   from where, and which channels were cross-verified at that time.
   Not used at build time; it's the audit trail for how trust was
@@ -163,9 +164,9 @@ sequenceDiagram
         K-->>A: key bytes (FP extracted locally)
     end
 
-    alt all 3 sources match pinned
+    alt every source that answered matches pinned, at most one did not answer
         A->>M: pass (silent)
-    else any source disagrees
+    else any source disagrees, or two or more did not answer
         A->>M: fail + email notification
         Note over M: human reviews,<br/>PR if drift is real
     end

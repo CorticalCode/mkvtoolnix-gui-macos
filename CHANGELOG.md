@@ -1,5 +1,16 @@
 # Changelog
 
+## CI release check (2026-10-18)
+
+- **The newest-tag lookup tries three times and says why it failed.** When no tag is given, CI
+  asks Codeberg for the newest upstream release tag up to three times, each try capped at 60
+  seconds. If every try fails, the error names git's exit status and its error line; if Codeberg
+  answers with no release tags, the error says so. Either shows on the run's summary page.
+- **A failed release lookup stops the run.** Checking whether a release already exists, choosing
+  the CalVer sequence number and the re-check before publishing each stop with gh's error when
+  `gh release list` fails, instead of reading the failure as "no release yet" and building,
+  numbering or publishing anyway.
+
 ## v103.0-b2026.10.1 (2026-10-18) — Current Release
 
 MKVToolNix 103.0 "The Darkness" — Apple Silicon (arm64) and Intel (x86_64).
@@ -35,6 +46,18 @@ dependency build cached by what went into it. Release builds are unaffected.
 - **Comparable records.** Each DMG's manifest (schema 2) records the mode, the pin and changes, each
   library's key and whether it was restored or built, the toolchain, and the size of every program
   and library in the bundle. Every run ends with one line saying whether it finished or failed.
+
+## Fixed build root (2026-09-28)
+
+- **Builds no longer run in your home folder.** Release builds use `/opt/mtx` (`MTX_ROOT`) and
+  experimental builds a root of their own, `/opt/mtx-exp` (`MTX_EXP_ROOT`), instead of upstream's
+  defaults under `$HOME`, so the paths compilers record are the same on every machine. `/opt` is
+  root-owned: create each root once, for example with
+  `sudo mkdir -p /opt/mtx && sudo chown "$(id -un)" /opt/mtx`.
+- **The pre-built dependencies are built for `/opt/mtx`.** A cached package records its install
+  prefix, and a build refuses one built under another. Both published caches were rebuilt and
+  promoted under `/opt/mtx` (Intel 2026-09-28, Apple Silicon 2026-10-01). Under any other root,
+  build with `--full`.
 
 ## v102.0-b2026.09.2 (2026-09-18)
 

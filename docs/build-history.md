@@ -79,7 +79,7 @@ The Intel counter then skips rel008 for the same reason. rel007 (intel, 2026-09-
 
 ## Summary
 
-- **v98 builds preserved:** 22 (17 arm + 5 intel) — the `bNNN` tables above
+- **v98 builds preserved:** 23 (18 arm + 5 intel) — the `bNNN` tables above
 - **Release builds (v99+):** 13 shipped — `rel002` arm+intel (v99), `rel003` arm+intel (v100), `rel004` arm+intel (v101), `rel006` arm+intel (v102.0-b2026.09.1), `rel007` then `rel008` arm + `rel009` intel (v102.0-b2026.09.2), `rel009` arm + `rel010` intel (v103.0-b2026.10.1)
 - **Missing from preservation:** 3 (arm b015, b016, b019)
 - **Currently shipped:** **arm rel009 + intel rel010** (v103.0-b2026.10.1); SHA256-verified against

@@ -2,7 +2,7 @@ blank_issues_enabled: false
 contact_links:
   - name: MKVToolNix bug (not build-related)
     url: https://codeberg.org/mbunkus/mkvtoolnix/issues
-    about: For bugs in MKVToolNix itself (not specific to this macOS ARM build), report upstream
+    about: For bugs in MKVToolNix itself (not specific to this macOS build), report upstream
   - name: MKVToolNix forum
     url: https://help.mkvtoolnix.download/
     about: General MKVToolNix help and discussion

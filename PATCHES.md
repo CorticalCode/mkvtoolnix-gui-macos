@@ -40,6 +40,7 @@ Previous release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build proces
 | **v102 rel006 (Intel)** | 27.5 MB | 78.4 MB | 6.11.1 | Intel, verified, full from-source rebuild; deps unchanged from v101 |
 | **v102 rel007 (Qt patch)** | 25.6 MB | 75.0 MB | 6.11.1 | ARM, verified, Qt rebuilt from source with the QTBUG-150017 patch (Xcode 27) |
 | **v102 rel009 (Qt patch, Intel)** | 27.5 MB | 78.4 MB | 6.11.1 | Intel, verified, full from-source rebuild including the QTBUG-150017 patch |
+| **v102 rel008 (Qt patch, full rebuild)** | 25.5 MB | 75.0 MB | 6.11.1 | ARM, verified, full from-source rebuild of every dependency including the QTBUG-150017 patch; replaced rel007 as the release asset |
 | **v103 rel009 (source bump)** | 24.8 MB | 75.1 MB | 6.11.1 | ARM, verified, restored from proven cache; deps unchanged from v102 |
 | **v103 rel010 (source bump, Intel)** | 27.6 MB | 78.4 MB | 6.11.1 | Intel, verified, restored from proven cache; deps unchanged from v102 |
 
@@ -71,7 +72,7 @@ No functional change; ThinLTO is fast incremental LTO and `-Os` favors size over
 
 **Retire:** at the first MKVToolNix release whose source tarball includes the same patch file; check the actual release source.
 
-**Cache:** the patch changes the Qt fingerprint, so each architecture has to rebuild Qt and promote it. Done for Intel at rel009. Apple Silicon still carries the pre-patch Qt in the published cache; its manifests also predate the current format, which `tools/refresh-deps.sh` cannot repair on its own — that one needs `--full` followed by `--promote`.
+**Cache:** the patch changes the Qt fingerprint, so each architecture has to rebuild Qt and promote it. Done for both architectures: Intel at rel009 (2026-09-28) and Apple Silicon at rel008 (2026-10-01), each a `--full` build followed by `--promote`.
 
 ### Retired at v99.0 (7 patches)
 
@@ -181,6 +182,22 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 ---
 
+### 5. ARM `__yield` declaration (`qt-patches/001-fix-arm-yield-declaration.patch`)
+
+**File patched:** `qtbase/src/corelib/thread/qyieldcpu.h` (applied to Qt source during extraction)
+
+**Problem:** Qt6's `qyieldcpu.h` calls `__yield()` on ARM via `__has_builtin(__yield)`, but clang requires `<arm_acle.h>` to be included for the declaration. Without it, clang produces `-Werror,-Wimplicit-function-declaration`.
+
+**Fix:** Add `#include <arm_acle.h>` guarded by `Q_PROCESSOR_ARM` and `__has_include`.
+
+**History:** This patch was incorrectly retired on 2026-04-13 based on reports that Qt 6.10.2 included the fix upstream. Inspection of the actual Qt 6.10.2 source confirmed the fix is NOT present. The retirement went undetected because the proven cache contained pre-compiled Qt that was built WITH the patch — a smart-restore build never recompiled Qt, masking the issue. A `--full` rebuild on 2026-04-14 exposed the missing fix. The patch was restored.
+
+**Lesson:** Never retire a patch based on release notes alone. Always verify the fix in the actual upstream source, and always test with `--full` (not smart-restore) to confirm.
+
+**Upstream:** Qt project — not yet reported at bugreports.qt.io. Would need to be filed against Qt rather than MKVToolNix.
+
+---
+
 ### 6. cmark Release build type (`patches/cmark-release-build.patch`)
 
 **File patched:** `packaging/macos/build.sh` (build_cmark function)
@@ -248,17 +265,17 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 ## Build script fixes (in `build-local.sh`)
 
-**Proven cache architecture:** Compiled dependency packages are stored in an architecture-specific proven cache (`/opt/mtx/prefix/proven/arm/` or `/opt/mtx/prefix/proven/intel/`). Each build wipes the workspace (everything under `/opt/mtx/prefix/` except the `proven/` cache beneath it; downloaded source tarballs live outside at `/opt/mtx/src/`), restores from the proven cache for the current architecture, and only builds what's missing. If all deps are available, only mkvtoolnix is rebuilt (minutes instead of hours). A full rebuild from source is available with `--full`.
+**Proven cache architecture:** Compiled dependency packages are stored in an architecture-specific proven cache (`/opt/mtx/prefix/proven/arm/` or `/opt/mtx/prefix/proven/intel/`). Each build wipes the workspace (everything under `/opt/mtx/prefix/` except the `proven/` cache beneath it; downloaded source tarballs live outside at `/opt/mtx/src/`), restores from the proven cache for the current architecture, and only builds what's missing. If all deps are available, only mkvtoolnix and shared-mime-info (which has no cacheable package) are rebuilt (minutes instead of hours). A full rebuild from source is available with `--full`.
 
 **Promotion workflow:** After a successful build and manual testing, `--promote` archives the current proven cache to Git LFS, atomically swaps in the new packages, and commits. Uses directory-swap for atomicity — interruption at any point leaves either old or new proven intact. Each promoted package gets a `.manifest.json` recording the source tarball it was built from. A smart-restore build legitimately leaves `packages/` incomplete, which promotion reports as a successful no-op when the cache already covers the tag.
 
-**Cache/tag binding:** Restores are refused when a cached package's manifest names a different source tarball than the release tag declares, records a different patch set or install prefix, or when a package has no manifest at all. `tools/refresh-deps.sh <tag>` rebuilds only the affected dependencies, in upstream's build order, and repromotes those alone — but it cannot repair a cache refused over its format or prefix, since it never rewrites docbook-xsl's manifest; that case needs `--full` then `--promote`.
+**Cache/tag binding:** Restores are refused when a cached package's manifest names a different source tarball than the release tag declares, records a different patch set or install prefix, or when a package has no manifest at all. `tools/refresh-deps.sh <tag>` rebuilds the first affected dependency and every one after it in upstream's build order, and repromotes all of those — but it cannot repair a cache refused over its format or prefix, since it never rewrites docbook-xsl's manifest; that case needs `--full` then `--promote`.
 
 **Build manifest:** Every DMG in `build/` gets a `<dmg>.manifest.json` recording the dependencies used and their origin (cache or from-source), source hashes, applied patches, bundled dylibs, toolchain, host, timings, and verification results. A maintainer diagnostic — diffing two manifests shows what changed between builds.
 
 **Post-build verification:** Checks Qt version in binary, architecture of all binaries and dylibs, duplicate dylib scan, size sanity (60-95 MB range), Homebrew/external library leak detection, and bundle inventory. Each check fails closed: an absent input (no dylibs found, no `otool` output) is reported as a failure rather than a clean result. If verification does not pass, promotion is blocked **and** the release-named DMG is withheld — only the internal `build/` copy is written, for diagnosis.
 
-**Pre-build verification:** QTVER/specs.sh consistency check (already existed), stale build directory cleanup for all dependencies (extended from Qt-only).
+**Pre-build verification:** the Qt version is derived from `specs.sh` at the signed release tag, so there is no pin to drift, and the upstream source tarball's OpenPGP signature is verified before upstream's `build.sh` runs. Stale build directories are cleaned up for all dependencies. The built binary's Qt version is checked after the build.
 
 **EXPECTED_PACKAGES derived from specs.sh:** Package names are extracted dynamically from upstream's `spec_*` variables after sourcing specs.sh. Fails fast if any spec variable is missing (catches upstream renames). Eliminates version drift between specs.sh and the build script.
 
@@ -271,24 +288,6 @@ This patch combines two changes to the same file to avoid context conflicts when
 **`command <tool>` throughout:** macOS zsh aliases `cp` to `cp -i`, and a Homebrew-first PATH can put GNU versions of `find`, `stat`, and `sed` ahead of the BSD ones. Calling tools via `command` bypasses aliases, and the scripts avoid flags that differ between the BSD and GNU implementations, so either set works.
 
 **`git checkout -- .` before patching:** Ensures clean slate on re-runs.
-
----
-
-## Qt source patches (`patches/qt-patches/`)
-
-### 5. ARM `__yield` declaration (`qt-patches/001-fix-arm-yield-declaration.patch`)
-
-**File patched:** `qtbase/src/corelib/thread/qyieldcpu.h` (applied to Qt source during extraction)
-
-**Problem:** Qt6's `qyieldcpu.h` calls `__yield()` on ARM via `__has_builtin(__yield)`, but clang requires `<arm_acle.h>` to be included for the declaration. Without it, clang produces `-Werror,-Wimplicit-function-declaration`.
-
-**Fix:** Add `#include <arm_acle.h>` guarded by `Q_PROCESSOR_ARM` and `__has_include`.
-
-**History:** This patch was incorrectly retired on 2026-04-13 based on reports that Qt 6.10.2 included the fix upstream. Inspection of the actual Qt 6.10.2 source confirmed the fix is NOT present. The retirement went undetected because the proven cache contained pre-compiled Qt that was built WITH the patch — a smart-restore build never recompiled Qt, masking the issue. A `--full` rebuild on 2026-04-14 exposed the missing fix. The patch was restored.
-
-**Lesson:** Never retire a patch based on release notes alone. Always verify the fix in the actual upstream source, and always test with `--full` (not smart-restore) to confirm.
-
-**Upstream:** Qt project — not yet reported at bugreports.qt.io. Would need to be filed against Qt rather than MKVToolNix.
 
 ---
 

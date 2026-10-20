@@ -17,8 +17,7 @@ unalias -a 2>/dev/null || true  # Prevent .zshenv aliases from leaking into scri
 # Verify required external tools are reachable in PATH before doing real work.
 # Without this, a missing tool surfaces mid-build with a cryptic pipe error;
 # here it surfaces immediately with the tool's name. tools/build-exp.sh has
-# its own probe for the tools it uses — each script lists its own, inline
-# rather than sourced from a shared helper, to stay self-contained.
+# its own probe for the tools it uses; each script lists the tools it needs.
 #
 # Note on `unalias -a` (line above): only affects THIS script's subshell.
 # Your interactive aliases in the parent shell are unaffected.
@@ -109,9 +108,11 @@ Options:
   --help                 Show this help
 
 Default behavior:
-  Wipes workspace, restores dependencies from proven cache,
-  builds only what's missing + mkvtoolnix. If no proven cache
-  exists, does a full build from source.
+  Checks the proven cache against the tag. If every package matches,
+  wipes the workspace, restores them, and builds shared-mime-info and
+  mkvtoolnix. If any package is missing, wipes the workspace and builds
+  everything from source. If any contradicts the tag, stops before
+  wiping and names what to run.
 
 Environment:
   MTX_ROOT          Build root (default: /opt/mtx). Everything derives from
@@ -178,8 +179,11 @@ function verify_pkg_sha256 {
 
 # --- Manifest helpers ---
 # Ported from tools/build-exp.sh, which has written provenance manifests for
-# experimental builds since 2026-05-06. Duplicated rather than sourced: the two
-# scripts stay self-contained by design, same as the tool probe above.
+# experimental builds since 2026-05-06. tools/refresh-deps.sh holds copies of
+# _json_str, _iso_utc, _host_json, _qt_args_hash and _patch_state_hash, and
+# tools/build-exp.sh of the first three; keep the copies identical.
+# refresh-deps.sh writes manifests that validate_proven_cache reads, so its two
+# hashes must compute exactly what these do.
 
 # JSON string escaper. Handles backslash, quote, newline, tab, CR.
 #
@@ -907,7 +911,7 @@ function validate_proven_cache {
     else
       echo "  Repopulate packages and hashes from LFS:"
       echo "    ./build-local.sh --restore-cache"
-      echo "  Rebuild just the affected dependencies:"
+      echo "  Rebuild from the first affected dependency onward:"
       echo "    ./tools/refresh-deps.sh ${TAG}"
       echo "  Or rebuild everything from source:"
       echo "    ./build-local.sh --full ${TAG}"
@@ -1192,8 +1196,8 @@ function do_promote {
 # into the upstream tree so build.sh derives the same values from the same
 # file. Read it here, before anything creates a directory, so the wrapper and
 # the build it drives never disagree about where the build lives. The overlay
-# is sourced again later from the clone (to read QTVER); both reads produce
-# the same paths.
+# is sourced again later from the clone, with config.sh and specs.sh, to read
+# the dependency specs; both reads produce the same paths.
 # Without the overlay there is nothing to override upstream's $HOME-based
 # paths, so the build would run in the invoking user's home directory and bake
 # that path into everything it produces. That is a refusal, not a fallback.
@@ -1424,7 +1428,8 @@ fi
 
 # --- Pre-build verification ---
 
-# Source the config files the same way build.sh does, to get QTVER
+# Source config.sh, the overlay and specs.sh the same way build.sh does, to
+# read spec_qt and the other dependency specs
 # Save our state — sourced files can disable set -e, change options, clobber vars
 _SAVED_TARGET="${TARGET}"
 _SAVED_WORK_DIR="${WORK_DIR}"

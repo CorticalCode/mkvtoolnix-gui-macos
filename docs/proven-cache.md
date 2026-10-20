@@ -1,6 +1,6 @@
 # Proven Dependency Cache
 
-The build system caches compiled dependencies so that subsequent builds only need to rebuild MKVToolNix itself (~15 minutes instead of 1-3 hours).
+The build system caches compiled dependencies so that subsequent builds only need to rebuild MKVToolNix itself and the uncacheable shared-mime-info (~15 minutes instead of 1-3 hours).
 
 ## How it works
 
@@ -8,7 +8,7 @@ When you run `./build-local.sh release-XX.0`:
 
 1. The workspace (`/opt/mtx/prefix/`) is wiped clean, except the proven cache beneath it. Downloaded source tarballs live outside it at `/opt/mtx/src/` and are never in scope
 2. Each cached package is checked twice before anything is extracted: its **`.sha256` sidecar** proves the file is intact, and its **`.manifest.json`** proves it was built from the source tarball this release tag declares, with the patch set this tree carries, under the prefix this tree installs to. A mismatch on any of the three, a missing sidecar, or a missing manifest aborts the build (see [trust-model.md §6](trust-model.md) for context).
-3. If all dependencies are found, only MKVToolNix is built from source
+3. If all dependencies are found, only shared-mime-info and MKVToolNix are built from source
 4. If any are missing, a full build from source runs automatically
 
 The cache is per-architecture — Apple Silicon (arm64) and Intel (x86_64) have separate caches and cannot cross-contaminate.
@@ -35,38 +35,23 @@ If you prefer to build all dependencies from source instead, simply skip `--rest
 
 ### From a full build (if you need to build deps yourself)
 
-After a successful `--full` build:
+A `--full` build leaves its packages in `/opt/mtx/prefix/packages/` but does not add them to the
+cache. Copying them into `/opt/mtx/prefix/proven/{arch}/` by hand does not make a usable cache: each
+package also needs a `.manifest.json` recording the source tarball it was built from, and a
+manifest cannot honestly be written after the fact — it could only record what `specs.sh` says
+today, not what the package was actually built from. The next build reports
+`no provenance manifest` and stops.
 
-```sh
-# Copy the built packages to your local proven cache
-mkdir -p /opt/mtx/prefix/proven/arm    # or /opt/mtx/prefix/proven/intel
-cp /opt/mtx/prefix/packages/*.tar.gz /opt/mtx/prefix/proven/arm/
+`tools/refresh-deps.sh` cannot repair such a cache either: it writes manifests for the dependencies
+named in `specs.sh` but never for `docbook-xsl`, so the cache is still refused afterwards. Only
+`--promote` writes a complete set.
 
-# Write a .sha256 sidecar beside each one — a package without its hash is
-# unverifiable, and the restore step refuses it
-(cd /opt/mtx/prefix/proven/arm && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
-```
-
-This does **not** produce the `.manifest.json` that records which source tarball each package was
-built from, and a manifest cannot honestly be written after the fact — it could only record what
-`specs.sh` says today, not what the package was actually built from.
-
-**So a cache built this way is refused, not reused.** The next build reports
-`no provenance manifest` for every package and stops. The copy is still worth doing as a
-starting point, but it has to be converted into a real cache before it is usable:
-
-```sh
-./tools/refresh-deps.sh release-XX.0
-```
-
-That rebuilds every package whose manifest is missing — on a hand-copied cache, all of them —
-and writes real manifests beside them in `/opt/mtx/prefix/proven/{arch}/` without touching git. It costs
-the same as a full build the first time and pays for itself from the second build onward.
-Maintainers use `--promote` instead, which additionally commits the result to the repository.
+So without `--promote`, use the published cache (`--restore-cache`, above) or build with `--full`
+every time. Maintainers run `--full`, then `--promote`.
 
 ### The `--promote` flag (maintainers only)
 
-The `--promote` flag is a maintainer operation that archives the proven cache to Git LFS and commits it to the repository. **Regular users should not use `--promote`** — it modifies the git history and would create conflicts when pulling upstream updates. Use the manual copy method above instead.
+The `--promote` flag is a maintainer operation that archives the proven cache to Git LFS and commits it to the repository. **Regular users should not use `--promote`** — it modifies the git history and would create conflicts when pulling upstream updates. Use the published cache or `--full` instead, as above.
 
 ## What's in the cache
 

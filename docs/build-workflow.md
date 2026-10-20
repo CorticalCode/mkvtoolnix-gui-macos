@@ -5,7 +5,7 @@
 | Flag | Purpose | Who | Build time | Requires |
 |------|---------|-----|-----------|----------|
 | *(default)* | Validate the cache against the tag, then restore it; full build if the cache is absent | Anyone | 15 min (cached) / 1-3 hrs (full) | Tag |
-| `tools/refresh-deps.sh` | Rebuild only the dependencies that no longer match the tag | Anyone | minutes to hours, depending on which | Tag |
+| `tools/refresh-deps.sh` | Rebuild the dependencies from the first one that no longer matches the tag | Anyone | minutes to hours, depending on which | Tag |
 | `--restore-cache` | Pull pre-built deps from LFS to local cache; refuses a cache missing either sidecar | Anyone | ~2 min | Nothing |
 | `--full` | Rebuild all dependencies from source | Anyone | 1-3 hours | Tag |
 | `--promote` | Archive verified build to LFS | Maintainer | ~1 min | Verified build |
@@ -69,7 +69,7 @@ flowchart TD
     MODE -->|default / auto| A1["Wipe workspace"]
     A1 --> A2{"/opt/mtx/prefix/proven/{arch}/<br/>has all packages?"}
     A2 -->|Yes| A3["Restore deps from cache"]
-    A3 --> A4["Build mkvtoolnix only"]
+    A3 --> A4["Build shared-mime-info<br/>and mkvtoolnix"]
     A4 --> POST
     A2 -->|No| A5["Build ALL deps from source"]
     A5 --> POST
@@ -218,14 +218,14 @@ something to paper over with three hours of compiling.
 
 ```sh
 ./tools/refresh-deps.sh release-XX.0 --dry-run   # what drifted, and why
-./tools/refresh-deps.sh release-XX.0             # rebuild only those
+./tools/refresh-deps.sh release-XX.0             # rebuild from the first drifted dependency onward
 ./build-local.sh release-XX.0                    # normal build, ~15 min
 ```
 
-`refresh-deps.sh` restores the dependencies that are still current, rebuilds the ones that are
-not — in upstream's own build order — and repromotes just those into the local cache. Everything
-else is left alone. The repo's LFS copy is untouched until you run `--promote` after a verified
-build.
+`refresh-deps.sh` restores the dependencies built before the first one that drifted, rebuilds that
+one and every dependency after it in upstream's build order (each may link against the ones
+before it), and repromotes all of those into the local cache. The repo's LFS copy is untouched
+until you run `--promote` after a verified build.
 
 One field, `configure_args_hash`, is reported when it drifts but never refuses. It is an
 approximation: derived from the text of Qt's configure arguments, so blind to compiler, SDK and

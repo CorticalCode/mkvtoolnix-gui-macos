@@ -16,8 +16,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Both roots come from the config overlays, the single source of truth for
-# where each tree lives. Each is evaluated in its own subshell, because an
+# The release root comes from config/config.local.sh, the single source of
+# truth for where that tree lives. It is read in a subshell, because the
 # overlay exits when it refuses its root; _target_from then names the file.
 # Fails closed: a scanner that cannot tell where the trees are must say so
 # rather than scan a path that does not exist and report "nothing found".

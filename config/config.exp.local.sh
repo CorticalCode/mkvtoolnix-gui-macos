@@ -1,10 +1,8 @@
-# Wrapper config for experimental builds — sourced by tools/build-exp.sh in
-# preference to config.local.sh.
-#
-# Production build-local.sh continues to use config.local.sh (which pins
-# QTVER for alignment with specs-updates.patch). This file mirrors the
-# wrapper's universal settings (signing, threads, optimization flags) but
-# omits the QTVER pin so experimental builds defer to the source's specs.sh.
+# Wrapper config for experimental builds. tools/build-exp.sh sources it,
+# refuses to run without it, and stages it as packaging/macos/config.local.sh
+# in the source it builds. It sets the experimental build locations and the
+# wrapper's universal settings (signing, threads, optimization flags); release
+# builds use config.local.sh.
 
 # Build locations — a root of its own, separate from the release tree, so an
 # experiment can never install over what a release build depends on.
@@ -28,7 +26,7 @@ export MTX_EXP_ROOT="${MTX_EXP_ROOT:-/opt/mtx-exp}"
 # release root (/opt/mtx, or MTX_ROOT when set): this file is read from more
 # than one working directory, and each track wipes its own prefix. Folders
 # that exist are compared with symlinks resolved. Written for zsh and bash
-# alike: tools/backfill-sha256.sh reads this file with bash.
+# alike.
 _mtx_release_root="${MTX_ROOT:-/opt/mtx}"
 _mtx_real() {
   local p="$1"
@@ -79,12 +77,9 @@ export SIGNATURE_IDENTITY="-"
 # Use more cores (default is 4)
 export DRAKETHREADS=12
 
-# Qt version: intentionally NOT pinned here. Experimental builds let upstream's
-# config.sh default (`QTVER=${QTVER:-X.Y.Z}`) take effect, so build_qt
-# operates on the version specified by the experimental source's specs.sh. This
-# keeps experimental builds aligned with whatever Qt the source targets and
-# avoids the build_qt directory mismatch (`cd qt-everywhere-src-${QTVER}`)
-# that occurs when production's pinned version differs.
+# Qt version: neither overlay pins QTVER. build-local.sh and
+# tools/refresh-deps.sh derive it from the source's specs.sh; experimental
+# builds take upstream config.sh's default (`QTVER=${QTVER:-X.Y.Z}`).
 
 # Optimization flags — upstream sets no -O level in CFLAGS/CXXFLAGS,
 # so autotools deps (Boost, FLAC, libogg, etc.) build at -O0 by default.

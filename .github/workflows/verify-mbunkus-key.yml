@@ -77,10 +77,11 @@ jobs:
             return 0
           }
 
-          # Reachability failures (return 1) get flagged as warnings; we still
-          # require all three to be reachable AND match for the workflow to
-          # pass. Mismatches (return 2) are hard errors regardless of how many
-          # sources agreed otherwise.
+          # A source that cannot be fetched or yields no fingerprint (return 1)
+          # is a warning: the run passes with at most one such source, provided
+          # every source that answered matches, and two or more fail it as
+          # inconclusive. Mismatches (return 2) are hard errors regardless of
+          # how many sources agreed otherwise.
           unreachable=0
           mismatch=0
           for src in \
