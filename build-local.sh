@@ -1089,7 +1089,7 @@ function _publish_cache_to_repo {
   fi
 
   # git add -A so pruned packages are staged as deletions, not just the new adds.
-  (cd "${SCRIPT_DIR}" && git add -A "proven/${ARCH_LABEL}/" && { git diff --cached --quiet || git commit -m "${subject}" -- "proven/${ARCH_LABEL}/"; })
+  (cd "${SCRIPT_DIR}" && git add -A "proven/${ARCH_LABEL}/" && { git diff --cached --quiet -- "proven/${ARCH_LABEL}/" || git commit -m "${subject}" -- "proven/${ARCH_LABEL}/"; })
 }
 
 # _promote_staging_free <target> <arch> — 0 when no earlier promote left its
@@ -1223,7 +1223,7 @@ function do_promote {
     local -a old_manifests=("${proven_dir}"/*.tar.gz.manifest.json(N))
     [[ ${#old_manifests[@]} -gt 0 ]] && command cp "${old_manifests[@]}" "${repo_proven}/"
     (cd "${repo_proven}" && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
-    (cd "${SCRIPT_DIR}" && git add "proven/${ARCH_LABEL}/"*.tar.gz "proven/${ARCH_LABEL}/"*.sha256 && { git diff --cached --quiet || git commit -m "archive: ${ARCH_LABEL} proven deps before promotion $(date +%Y-%m-%d)" -- "proven/${ARCH_LABEL}/"; })
+    (cd "${SCRIPT_DIR}" && git add "proven/${ARCH_LABEL}/"*.tar.gz "proven/${ARCH_LABEL}/"*.sha256 && { git diff --cached --quiet -- "proven/${ARCH_LABEL}/" || git commit -m "archive: ${ARCH_LABEL} proven deps before promotion $(date +%Y-%m-%d)" -- "proven/${ARCH_LABEL}/"; })
   fi
 
   # Step 2: Build new proven set in temp directory
