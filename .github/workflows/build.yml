@@ -40,26 +40,58 @@ jobs:
           # number has to live in this file.
           TAG="${{ github.event.inputs.tag }}"
           if [[ -z "${TAG}" ]]; then
-            # Latest upstream release tag (--refs filters ^{} peeled refs)
-            TAG=$(git ls-remote --tags --refs --sort=-v:refname \
-              https://codeberg.org/mbunkus/mkvtoolnix.git \
-              'refs/tags/release-*' | head -1 | sed 's|.*refs/tags/||')
-          fi
-          if [[ -z "${TAG}" ]]; then
-            echo "::error::Could not resolve an upstream release tag."
-            exit 1
+            # Latest upstream release tag (--refs filters ^{} peeled refs).
+            # git's output is kept and its status checked before anything
+            # parses it: piped straight into head, a git that cannot reach
+            # Codeberg reads the same as a Codeberg with no release tags.
+            # Three tries, each capped at 60 s: an unanswered connection
+            # otherwise waits out the kernel's two-minute timeout, and a
+            # short outage should not fail the weekly check.
+            ERR="${RUNNER_TEMP}/ls-remote.err"
+            for ATTEMPT in 1 2 3; do
+              if REFS=$(timeout 60 git ls-remote --tags --refs --sort=-v:refname \
+                  https://codeberg.org/mbunkus/mkvtoolnix.git \
+                  'refs/tags/release-*' 2>"${ERR}"); then
+                break
+              else
+                STATUS=$?
+              fi
+              if (( STATUS == 124 )); then
+                WHY="no answer within 60 s"
+              else
+                WHY=$(tail -n 1 "${ERR}")
+              fi
+              if (( ATTEMPT == 3 )); then
+                echo "::error::git ls-remote failed 3 times; the last exited ${STATUS}: ${WHY}"
+                exit 1
+              fi
+              echo "Attempt ${ATTEMPT}: git ls-remote exited ${STATUS}: ${WHY}; retrying in 15 s."
+              sleep 15
+            done
+            TAG=$(head -n 1 <<<"${REFS}" | sed 's|.*refs/tags/||')
+            if [[ -z "${TAG}" ]]; then
+              echo "::error::Codeberg lists no release-* tags."
+              exit 1
+            fi
           fi
           VERSION=${TAG#release-}
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Resolved: ${TAG} (version ${VERSION})"
 
-          # Check if we already have any release for this version
+          # Check if we already have any release for this version. gh's
+          # output is kept and its status checked before grep reads it:
+          # piped straight into grep, a gh that fails reads as "no release
+          # yet" and starts a build.
           FORCE="${{ github.event.inputs.force }}"
+          LIST_ERR="${RUNNER_TEMP}/release-list.err"
           if [[ "${FORCE}" == "true" ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
             echo "Force build requested."
-          elif gh release list --repo "${{ github.repository }}" --limit 50 | grep -q "v${VERSION}"; then
+          elif ! RELEASES=$(gh release list --repo "${{ github.repository }}" --limit 50 2>"${LIST_ERR}"); then
+            echo "::error::gh release list failed, so whether v${VERSION} is released is unknown: $(tail -n 1 "${LIST_ERR}")"
+            exit 1
+          elif grep -q "v${VERSION}" <<<"${RELEASES}"; then
             echo "should_build=false" >> "$GITHUB_OUTPUT"
             echo "Release for v${VERSION} already exists, skipping."
           else
@@ -154,9 +186,15 @@ jobs:
           # sed, not `grep -oP`: this job runs on macOS, whose BSD grep has no
           # -P and errors out, which silently left SEQ empty and every CI release
           # at sequence 1. Dots in the version are escaped so they match literally.
+          # gh's output is kept and its status checked first: piped into sed,
+          # a gh that fails yields no sequence numbers and the tag restarts at 1.
           VER_RE="${VERSION//./\\.}"
-          SEQ=$(gh release list --repo "${{ github.repository }}" --limit 50 \
-            | sed -nE "s/.*v${VER_RE}-b${YEAR}\.${MONTH}\.([0-9]+).*/\1/p" \
+          LIST_ERR="${RUNNER_TEMP}/release-list.err"
+          if ! RELEASES=$(gh release list --repo "${{ github.repository }}" --limit 50 2>"${LIST_ERR}"); then
+            echo "::error::gh release list failed, so the CalVer sequence is unknown: $(tail -n 1 "${LIST_ERR}")"
+            exit 1
+          fi
+          SEQ=$(sed -nE "s/.*v${VER_RE}-b${YEAR}\.${MONTH}\.([0-9]+).*/\1/p" <<<"${RELEASES}" \
             | sort -rn | head -1)
           SEQ=$((${SEQ:-0} + 1))
           TAG_NAME="v${VERSION}-b${YEAR}.${MONTH}.${SEQ}"
@@ -171,9 +209,15 @@ jobs:
           # build that can take up to three hours, and a release published by
           # hand during that window would otherwise get a duplicate alongside it.
           # A manual release always wins: this job exists to cover the case where
-          # nobody got to it, not to race someone who did.
-          if gh release list --repo "${{ github.repository }}" --limit 50 \
-               | grep -q "v${VERSION}"; then
+          # nobody got to it, not to race someone who did. gh's output is kept
+          # and its status checked first: piped into grep, a gh that fails reads
+          # as "no release" and the job publishes anyway.
+          LIST_ERR="${RUNNER_TEMP}/release-list.err"
+          if ! RELEASES=$(gh release list --repo "${{ github.repository }}" --limit 50 2>"${LIST_ERR}"); then
+            echo "::error::gh release list failed, so the re-check before publishing could not run: $(tail -n 1 "${LIST_ERR}")"
+            exit 1
+          fi
+          if grep -q "v${VERSION}" <<<"${RELEASES}"; then
             echo "A release for v${VERSION} was published while this build ran."
             echo "Leaving it alone — the manually published release stands."
             exit 0
