@@ -1029,7 +1029,8 @@ function restore_from_proven {
 # cache holds. Compares the sidecars, not the packages: in a normal checkout the
 # repo copies are LFS pointers, so their bytes say nothing about the package
 # they stand for, while the .sha256 and .manifest.json beside them are ordinary
-# files that name the hash and the build.
+# files that name the hash and the build. The package file itself only has to
+# be there.
 function _repo_proven_matches_cache {
   local proven_dir="${TARGET}/proven/${ARCH_LABEL}"
   local repo_proven="${SCRIPT_DIR}/proven/${ARCH_LABEL}"
@@ -1037,6 +1038,7 @@ function _repo_proven_matches_cache {
 
   for f in "${proven_dir}"/*.tar.gz(N); do
     stem="${f:t}"
+    [[ -f "${repo_proven}/${stem}" ]]               || return 1
     [[ -f "${repo_proven}/${stem}.sha256" ]]        || return 1
     [[ -f "${repo_proven}/${stem}.manifest.json" ]] || return 1
     command cmp -s "${f}.sha256" "${repo_proven}/${stem}.sha256"               || return 1
