@@ -92,6 +92,7 @@ function wipe_workspace {
   echo "==> Workspace clean."
 }
 
+# usage [<exit-status>] — prints the usage text and exits (0 unless told).
 function usage {
   cat <<'USAGE'
 Usage: build-local.sh [options] [tag]
@@ -125,7 +126,7 @@ needs creating once.
 
 Or point MTX_ROOT somewhere you already own and skip that entirely.
 USAGE
-  exit 0
+  exit "${1:-0}"
 }
 
 function is_lfs_pointer_file {
@@ -661,6 +662,31 @@ function run_cleanup_lfs_mode {
   echo "==> Done. Repo proven/ restored to pointers; LFS cache pruned."
 }
 
+# The build root lives outside $HOME, so it takes one privileged step per
+# machine to create. mkdir would fail with a bare EACCES that says nothing
+# about what to do; check first and give the two commands instead.
+function check_build_root {
+  if [[ ! -d "${MTX_ROOT}" ]]; then
+    echo "ERROR: build root ${MTX_ROOT} does not exist." >&2
+    echo "" >&2
+    echo "  It lives outside your home directory, so creating it needs one" >&2
+    echo "  privileged step per machine. Run these once, then run the same" >&2
+    echo "  command again:" >&2
+    echo "" >&2
+    echo "    sudo mkdir -p ${MTX_ROOT}" >&2
+    echo "    sudo chown \"\$(id -un)\" ${MTX_ROOT}" >&2
+    echo "" >&2
+    echo "  To build somewhere you already own instead, set MTX_ROOT to it and add" >&2
+    echo "  --full: the published dependencies are built for /opt/mtx only." >&2
+    return 1
+  fi
+  if [[ ! -w "${MTX_ROOT}" ]]; then
+    echo "ERROR: build root ${MTX_ROOT} is not writable by $(id -un)." >&2
+    echo "       sudo chown \"\$(id -un)\" ${MTX_ROOT}" >&2
+    return 1
+  fi
+}
+
 function run_restore_cache_mode {
   local repo_proven="${SCRIPT_DIR}/proven/${ARCH_LABEL}"
   local local_proven="${TARGET}/proven/${ARCH_LABEL}"
@@ -997,7 +1023,7 @@ function _publish_cache_to_repo {
   fi
 
   # git add -A so pruned packages are staged as deletions, not just the new adds.
-  (cd "${SCRIPT_DIR}" && git add -A "proven/${ARCH_LABEL}/" && git diff --cached --quiet || git commit -m "${subject}" -- "proven/${ARCH_LABEL}/")
+  (cd "${SCRIPT_DIR}" && git add -A "proven/${ARCH_LABEL}/" && { git diff --cached --quiet || git commit -m "${subject}" -- "proven/${ARCH_LABEL}/"; })
 }
 
 function do_promote {
@@ -1076,8 +1102,9 @@ function do_promote {
       # to run --promote to archive them — so compare the two copies rather
       # than assuming a restore build leaves nothing to publish.
       if ! _repo_proven_matches_cache; then
-        echo "==> This build rebuilt only mkvtoolnix, but the proven cache holds"
-        echo "    packages the repo copy does not. Archiving the cache as it stands..."
+        echo "==> This build rebuilt only shared-mime-info and mkvtoolnix, but the"
+        echo "    proven cache holds packages the repo copy does not. Archiving the"
+        echo "    cache as it stands..."
         _publish_cache_to_repo "promote: ${ARCH_LABEL} proven deps $(date +%Y-%m-%d)" || exit 1
         echo "==> Promotion complete. Proven cache published to LFS."
         echo "    Push when ready."
@@ -1085,15 +1112,16 @@ function do_promote {
         return 0
       fi
       echo "==> Nothing to promote — the proven cache already holds every package"
-      echo "    this tag expects, this build rebuilt only mkvtoolnix, and the repo"
-      echo "    copy already matches the cache."
+      echo "    this tag expects, this build rebuilt only shared-mime-info and"
+      echo "    mkvtoolnix, and the repo copy already matches the cache."
       return 0
     fi
     echo "ERROR: Cannot promote — packages/ is incomplete (${#missing_pkgs[@]} missing)."
     echo "  Missing from packages/: ${missing_pkgs[*]}"
     echo "  Missing from proven/:   ${absent_from_proven[*]}"
-    echo "  A smart-restore build rebuilds only mkvtoolnix, and the proven cache"
-    echo "  cannot cover the gap. Run a --full build first, then promote."
+    echo "  A smart-restore build rebuilds only shared-mime-info and mkvtoolnix,"
+    echo "  and the proven cache cannot cover the gap. Run a --full build first,"
+    echo "  then promote."
     exit 1
   fi
 
@@ -1111,7 +1139,7 @@ function do_promote {
     local -a old_manifests=("${proven_dir}"/*.tar.gz.manifest.json(N))
     [[ ${#old_manifests[@]} -gt 0 ]] && command cp "${old_manifests[@]}" "${repo_proven}/"
     (cd "${repo_proven}" && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
-    (cd "${SCRIPT_DIR}" && git add "proven/${ARCH_LABEL}/"*.tar.gz "proven/${ARCH_LABEL}/"*.sha256 && git diff --cached --quiet || git commit -m "archive: ${ARCH_LABEL} proven deps before promotion $(date +%Y-%m-%d)" -- "proven/${ARCH_LABEL}/")
+    (cd "${SCRIPT_DIR}" && git add "proven/${ARCH_LABEL}/"*.tar.gz "proven/${ARCH_LABEL}/"*.sha256 && { git diff --cached --quiet || git commit -m "archive: ${ARCH_LABEL} proven deps before promotion $(date +%Y-%m-%d)" -- "proven/${ARCH_LABEL}/"; })
   fi
 
   # Step 2: Build new proven set in temp directory
@@ -1180,11 +1208,12 @@ source "${SCRIPT_DIR}/config/config.local.sh"
 # Defaults
 TAG=""
 BUILD_MODE="auto"  # auto, full, promote
-# CMPL is upstream's name for the compile workspace and is authoritative when
-# the overlay supplies it; the $HOME fallbacks apply only without an overlay.
-WORK_DIR=${CMPL:-${WORK_DIR:-$HOME/tmp/compile}}
-TARGET=${TARGET:-$HOME/opt}
+# CMPL is upstream's name for the compile workspace; the overlay sets it.
+WORK_DIR=${CMPL:?config/config.local.sh must set CMPL}
+TARGET=${TARGET:?config/config.local.sh must set TARGET}
 PACKAGE_DIR=${PACKAGE_DIR:-${TARGET}/packages}
+# The source folder is checked with the other two, before anything is created.
+SOURCE_DIR="${SRCDIR:?config/config.local.sh must set SRCDIR}"
 BUILD_DIR="${SCRIPT_DIR}/build"
 RELEASE_DIR="${SCRIPT_DIR}/release"
 VERIFY_PASSED=false
@@ -1200,11 +1229,17 @@ while [[ -n $1 ]]; do
     --restore-cache)       BUILD_MODE="restore-cache" ;;
     --cleanup-lfs)         BUILD_MODE="cleanup-lfs" ;;
     --help|-h)             usage ;;
-    -*)           echo "Unknown option: $1"; usage ;;
+    -*)           echo "Unknown option: $1" >&2; usage 1 ;;
     *)            TAG="$1" ;;
   esac
   shift
 done
+
+# --restore-cache copies into the build root, so it needs the root before it
+# downloads anything.
+if [[ "${BUILD_MODE}" == restore-cache ]]; then
+  check_build_root || exit 1
+fi
 
 # Handle --cleanup-lfs early (no tag, clone, or specs needed)
 if [[ "${BUILD_MODE}" == "cleanup-lfs" ]]; then
@@ -1224,27 +1259,7 @@ if [[ -z "${TAG}" ]]; then
 fi
 VERSION=${TAG#release-}
 
-# The build root lives outside $HOME, so it takes one privileged step per
-# machine to create. mkdir would fail here with a bare EACCES that says
-# nothing about what to do; check first and give the two commands instead.
-if [[ ! -d "${MTX_ROOT}" ]]; then
-  echo "ERROR: build root ${MTX_ROOT} does not exist." >&2
-  echo "" >&2
-  echo "  It lives outside your home directory, so creating it needs one" >&2
-  echo "  privileged step per machine. Run these once, then build again:" >&2
-  echo "" >&2
-  echo "    sudo mkdir -p ${MTX_ROOT}" >&2
-  echo "    sudo chown \"\$(id -un)\" ${MTX_ROOT}" >&2
-  echo "" >&2
-  echo "  To build somewhere you already own instead, set MTX_ROOT to it and add" >&2
-  echo "  --full: the published dependencies are built for /opt/mtx only." >&2
-  exit 1
-fi
-if [[ ! -w "${MTX_ROOT}" ]]; then
-  echo "ERROR: build root ${MTX_ROOT} is not writable by $(id -un)." >&2
-  echo "       sudo chown \"\$(id -un)\" ${MTX_ROOT}" >&2
-  exit 1
-fi
+check_build_root || exit 1
 
 # The docbook package is archived relative to the stylesheet root's parent and
 # restored by extracting into TARGET, so the two only line up while the
@@ -1269,9 +1284,10 @@ exec > >(tee "${LOG_FILE}") 2>&1
 BUILD_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')
 SECONDS=0
 
-# Build report function (defined early so EXIT trap can use it on any failure)
+# write_report <exit-status> — the build report, written by the EXIT trap below;
+# its Result line says how the run ended.
 function write_report {
-  local report_file="${WORK_DIR}/build-report-${VERSION}.txt"
+  local rc="$1" report_file="${WORK_DIR}/build-report-${VERSION}.txt"
   {
     local elapsed=$SECONDS
     local mins=$((elapsed / 60))
@@ -1283,13 +1299,16 @@ function write_report {
     echo "Architecture: ${MACHINE_ARCH} (${ARCH_LABEL})"
     echo "Mode: ${BUILD_MODE}"
     echo "Build: ${BUILD_SUMMARY:-unknown}"
+    if (( rc == 0 )); then echo "Result: completed"; else echo "Result: FAILED (exit ${rc})"; fi
     echo ""
     echo "Verification: $(if [[ "${VERIFY_PASSED}" == true ]]; then echo "PASSED"; else echo "FAILED"; fi)"
     [[ -n "${BUILT_QT_VERSION}" ]] && echo "Qt version: ${BUILT_QT_VERSION} (expected ${QTVER})"
     [[ -n "${size_mb}" ]] && echo "App size: ${size_mb} MB"
     echo ""
-    [[ -n "${DMG_RELEASE_NAME}" ]] && echo "Release: ${RELEASE_DIR}/${DMG_RELEASE_NAME}"
-    [[ -n "${DMG_NAME}" ]] && echo "Internal: ${BUILD_DIR}/${DMG_NAME}"
+    # Only files the run wrote: the release copy when one was made, the internal
+    # copy when it is in build/.
+    [[ -n "${DMG_RELEASE_NAME}" && "${release_emitted}" == true ]] && echo "Release: ${RELEASE_DIR}/${DMG_RELEASE_NAME}"
+    [[ -n "${DMG_NAME}" && -f "${BUILD_DIR}/${DMG_NAME}" ]] && echo "Internal: ${BUILD_DIR}/${DMG_NAME}"
     [[ -n "${LOG_NAME}" ]] && echo "Log: ${LOG_DIR}/${LOG_NAME}"
     echo "Build log: ${LOG_FILE}"
   } > "${report_file}"
@@ -1297,9 +1316,9 @@ function write_report {
 }
 
 # Write build report on exit (success or failure)
-trap '{
+trap '_rc=$?; {
   BUILD_SUMMARY="${BUILD_SUMMARY:-FAILED (script exited unexpectedly)}"
-  write_report
+  write_report ${_rc}
   sleep 0.1  # allow tee to flush
 }' EXIT
 trap 'echo "==> Interrupted."; exit 130' INT TERM HUP
@@ -1441,7 +1460,6 @@ echo "==> Qt version (derived from specs.sh): ${QTVER} (${SPECS_QT_FILE})"
 # (build_package /path mode bypasses retrieve_file).
 PUBKEY="${SCRIPT_DIR}/tools/mbunkus-pubkey.asc"
 PINNED_FP_FILE="${SCRIPT_DIR}/tools/mbunkus-fingerprint.txt"
-SOURCE_DIR="${SRCDIR:-${HOME}/opt/source}"
 TARBALL="${SOURCE_DIR}/mkvtoolnix-${VERSION}.tar.xz"
 SIGFILE="${TARBALL}.sig"
 TARBALL_URL="https://mkvtoolnix.download/sources/mkvtoolnix-${VERSION}.tar.xz"
@@ -1586,8 +1604,8 @@ case "${BUILD_MODE}" in
     wipe_workspace
     if [[ ${cache_rc} -eq 0 ]]; then
       restore_from_proven
-      BUILD_SUMMARY="Restored from proven, built mkvtoolnix only"
-      echo "==> All dependencies restored from proven. Building mkvtoolnix only..."
+      BUILD_SUMMARY="Restored from proven, built shared-mime-info and mkvtoolnix"
+      echo "==> All dependencies restored from proven. Building shared-mime-info and mkvtoolnix..."
       # shared-mime-info produces no cacheable package (NO_CONFIGURE installs the
       # MIME DB straight into ${TARGET}/share/mime), so restore can't bring it back.
       # Rebuild it before mkvtoolnix, or build_configured_mkvtoolnix silently ships
