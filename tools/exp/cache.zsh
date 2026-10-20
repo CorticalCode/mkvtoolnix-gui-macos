@@ -87,6 +87,8 @@ exp_cache_store() {
   fi
   command mkdir -p "${entry:h}" || return 1
   tmp=$(command mktemp -d "${entry:h}/.incoming.XXXXXX") || return 1
+  # A store that fails part-way leaves this folder; the run removes it when it ends.
+  if (( $+functions[run_temp_add] )); then run_temp_add "${tmp}"; fi
   command cp "${pkg}" "${tmp}/package.tar.gz" || return 1
   sha=$(command shasum -a 256 < "${tmp}/package.tar.gz" | command cut -d' ' -f1)
   [[ -n "${sha}" ]] || return 1
@@ -115,6 +117,66 @@ exp_cache_restore() {
   (cd "$2" && command tar xzf "$1/package.tar.gz")
 }
 
+# exp_cache_users <kept-builds-dir> <entry-dir>...
+# For each entry a kept build used, prints "<entry-dir><TAB><manifest>". A
+# kept build is a manifest in <dir>/exp/*/ or a loose one in <dir>; it used an
+# entry when its deps name the entry's library and key and the checksum of the
+# entry's manifest.json. 0 when it could read every manifest (and printed
+# each use); 2 when it cannot tell.
+exp_cache_users() {
+  local dir="$1"; shift
+  if [[ -z "${dir}" ]]; then
+    print -u2 "ERROR: no kept-builds folder given; cannot tell which cache entries kept builds use"
+    return 2
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    print -u2 "ERROR: python3 is needed to read the kept builds' manifests; cannot tell which cache entries are in use"
+    return 2
+  fi
+  command python3 -I - "${dir}" "$@" <<'PY'
+import glob, hashlib, json, os, sys
+d, entries = sys.argv[1], sys.argv[2:]
+
+def listable(p):
+    # A folder that is absent holds no kept build; one that cannot be listed
+    # may hold some, so the answer cannot be told.
+    try:
+        os.listdir(p)
+    except FileNotFoundError:
+        pass
+    except OSError as err:
+        print(f"ERROR: cannot read {p}: {err}", file=sys.stderr)
+        sys.exit(2)
+
+listable(d)
+listable(os.path.join(d, "exp"))
+de = glob.escape(d)
+for b in glob.glob(os.path.join(de, "exp", "*", "")):
+    listable(b)
+paths = sorted(glob.glob(os.path.join(de, "exp", "*", "*.dmg.manifest.json"))
+               + glob.glob(os.path.join(de, "*-exp[0-9]*.dmg.manifest.json")))
+used = {}
+for p in paths:
+    try:
+        with open(p) as f:
+            m = json.load(f)
+    except (OSError, ValueError) as e:
+        print(f"ERROR: cannot read {p}: {e}", file=sys.stderr)
+        sys.exit(2)
+    for dep in m.get("deps") or []:
+        if dep.get("key"):
+            used.setdefault((dep.get("library"), dep.get("key"), dep.get("manifest_sha256")), []).append(p)
+for e in entries:
+    try:
+        with open(os.path.join(e, "manifest.json"), "rb") as f:
+            sha = hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        continue
+    for p in used.get((os.path.basename(os.path.dirname(e)), os.path.basename(e), sha), []):
+        print(f"{e}\t{p}")
+PY
+}
+
 # exp_cache_drop <arch> <library>/<key or its first 12+ characters>
 exp_cache_drop() {
   local arch="$1" spec="$2" lib prefix re='^[a-z0-9_]+/[0-9a-f]{12,64}$'
@@ -134,6 +196,19 @@ exp_cache_drop() {
     print -u2 "ERROR: ${#hits[@]} cache entries match ${spec} for ${arch}"
     return 1
   fi
+  local users rc
+  users=$(exp_cache_users "${EXP_KEPT_BUILDS_DIR:-}" "${hits[1]}"); rc=$?
+  (( rc == 0 )) || return 1
+  if [[ -n "${users}" ]]; then
+    if exp_cache_check "${hits[1]}" 2>/dev/null; then
+      print -u2 "ERROR: kept builds used ${hits[1]}; it was not removed:"
+      print -u2 -- "${users//$'\t'/  used by  }"
+      print -u2 "       Remove those builds' folders first if they are no longer needed."
+      return 1
+    fi
+    print -r -- "${hits[1]} is damaged; removing it although kept builds used it:"
+    print -r -- "${users//$'\t'/  used by  }"
+  fi
   command rm -rf "${hits[1]}" || return 1
   print -r -- "Removed ${hits[1]}"
 }
@@ -148,6 +223,14 @@ exp_cache_clear() {
   fi
   dir="${EXP_CACHE_ROOT}/$1"
   if [[ -d "${dir}" ]]; then
+    local users rc
+    users=$(exp_cache_users "${EXP_KEPT_BUILDS_DIR:-}" "${dir}"/*/*(N/)); rc=$?
+    (( rc == 0 )) || return 1
+    if [[ -n "${users}" ]]; then
+      print -u2 "ERROR: kept builds use entries of ${dir}; nothing was removed:"
+      print -u2 -- "${users//$'\t'/  used by  }"
+      return 1
+    fi
     command rm -rf "${dir}" || return 1
     print -r -- "Cleared ${dir}"
   else

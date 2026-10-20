@@ -18,19 +18,70 @@ fi
 set -e
 setopt NULL_GLOB
 
-# Every run ends with one line saying how it ended, whatever the exit path.
-# Installed first so the refusals below end with it too. A function that fails
-# at top level under `set -e` skips this trap, so a top-level call to a function
-# that can fail is written `fn ... || exit $?`.
+# The report beside this attempt's log: how the run ended, and where its
+# outputs are.
+_exp_report() {
+  local rc="$1" report
+  [[ -n "${RUN_LOG:-}" ]] || return 0
+  report=$(run_report_path)
+  {
+    print -r -- "Experimental build report"
+    print -r -- "Run:      ${RUN_ID}"
+    print -r -- "Build:    ${EXP_BUILD_ID:-none (the run ended before it had a number)}"
+    print -r -- "Mode:     ${MODE:-${ACTION:-}}"
+    if [[ "${MODE:-}" == series ]]; then
+      print -r -- "Source:   ${PIN:-} (${PIN_SHA:-unresolved}) with: ${EXP_CHANGES[*]:-no changes}"
+    elif [[ "${MODE:-}" == try ]]; then
+      print -r -- "Source:   ${SRC:-}"
+    fi
+    if (( rc != 0 )); then
+      print -r -- "Result:   failed (exit ${rc})"
+    elif [[ -n "${DMG_FINAL_PATH:-}" && -f "${DMG_FINAL_PATH}" ]]; then
+      print -r -- "Result:   built"
+      print -r -- "DMG:      ${DMG_FINAL_PATH}"
+    else
+      print -r -- "Result:   done (exit 0)"
+    fi
+    print -r -- "Log:      ${RUN_LOG}"
+    print -r -- "Started:  ${BUILD_START_TIME:-unknown}"
+    print -r -- "Finished: $(command date '+%Y-%m-%d %H:%M:%S')"
+  } > "${report}" || { print -r -- "WARNING: could not write ${report}"; return 0; }
+  print -r -- "==> Report: ${report}"
+  print -r -- "==> Log: ${RUN_LOG}"
+}
+
+# _exp_outcome <exit-status> — the run's finish. Every run ends with one line
+# saying how it ended, whatever the exit path. Installed first so the refusals
+# below end with it too; once the library is sourced it runs once, from the
+# EXIT trap or from TRAPZERR below (tools/lib/run-record.zsh, run_finish),
+# which finishes a run that set -e ends inside a function, where zsh skips the
+# EXIT trap.
 _exp_outcome() {
-  local rc=$?
+  local rc="$1"
+  # The record closes first: it prints a line for each temporary file it
+  # removes, and the log path stays the last thing printed. Neither step may
+  # stop the others under set -e.
+  if (( $+functions[run_record_close] )); then run_record_close "${rc}" || true; fi
   if [[ ${rc} -eq 0 ]]; then
     print -r -- "build-exp: finished (exit 0)"
   else
     print -r -- "build-exp: FAILED (exit ${rc})"
   fi
+  if (( $+functions[_exp_report] )); then _exp_report "${rc}" || true; fi
 }
-trap _exp_outcome EXIT
+trap '_rc=$?; if (( $+functions[run_finish] )); then run_finish _exp_outcome ${_rc}; else _exp_outcome ${_rc}; fi' EXIT
+
+# SCRIPT_DIR = wrapper repo root (tools/ → parent)
+SCRIPT_DIR=${0:a:h:h}
+source "${SCRIPT_DIR}/tools/lib/run-record.zsh" || exit 1
+# Every run except --help keeps a log of its own from here on; a build's log
+# moves into the build's folder once the build has a number.
+if (( ! ${argv[(Ie)--help]} && ! ${argv[(Ie)-h]} )); then
+  _run_mode=build
+  (( ${argv[(Ie)--clear-cache]} )) && _run_mode=clear-cache
+  (( ${argv[(Ie)--cache-drop]} )) && _run_mode=cache-drop
+  run_log_start "${MTX_LOG_DIR:-${SCRIPT_DIR}/logs}" build-exp "${_run_mode}" || exit 1
+fi
 
 unalias -a 2>/dev/null || true
 
@@ -66,12 +117,13 @@ EXP_BASE_PATH="${PATH}"
 # The arguments as given, for refusals that say how to re-run this command.
 _EXP_ARGV=("$@")
 
+# A failure that set -e turns into the end of the run: says where, then
+# finishes the run. Each step goes on whatever the one before it did.
 TRAPZERR() {
-  echo "ERROR: build-exp.sh failed at ${funcfiletrace[1]:-line ${LINENO}} (exit code $?)" >&2
+  local rc=$?
+  echo "ERROR: build-exp.sh failed at ${funcfiletrace[1]:-line ${LINENO}} (exit code ${rc})" >&2 || true
+  run_finish_zerr _exp_outcome "${rc}" || true
 }
-
-# SCRIPT_DIR = wrapper repo root (tools/ → parent)
-SCRIPT_DIR=${0:a:h:h}
 
 # Build locations come from the experimental config overlay — the same file
 # staged as config.local.sh in the source tree, so this wrapper and the build
@@ -211,7 +263,16 @@ case "${MACHINE_ARCH}" in
   *)      ARCH_LABEL="${MACHINE_ARCH}" ;;
 esac
 
+# Where builds are kept: each in exp/<build-id>/ here, older ones loose.
+EXP_KEPT_BUILDS_DIR="${EXP_KEPT_BUILDS_DIR:-${SCRIPT_DIR}/build}"
+
 # --- Modes that do not build ---
+case "${ACTION}" in
+  clear-cache|cache-drop)
+    if [[ -d "${MTX_EXP_ROOT}" ]]; then
+      run_record_open "${MTX_EXP_ROOT}" build-exp.sh "${ACTION}" || exit $?
+    fi ;;
+esac
 case "${ACTION}" in
   clear-cache) exp_cache_clear "${ARCH_LABEL}" || exit $?; exit 0 ;;
   cache-drop)  exp_cache_drop "${ARCH_LABEL}" "${DROP_SPEC}" || exit $?; exit 0 ;;
@@ -338,9 +399,13 @@ fi
 
 # --- Paths come from the experimental overlay read at the top ---
 WORK_DIR="${CMPL}"
+if [[ "${TARGET:A}" != "${MTX_EXP_ROOT:A}/prefix" || "${WORK_DIR:A}" != "${MTX_EXP_ROOT:A}/build" ]]; then
+  echo "ERROR: TARGET (${TARGET}) and CMPL (${WORK_DIR}) must be ${MTX_EXP_ROOT}/prefix and ${MTX_EXP_ROOT}/build." >&2
+  exit 1
+fi
 # The root lives outside $HOME, so it takes one privileged step per machine to
-# create. Checked before anything is made in it, so that a missing root stops
-# the run with the commands, not a bare EACCES.
+# create. Checked before the build folder is made and the log moved into it,
+# so that a missing root stops the run with the commands, not a bare EACCES.
 if [[ ! -d "${MTX_EXP_ROOT}" ]]; then
   echo "ERROR: build root ${MTX_EXP_ROOT} does not exist." >&2
   echo "" >&2
@@ -369,6 +434,32 @@ else
 fi
 BUILD_LABEL="exp$(printf '%03d' ${BUILD_NUM})"
 BUILD_HASH=$(print -n "${SLUG}|${BUILD_NUM}|${MTX_VER}" | shasum -a 256 | head -c 6)
+# This build's folder: its DMG, checksum and manifest, and a log and report per
+# attempt. A retry after a failure has the same number, so the same folder.
+EXP_BUILD_ID="${BUILD_LABEL}-${SLUG}-${BUILD_HASH}"
+EXP_BUILD_FOLDER="${EXP_KEPT_BUILDS_DIR}/exp/${EXP_BUILD_ID}"
+# A manifest there is a finished build with this number: the counter is behind
+# the builds kept, and this build would replace that one. Only the manifest
+# counts: it is the last of a build's files moved into place, so a DMG without
+# one is an attempt that stopped before it finished.
+_kept=( "${EXP_BUILD_FOLDER}"/*.dmg.manifest.json(N) )
+if (( ${#_kept} )); then
+  echo "ERROR: ${EXP_BUILD_FOLDER} already holds a finished build:" >&2
+  printf '         %s\n' "${_kept[@]:t}" >&2
+  echo "       The build counter ${BUILD_COUNTER_FILE} is behind the builds already kept," >&2
+  echo "       so this build was given that build's number. Nothing was changed. Set the" >&2
+  echo "       counter to the highest number kept in ${EXP_KEPT_BUILDS_DIR}/exp/, then build again." >&2
+  exit 1
+fi
+unset _kept
+command mkdir -p "${EXP_BUILD_FOLDER}" || exit $?
+_last=0
+for _f in "${EXP_BUILD_FOLDER}"/attempt-<->.log(N); do
+  _n=${${_f:t:r}#attempt-}
+  (( _n > _last )) && _last=${_n}
+done
+run_log_rename "${EXP_BUILD_FOLDER}/attempt-$(( _last + 1 )).log" || exit $?
+unset _f _n _last
 # Experimental builds target the next upstream release, so label them
 # <next-major>pre derived from the source version (99.0 -> 100pre).
 DEV_VER="$(( ${MTX_VER%%.*} + 1 ))pre"
@@ -392,10 +483,7 @@ if [[ -n "${VERIFY_SYMBOL}" ]]; then
   echo "    VerifySym:   ${VERIFY_SYMBOL}"
 fi
 
-# --- Log setup ---
-mkdir -p "${WORK_DIR}"
-LOG_FILE="${WORK_DIR}/build-exp-${SLUG}-${BUILD_LABEL}-${BUILD_HASH}.log"
-exec > >(tee "${LOG_FILE}") 2>&1
+command mkdir -p "${WORK_DIR}" || exit $?
 BUILD_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')          # local time, for human log
 BUILD_START_ISO=$(command date -u +"%Y-%m-%dT%H:%M:%SZ")  # UTC ISO, for manifests
 SECONDS=0
@@ -448,11 +536,16 @@ _host_json() {
 # --- Stage source into WORK_DIR (upstream build.sh expects ${CMPL}/mkvtoolnix-${MTX_VER}) ---
 FORK_BUILD_DIR="${WORK_DIR}/mkvtoolnix-${MTX_VER}"
 PACKAGING="${FORK_BUILD_DIR}/packaging/macos"
-if [[ -d "${FORK_BUILD_DIR}" ]]; then
-  echo "    rm -rf ${FORK_BUILD_DIR:t} (prior experimental-build scratch)"
-  command rm -rf "${FORK_BUILD_DIR}"
+run_record_open "${MTX_EXP_ROOT}" build-exp.sh "${MODE}" || exit $?
+_stale=( "${EXP_CACHE_ROOT}"/*/*/.incoming.*(DN) "${EXP_KEPT_BUILDS_DIR}"/exp/*/*.tmp(DN) )
+if (( ${#_stale} )); then
+  echo "WARNING: temporary files left by a run that was stopped; nothing removes them. Look, then remove them by hand:"
+  printf '    %s\n' "${_stale[@]}"
 fi
-command rm -rf "${WORK_DIR}/dmg-${MTX_VER}"
+unset _stale
+run_check_root "${MTX_EXP_ROOT}" || exit $?
+run_remove "${MTX_EXP_ROOT}" "build/${FORK_BUILD_DIR:t}" || exit $?
+run_remove "${MTX_EXP_ROOT}" "build/dmg-${MTX_VER}" || exit $?
 if [[ "${MODE}" == series ]]; then
   # The pin's tree and its submodules, unpacked from the clone with the
   # changes applied: no repository in it and nothing to exclude.
@@ -592,10 +685,9 @@ fi
 # config.sh and config.local.sh is what the key hashed.
 exp_build_env || exit $?
 echo ""
-echo "==> Wiping ${TARGET}..."
-for item in "${TARGET}"/*(DN); do
-  command rm -rf "${item}"
-done
+echo "==> Cleaning ${TARGET} (only what earlier builds recorded creating)..."
+run_clean_area "${MTX_EXP_ROOT}" prefix || exit $?
+run_clean_area "${MTX_EXP_ROOT}" stage || exit $?
 mkdir -p "${TARGET}/include" "${TARGET}/lib" "${TARGET}/bin" "${PACKAGE_DIR}"
 
 DEPS_JSON_PARTS=()
@@ -816,7 +908,7 @@ fi
 # when the build started; the packaging staging patch, applied to every
 # experimental source, as it was at the staging step: by name and SHA-256, and
 # whether it was applied or already in the source.
-BUILD_DIR="${SCRIPT_DIR}/build"
+BUILD_DIR="${EXP_BUILD_FOLDER}"
 DMG_FINAL_NAME="MKVToolNix-${DEV_VER}-${ARCH_LABEL}-${BUILD_LABEL}-${SLUG}-${BUILD_HASH}.dmg"
 DMG_FINAL_PATH="${BUILD_DIR}/${DMG_FINAL_NAME}"
 DMG_MANIFEST_PATH="${DMG_FINAL_PATH}.manifest.json"
@@ -919,6 +1011,7 @@ _HOST_JSON=$(_host_json) || exit $?
 _FINISHED_AT=$(_iso_utc) || exit $?
 
 mkdir -p "${BUILD_DIR}" || exit $?
+run_temp_add "${DMG_MANIFEST_PATH}.tmp"
 command cat > "${DMG_MANIFEST_PATH}.tmp" <<EOF || exit $?
 {
   "schema_version": 2,
@@ -1005,7 +1098,7 @@ echo ""
 echo "  DMG:          ${BUILD_DIR}/${DMG_FINAL_NAME}"
 echo "  SHA256:       ${BUILD_DIR}/${DMG_FINAL_NAME}.sha256"
 echo "  Manifest:     ${BUILD_DIR}/${DMG_FINAL_NAME}.manifest.json"
-echo "  Log:          ${LOG_FILE}"
+echo "  Log:          ${RUN_LOG}"
 echo "  Mode:         ${MODE}"
 if [[ "${MODE}" == series ]]; then
   echo "  Pin:          ${PIN} (${PIN_SHA[1,12]})"
