@@ -1378,7 +1378,6 @@ mkdir -p "${WORK_DIR}"
 echo "==> Building MKVToolNix ${VERSION} for ${MACHINE_ARCH} (${ARCH_LABEL})"
 echo "==> Mode: ${BUILD_MODE}"
 echo "==> Work directory: ${WORK_DIR}"
-echo "==> Logging to ${RUN_LOG}"
 
 # Clone upstream at the specified tag (or verify existing clone matches)
 CLONE_DIR="${WORK_DIR}/mkvtoolnix-src"
