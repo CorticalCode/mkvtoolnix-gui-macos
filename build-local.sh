@@ -28,7 +28,7 @@ if (( ! ${argv[(Ie)--help]} && ! ${argv[(Ie)-h]} )); then
   run_log_start "${MTX_LOG_DIR:-${SCRIPT_DIR}/logs}" build-local "${_run_mode}" || exit 1
   unset _a
 fi
-BUILD_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+BUILD_START_TIME=$(command date -u +"%Y-%m-%dT%H:%M:%SZ")
 SECONDS=0
 
 # write_report <exit-status> — the build report, written beside the log on
@@ -43,7 +43,7 @@ function write_report {
     local secs=$((elapsed % 60))
     echo "Build Report: MKVToolNix${VERSION:+ ${VERSION}}"
     echo "Started: ${BUILD_START_TIME}"
-    echo "Finished: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "Finished: $(command date -u +"%Y-%m-%dT%H:%M:%SZ")"
     echo "Elapsed: ${mins}m $(printf '%02d' ${secs})s"
     echo "Architecture: ${MACHINE_ARCH} (${ARCH_LABEL})"
     echo "Mode: ${BUILD_MODE:-${_run_mode}}"
@@ -1189,7 +1189,7 @@ function do_promote {
         echo "==> This build rebuilt only shared-mime-info and mkvtoolnix, but the"
         echo "    proven cache holds packages the repo copy does not. Archiving the"
         echo "    cache as it stands..."
-        _publish_cache_to_repo "promote: ${ARCH_LABEL} proven deps $(date +%Y-%m-%d)" || exit 1
+        _publish_cache_to_repo "promote: ${ARCH_LABEL} proven deps $(date -u +%Y-%m-%d)" || exit 1
         echo "==> Promotion complete. Proven cache published to LFS."
         echo "    Push when ready."
         cleanup_repo_lfs "${ARCH_LABEL}"
@@ -1225,7 +1225,7 @@ function do_promote {
     local -a old_manifests=("${proven_dir}"/*.tar.gz.manifest.json(N))
     [[ ${#old_manifests[@]} -gt 0 ]] && command cp "${old_manifests[@]}" "${repo_proven}/"
     (cd "${repo_proven}" && for f in *.tar.gz; do shasum -a 256 "$f" > "$f.sha256"; done)
-    (cd "${SCRIPT_DIR}" && git add "proven/${ARCH_LABEL}/"*.tar.gz "proven/${ARCH_LABEL}/"*.sha256 && { git diff --cached --quiet -- "proven/${ARCH_LABEL}/" || git commit -m "archive: ${ARCH_LABEL} proven deps before promotion $(date +%Y-%m-%d)" -- "proven/${ARCH_LABEL}/"; })
+    (cd "${SCRIPT_DIR}" && git add "proven/${ARCH_LABEL}/"*.tar.gz "proven/${ARCH_LABEL}/"*.sha256 && { git diff --cached --quiet -- "proven/${ARCH_LABEL}/" || git commit -m "archive: ${ARCH_LABEL} proven deps before promotion $(date -u +%Y-%m-%d)" -- "proven/${ARCH_LABEL}/"; })
   fi
 
   # Step 2: Build new proven set in temp directory
@@ -1260,7 +1260,7 @@ function do_promote {
   # predecessor like an old Qt/zlib) so it doesn't linger as an orphan. Step 1
   # already committed the outgoing cache, so anything pruned here stays
   # recoverable from git history.
-  _publish_cache_to_repo "promote: ${ARCH_LABEL} proven deps $(date +%Y-%m-%d)" || exit 1
+  _publish_cache_to_repo "promote: ${ARCH_LABEL} proven deps $(date -u +%Y-%m-%d)" || exit 1
 
   echo "==> Promotion complete. Proven cache updated."
   echo "    LFS archive committed. Push when ready."

@@ -43,8 +43,8 @@ _exp_report() {
       print -r -- "Result:   done (exit 0)"
     fi
     print -r -- "Log:      ${RUN_LOG}"
-    print -r -- "Started:  ${BUILD_START_TIME:-unknown}"
-    print -r -- "Finished: $(command date '+%Y-%m-%d %H:%M:%S')"
+    print -r -- "Started:  ${BUILD_START_ISO:-unknown}"
+    print -r -- "Finished: $(command date -u +"%Y-%m-%dT%H:%M:%SZ")"
   } > "${report}" || { print -r -- "WARNING: could not write ${report}"; return 0; }
   print -r -- "==> Report: ${report}"
   print -r -- "==> Log: ${RUN_LOG}"
@@ -486,8 +486,7 @@ if [[ -n "${VERIFY_SYMBOL}" ]]; then
 fi
 
 command mkdir -p "${WORK_DIR}" || exit $?
-BUILD_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')          # local time, for human log
-BUILD_START_ISO=$(command date -u +"%Y-%m-%dT%H:%M:%SZ")  # UTC ISO, for manifests
+BUILD_START_ISO=$(command date -u +"%Y-%m-%dT%H:%M:%SZ")  # UTC ISO, for the report and the manifest
 SECONDS=0
 
 trap 'echo "==> Interrupted."; exit 130' INT TERM HUP

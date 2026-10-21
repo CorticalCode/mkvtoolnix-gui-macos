@@ -37,8 +37,9 @@ typeset -gi RUN_FINISHED=0
 _run_now() { command date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 # run_log_start <logs-dir> <script> [<mode>]
-# Creates <logs-dir>/<YYYYmmdd-HHMMSS>-<script>[-<mode>][-<n>].log, a name no
-# file has, and from then on writes everything the shell prints to it as well.
+# Creates <logs-dir>/<YYYYmmdd-HHMMSS>-<script>[-<mode>][-<n>].log, the time in
+# UTC, a name no file has, and from then on writes everything the shell prints
+# to it as well.
 # Sets RUN_ID, RUN_LOG and RUN_LOGS_DIR. 1 when no log can be created.
 run_log_start() {
   local stem
@@ -48,7 +49,7 @@ run_log_start() {
     print -u2 "ERROR: cannot create a log in ${RUN_LOGS_DIR}"
     return 1
   fi
-  stem="$(command date +%Y%m%d-%H%M%S)-$2${3:+-$3}"
+  stem="$(command date -u +%Y%m%d-%H%M%S)-$2${3:+-$3}"
   RUN_ID="${stem}"
   until ( setopt no_clobber; : > "${RUN_LOGS_DIR}/${RUN_ID}.log" ) 2>/dev/null; do
     if (( ++n > 99 )); then
