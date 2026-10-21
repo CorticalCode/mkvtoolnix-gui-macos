@@ -48,7 +48,9 @@ function write_report {
     echo "Architecture: ${MACHINE_ARCH} (${ARCH_LABEL})"
     echo "Mode: ${BUILD_MODE:-${_run_mode}}"
     echo "Build: ${BUILD_SUMMARY:-unknown}"
-    if (( rc == 0 )); then echo "Result: completed"; else echo "Result: FAILED (exit ${rc})"; fi
+    if (( rc == 0 )); then echo "Result: completed"
+    elif [[ -n "${RUN_SIGNAL}" ]]; then echo "Result: interrupted by ${RUN_SIGNAL} (exit ${rc})"
+    else echo "Result: FAILED (exit ${rc})"; fi
     echo ""
     case "${BUILD_MODE:-${_run_mode}}" in
       build|auto|full|promote)
@@ -74,17 +76,23 @@ function write_report {
 # set -e; each prints its own errors.
 function _build_local_finish {
   local rc="$1"
+  # A summary set before the run ended names the build it started, not one it
+  # finished.
   if (( rc == 0 )); then
     BUILD_SUMMARY="${BUILD_SUMMARY:-${BUILD_MODE:-${_run_mode}}: completed}"
+  elif [[ -n "${BUILD_SUMMARY}" ]]; then
+    BUILD_SUMMARY="${BUILD_SUMMARY} (not finished)"
   else
-    BUILD_SUMMARY="${BUILD_SUMMARY:-FAILED (exit ${rc})}"
+    BUILD_SUMMARY="FAILED (exit ${rc})"
   fi
   write_report ${rc} || true
   run_record_close ${rc} || true
   sleep 0.1  # allow tee to flush
 }
 trap 'run_finish _build_local_finish $?' EXIT
-trap 'echo "==> Interrupted."; exit 130' INT TERM HUP
+trap 'run_interrupted INT' INT
+trap 'run_interrupted TERM' TERM
+trap 'run_interrupted HUP' HUP
 
 # --- Startup tool probe ---
 # Verify required external tools are reachable in PATH before doing real work.

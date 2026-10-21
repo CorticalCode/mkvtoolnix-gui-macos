@@ -40,7 +40,9 @@ _refresh_report() {
     print -r -- "Mode: ${_run_mode}"
     print -r -- "Planned: ${REBUILD_PACKAGES[*]:-nothing}"
     print -r -- "Repromoted: ${REPROMOTED_PACKAGES[*]:-nothing}"
-    if (( rc == 0 )); then print -r -- "Result: ok"; else print -r -- "Result: failed (exit ${rc})"; fi
+    if (( rc == 0 )); then print -r -- "Result: ok"
+    elif [[ -n "${RUN_SIGNAL}" ]]; then print -r -- "Result: interrupted by ${RUN_SIGNAL} (exit ${rc})"
+    else print -r -- "Result: failed (exit ${rc})"; fi
     print -r -- "Log: ${RUN_LOG}"
   } > "${report}" || { print -r -- "WARNING: could not write ${report}"; return 0; }
   print -r -- "==> Report: ${report}"
@@ -61,7 +63,9 @@ TRAPZERR() {
   local rc=$?
   run_finish_zerr _refresh_finish "${rc}" || true
 }
-trap 'echo "==> Interrupted."; exit 130' INT TERM HUP
+trap 'run_interrupted INT' INT
+trap 'run_interrupted TERM' TERM
+trap 'run_interrupted HUP' HUP
 UPSTREAM_URL="https://codeberg.org/mbunkus/mkvtoolnix.git"
 # Build locations come from the config overlay — the same file the build copies
 # into the upstream tree — so this tool refreshes packages in the tree the

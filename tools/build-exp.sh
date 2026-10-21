@@ -34,7 +34,9 @@ _exp_report() {
     elif [[ "${MODE:-}" == try ]]; then
       print -r -- "Source:   ${SRC:-}"
     fi
-    if (( rc != 0 )); then
+    if [[ -n "${RUN_SIGNAL:-}" ]]; then
+      print -r -- "Result:   interrupted by ${RUN_SIGNAL} (exit ${rc})"
+    elif (( rc != 0 )); then
       print -r -- "Result:   failed (exit ${rc})"
     elif [[ -n "${DMG_FINAL_PATH:-}" && -f "${DMG_FINAL_PATH}" ]]; then
       print -r -- "Result:   built"
@@ -489,7 +491,9 @@ command mkdir -p "${WORK_DIR}" || exit $?
 BUILD_START_ISO=$(command date -u +"%Y-%m-%dT%H:%M:%SZ")  # UTC ISO, for the report and the manifest
 SECONDS=0
 
-trap 'echo "==> Interrupted."; exit 130' INT TERM HUP
+trap 'run_interrupted INT' INT
+trap 'run_interrupted TERM' TERM
+trap 'run_interrupted HUP' HUP
 
 # --- Helper functions for manifest writing/reading ---
 

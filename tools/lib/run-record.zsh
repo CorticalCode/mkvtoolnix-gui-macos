@@ -24,6 +24,8 @@
 # from its EXIT trap through run_finish and from its TRAPZERR through
 # run_finish_zerr: under set -e, zsh ends a run without the EXIT trap when a
 # command fails inside a function or a function returns non-zero at top level.
+# An interrupt (INT, TERM, HUP) goes through run_interrupted, which records the
+# signal for the report and ends the run with status 130.
 
 typeset -ga RUN_AREAS=(prefix build stage)
 # Never removed by a build: the release cache, and the release clone, which its
@@ -31,7 +33,7 @@ typeset -ga RUN_AREAS=(prefix build stage)
 typeset -ga RUN_KEEP=(prefix/proven build/mkvtoolnix-src)
 typeset -ga RUN_BEFORE=() RUN_REMOVED=() RUN_TEMP=() RUN_UNKNOWN=() RUN_LOGS_FOUND=()
 typeset -gA RUN_OWNED=()
-typeset -g RUN_ID="" RUN_LOG="" RUN_LOGS_DIR="" RUN_ROOT="" RUN_RECORD=""
+typeset -g RUN_ID="" RUN_LOG="" RUN_LOGS_DIR="" RUN_ROOT="" RUN_RECORD="" RUN_SIGNAL=""
 typeset -gi RUN_FINISHED=0
 
 _run_now() { command date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -107,6 +109,16 @@ run_finish_zerr() {
   (( ZSH_SUBSHELL == 0 )) || return 0
   [[ -o errexit ]] || return 0
   run_finish "$1" "$2" || true
+}
+
+# run_interrupted <signal> — a script's trap for INT, TERM and HUP:
+#   trap 'run_interrupted INT' INT
+# Records the signal in RUN_SIGNAL for the run's report, says so, and ends the
+# run with status 130, so the EXIT trap's finish writes the report.
+run_interrupted() {
+  RUN_SIGNAL="SIG$1"
+  print -r -- "==> Interrupted by ${RUN_SIGNAL}."
+  exit 130
 }
 
 # run_report_path — where this run's report goes: beside its log.
