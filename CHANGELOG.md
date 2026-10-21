@@ -5,6 +5,11 @@
 - **Every log is kept.** Each run of `build-local.sh`, `tools/refresh-deps.sh` and
   `tools/build-exp.sh` writes its own log in `logs/` from its first line, and a report beside it,
   including failed and refused runs. Nothing deletes or overwrites a log.
+- **Times are UTC.** Log and report names and the times in reports, run records and build
+  manifests are UTC. `docs/build-history.md` keeps local time.
+- **An interrupted run says so.** A run stopped by Ctrl-C, a closed terminal or a shutdown ends
+  its log with the signal, its report says "interrupted by SIGINT" (or SIGHUP, SIGTERM) instead
+  of a failure, and its record is closed, so the next build cleans up after it.
 - **Builds remove only their own output.** Each run records what it created in the build root's
   `run-records/`; a build removes only those entries and stops, with a list, on anything else except the
   kept entries, `.DS_Store` files and logs. `tools/adopt-entries.sh` records existing entries once, after you have looked at them.
