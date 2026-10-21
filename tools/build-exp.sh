@@ -1136,9 +1136,17 @@ if [[ ${VERIFY_ISSUES} -gt 0 ]]; then
   echo "    Issues to review: ${VERIFY_ISSUES} (non-fatal)"
 fi
 echo ""
+# The DMG mounts at /Volumes/<its volume name> only while no other volume has
+# that name. A release DMG of the same version carries the same name, and a
+# second one mounts as "<name> 1", so the copy below would read the other app.
+_dmg_volume="/Volumes/MKVToolNix-${MTX_VER}-${DMG_REVISION}-${MACHINE_ARCH}"
 echo "To install and test:"
+if [[ -e "${_dmg_volume}" ]]; then
+  echo "    ${_dmg_volume} is already mounted; detach it first, or this DMG mounts under another name:"
+  echo "    hdiutil detach \"${_dmg_volume}\""
+fi
 echo "    open \"${BUILD_DIR}/${DMG_FINAL_NAME}\""
-echo "    cp -R \"/Volumes/MKVToolNix-${MTX_VER}-${DMG_REVISION}-${MACHINE_ARCH}/${APP_BUNDLE_NAME}\" /Applications/"
-echo "    hdiutil detach \"/Volumes/MKVToolNix-${MTX_VER}-${DMG_REVISION}-${MACHINE_ARCH}\""
+echo "    cp -R \"${_dmg_volume}/${APP_BUNDLE_NAME}\" /Applications/"
+echo "    hdiutil detach \"${_dmg_volume}\""
 echo ""
 echo "NOTE: This DMG is an experimental build — NOT a release. release/ was not touched."
