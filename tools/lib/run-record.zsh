@@ -61,7 +61,11 @@ run_log_start() {
     RUN_ID="${stem}-${n}"
   done
   RUN_LOG="${RUN_LOGS_DIR}/${RUN_ID}.log"
-  exec > >(command tee -a "${RUN_LOG}") 2>&1
+  # The writer ignores INT, TERM and HUP, so it outlives the run's own handling
+  # of them: a signal to the whole process group, as when a terminal closes,
+  # would otherwise end it first, and the run's next write would end the run
+  # (SIGPIPE) before its finish wrote the report and closed the record.
+  exec > >(trap '' INT TERM HUP; command tee -a "${RUN_LOG}") 2>&1
   print -r -- "==> Log: ${RUN_LOG}"
 }
 
