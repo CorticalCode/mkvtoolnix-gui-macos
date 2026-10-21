@@ -13,11 +13,30 @@
 - **Builds remove only their own output.** Each run records what it created in the build root's
   `run-records/`; a build removes only those entries and stops, with a list, on anything else except the
   kept entries, `.DS_Store` files and logs. `tools/adopt-entries.sh` records existing entries once, after you have looked at them.
+- **The first build after updating stops once.** A build root from before this change has no run
+  records, so the first build lists everything in it and stops. Look at the list, then run
+  `./tools/adopt-entries.sh /opt/mtx --adopt`. An existing `/opt/mtx-exp` needs the same once:
+  `./tools/adopt-entries.sh /opt/mtx-exp` lists its entries and `--adopt` records them. Later
+  builds clean up after themselves.
 - **Experimental builds keep a folder each**, `build/exp/<build-id>/`, with a log and report per
   attempt and, for a try build, the uncommitted work it compiled. `--cache-drop` and
   `--clear-cache` refuse to remove an entry a kept build used; the one exception is `--cache-drop`
   of an entry whose package does not match its checksum, which it removes and says which kept
   builds used it.
+
+## Build script fixes (2026-10-20)
+
+- **An unknown option is an error.** `build-local.sh` exits 1 and names the option; it used to
+  exit 0.
+- **No fallback to the home folder.** A config overlay that does not set `CMPL` or `TARGET` (or,
+  for `build-local.sh`, `SRCDIR`) stops `build-local.sh` and `tools/refresh-deps.sh` instead of
+  putting the build in your home folder.
+- **`--restore-cache` checks the build root first**, before it copies anything.
+- **`tools/refresh-deps.sh` builds the Qt that the tag's `specs.sh` names**, as `build-local.sh`
+  does, not `config.sh`'s default.
+- **Promote.** A promote with nothing new to publish no longer fails when unrelated changes are
+  staged; a repo copy missing a package file no longer counts as in sync; and a promote commits
+  only when staging the cache succeeded.
 
 ## CI release check (2026-10-18)
 

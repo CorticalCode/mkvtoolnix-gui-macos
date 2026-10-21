@@ -264,16 +264,19 @@ The counter then restarts at 1 and increments locally from there. **Do not push 
 
 Every run of `build-local.sh`, `tools/refresh-deps.sh` and `tools/build-exp.sh` except `--help`
 (`-h`) writes its own log in `logs/` (`MTX_LOG_DIR`) from its first line, and a report beside it
-on every exit, whether it builds, fails or is refused; `tools/adopt-entries.sh --adopt` writes a
+on every exit, whether it builds, fails, is refused or is interrupted; `tools/adopt-entries.sh --adopt` writes a
 log and no report, and listing without `--adopt` writes neither. No script deletes or
-overwrites a log. A log is renamed in two places: a release build that gets a build number renames
+overwrites a log. A log is named after the time its run started, in UTC, as
+`<YYYYmmdd-HHMMSS>-<script>[-<mode>].log`; the times in reports, run records and build manifests
+are UTC too. A log is renamed in two places: a release build that gets a build number renames
 it to match its DMG, in the same folder; an experimental build moves it, once the build has a
 number, into `build/exp/<build-id>/` (`EXP_KEPT_BUILDS_DIR`) as `attempt-<n>.log`, with the report
 beside it as `attempt-<n>.report.txt`. An experimental run refused before that keeps its log in
 `logs/`.
 
 Each run that works on a build root also keeps a record in its `run-records/`: the entries of
-`prefix/`, `build/` and `stage/` it created and removed.
+`prefix/`, `build/` and `stage/` it created and removed. A run stopped by Ctrl-C, a closed terminal
+or a shutdown still closes its record, and its report says which signal ended it.
 
 A build removes only entries a record says a build created, printing each. Anything else —
 something you put there, or what a run that was killed outright made — stops the build before it
@@ -282,6 +285,8 @@ removes anything, with a list. Three kinds of entry never stop a run: the kept e
 leaves where they are; `.DS_Store` files; and upstream's own logs in `build/`
 (`build-*.log`, `build-report-*.txt`), which the check moves to the logs folder. `./tools/adopt-entries.sh <root>` shows
 the entries that do stop a run; after looking at each, `--adopt` records them as build output.
+A root from before run records has none, so the first build there stops once and lists every
+entry; adopting them is a one-time step.
 
 ## Experimental Builds
 
