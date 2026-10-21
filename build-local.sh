@@ -54,7 +54,11 @@ function write_report {
     echo ""
     case "${BUILD_MODE:-${_run_mode}}" in
       build|auto|full|promote)
-        echo "Verification: $(if [[ "${VERIFY_PASSED}" == true ]]; then echo "PASSED"; else echo "FAILED"; fi)"
+        case "${VERIFY_PASSED}" in
+          true) echo "Verification: PASSED" ;;
+          false) echo "Verification: FAILED" ;;
+          *) echo "Verification: not run" ;;
+        esac
         [[ -n "${BUILT_QT_VERSION}" ]] && echo "Qt version: ${BUILT_QT_VERSION} (expected ${QTVER})"
         [[ -n "${size_mb}" ]] && echo "App size: ${size_mb} MB"
         echo ""
@@ -1308,7 +1312,9 @@ PACKAGE_DIR=${PACKAGE_DIR:-${TARGET}/packages}
 SOURCE_DIR="${SRCDIR:?config/config.local.sh must set SRCDIR}"
 BUILD_DIR="${SCRIPT_DIR}/build"
 RELEASE_DIR="${SCRIPT_DIR}/release"
-VERIFY_PASSED=false
+# Empty until post-build verification runs, then true or false; a run that ends
+# before it reports verification as not run.
+VERIFY_PASSED=""
 # Per-dependency provenance for the build manifest, filled by whichever path
 # supplied the deps.
 RESTORED_DEPS_JSON=()
