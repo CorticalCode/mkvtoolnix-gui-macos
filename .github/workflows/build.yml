@@ -87,6 +87,11 @@ jobs:
               exit 1
             fi
           fi
+          # Typed or discovered, the tag must be release-<number>(.<number>)* on a single line.
+          if [[ ! "${TAG}" =~ ^release-[0-9]+(\.[0-9]+)*$ ]]; then
+            printf '::error::Refusing tag %q: expected release-<number>(.<number>)*\n' "${TAG}"
+            exit 1
+          fi
           VERSION=${TAG#release-}
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
