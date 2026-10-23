@@ -40,6 +40,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           NOTE: ${{ inputs.note }}
+          TAG_INPUT: ${{ github.event.inputs.tag }}
+          FORCE_INPUT: ${{ github.event.inputs.force }}
         run: |
           # Written here so the note heads the run's summary page: this job finishes first.
           if [[ -n "${NOTE}" ]]; then
@@ -49,7 +51,7 @@ jobs:
           # Empty on every scheduled run, and on a manual run unless a tag was
           # typed, so both triggers reach the same discovery and no release
           # number has to live in this file.
-          TAG="${{ github.event.inputs.tag }}"
+          TAG="${TAG_INPUT}"
           if [[ -z "${TAG}" ]]; then
             # Latest upstream release tag (--refs filters ^{} peeled refs).
             # git's output is kept and its status checked before anything
@@ -94,7 +96,7 @@ jobs:
           # output is kept and its status checked before grep reads it:
           # piped straight into grep, a gh that fails reads as "no release
           # yet" and starts a build.
-          FORCE="${{ github.event.inputs.force }}"
+          FORCE="${FORCE_INPUT}"
           LIST_ERR="${RUNNER_TEMP}/release-list.err"
           if [[ "${FORCE}" == "true" ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
@@ -216,6 +218,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           FORCE: ${{ inputs.force }}
+          CALVER_TAG: ${{ steps.calver.outputs.tag_name }}
         run: |
           # Re-check immediately before publishing. check-release ran before a
           # build that can take up to three hours, and a release published by
@@ -240,7 +243,7 @@ jobs:
             exit 0
           fi
 
-          CALVER="${{ steps.calver.outputs.tag_name }}"
+          CALVER="${CALVER_TAG}"
           gh release create "${CALVER}" \
             --repo "${{ github.repository }}" \
             --title "MKVToolNix ${VERSION} — macOS (${CALVER})" \
