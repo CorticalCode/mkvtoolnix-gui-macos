@@ -1,5 +1,19 @@
 # Changelog
 
+## CI inputs and forced runs (2026-10-23)
+
+- **A manual run can carry a note.** The optional `note` input becomes the run's title and
+  appears at the top of its summary page and in any failure issue.
+- **A forced run of a released version says it published nothing.** It builds, verifies and
+  attests as before, then says "Not published" on its summary page instead of reporting a release
+  published while it ran.
+- **Typed inputs stay text.** The tag and force inputs and the CalVer tag reach the shell through
+  environment variables, so a tag holding `$( )` or backticks is no longer run as a command.
+- **Only a release tag is used.** A typed or discovered tag must be `release-<number>(.<number>)*`
+  on one line; anything else stops the run with an error.
+- **The release step quotes its file paths.** The DMG and checksum paths given to
+  `gh release create` are quoted.
+
 ## Build logs and cleaning (2026-10-20)
 
 - **Every log is kept.** Each run of `build-local.sh`, `tools/refresh-deps.sh` and
