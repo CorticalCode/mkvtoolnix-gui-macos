@@ -263,8 +263,8 @@ jobs:
           [Source](https://codeberg.org/mbunkus/mkvtoolnix/src/tag/${TAG})
           NOTES
           )" \
-            release/MKVToolNix-${VERSION}-macos-apple-silicon.dmg \
-            release/MKVToolNix-${VERSION}-macos-apple-silicon.dmg.sha256
+            "release/MKVToolNix-${VERSION}-macos-apple-silicon.dmg" \
+            "release/MKVToolNix-${VERSION}-macos-apple-silicon.dmg.sha256"
 
       - name: Create issue on build failure
         if: failure()
