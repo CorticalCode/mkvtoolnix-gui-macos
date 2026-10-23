@@ -1,4 +1,5 @@
 name: Build MKVToolNix macOS
+run-name: ${{ inputs.note || github.workflow }}
 
 on:
   schedule:
@@ -15,6 +16,10 @@ on:
         required: false
         type: boolean
         default: false
+      note:
+        description: 'Note shown as the run title, on its summary page and in any failure issue (blank = no note)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -34,7 +39,13 @@ jobs:
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
+          NOTE: ${{ inputs.note }}
         run: |
+          # Written here so the note heads the run's summary page: this job finishes first.
+          if [[ -n "${NOTE}" ]]; then
+            echo "**Note:** ${NOTE}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           # Empty on every scheduled run, and on a manual run unless a tag was
           # typed, so both triggers reach the same discovery and no release
           # number has to live in this file.
@@ -204,6 +215,7 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
         run: |
           # Re-check immediately before publishing. check-release ran before a
           # build that can take up to three hours, and a release published by
@@ -218,6 +230,11 @@ jobs:
             exit 1
           fi
           if grep -q "v${VERSION}" <<<"${RELEASES}"; then
+            # check-release does not look for a release on a forced run, so this one may predate the run.
+            if [[ "${FORCE}" == "true" ]]; then
+              echo "Not published: a release for v${VERSION} already exists; this run built, verified and attested only." | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
             echo "A release for v${VERSION} was published while this build ran."
             echo "Leaving it alone — the manually published release stands."
             exit 0
@@ -270,6 +287,7 @@ jobs:
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
+          NOTE: ${{ inputs.note }}
         run: |
           gh issue create \
             --repo "${{ github.repository }}" \
@@ -277,6 +295,8 @@ jobs:
             --label "build" \
             --body "$(cat <<BODY
           Automated build failed for MKVToolNix ${VERSION} from tag \`${TAG}\`.
+
+          ${NOTE:+**Note:** ${NOTE}}
 
           **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
