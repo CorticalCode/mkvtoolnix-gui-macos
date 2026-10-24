@@ -198,6 +198,43 @@ jobs:
           echo "The end of what configure tested, from ${LOG}:"
           awk '/^## Cache variables\. ##$/ { exit } !/^## -+ ##$/' "${LOG}" | tail -n 100
 
+      # Why qmake's first SDK lookup comes back empty on the runner (run
+      # 40047462301): whether qmake runs a command at all (A, with none of Qt's
+      # features loaded), and xcrun's own error inside Qt's lookup (B, Qt's
+      # sdk.prf without its "2>/dev/null"), each in this step's environment and
+      # in the one build.sh and configure give qmake.
+      - name: Probe qmake's SDK lookup
+        if: failure()
+        run: |
+          Q=/opt/mtx/prefix/bin/qmake6
+          BUILD_ENV=(PATH="/opt/mtx/prefix/bin:${PATH}" DYLD_LIBRARY_PATH=/opt/mtx/prefix/lib: MACOSX_DEPLOYMENT_TARGET=13 LC_ALL=C)
+          echo "SIP: $(csrutil status 2>&1)"
+          for args in "--show-sdk-path" "--sdk macosx --show-sdk-path"; do
+            echo "xcrun ${args}, the step's environment: $(/bin/sh -c "/usr/bin/xcrun ${args}" 2>&1)"
+            echo "xcrun ${args}, the build's environment: $(env "${BUILD_ENV[@]}" /bin/sh -c "/usr/bin/xcrun ${args}" 2>&1)"
+          done
+          if [[ ! -x "${Q}" ]]; then
+            echo "No ${Q}: the build stopped before Qt was restored."
+            exit 0
+          fi
+          P="${RUNNER_TEMP}/qmake-probe"
+          mkdir -p "${P}/A" "${P}/B"
+          echo 'message("A: echo run by qmake: [$$system(echo ok)]")' > "${P}/A/default_pre.prf"
+          : > "${P}/A/default_post.prf"
+          {
+            echo 'message("B: the sdk.prf that keeps the xcrun errors is in use")'
+            sed 's| 2>/dev/null"|"|' /opt/mtx/prefix/mkspecs/features/mac/sdk.prf
+          } > "${P}/B/sdk.prf"
+          for f in A B; do
+            for e in step build; do
+              echo "--- qmake with ${f}, the ${e}'s environment:"
+              mkdir -p "${P}/run-${f}-${e}" && : > "${P}/run-${f}-${e}/probe.pro"
+              if [[ "${e}" == step ]]; then set -- env; else set -- env "${BUILD_ENV[@]}"; fi
+              ( cd "${P}/run-${f}-${e}" && "$@" QMAKEFEATURES="${P}/${f}" /bin/sh -c "\"${Q}\" -makefile -nocache probe.pro" 2>&1 ) \
+                || echo "(qmake exited $?)"
+            done
+          done
+
       - name: Stage the release DMG
         run: |
           # build-local.sh writes release/MKVToolNix-<ver>-macos-<arch>.dmg only
