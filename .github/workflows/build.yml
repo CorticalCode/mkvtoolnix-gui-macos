@@ -198,13 +198,14 @@ jobs:
           echo "The end of what configure tested, from ${LOG}:"
           awk '/^## Cache variables\. ##$/ { exit } !/^## -+ ##$/' "${LOG}" | tail -n 100
 
-      # Why qmake gets no output from the commands it runs on the runner (run
-      # 40051649180: its "$$system(echo ok)" came back empty while xcrun worked):
-      # popen from a program built on the runner, as a control, then qmake
-      # running "echo ok" untraced and under dtruss, which works here because
-      # System Integrity Protection is off. qmake runs as this user throughout.
-      - name: Probe qmake's command running
+      # How the child qmake forks dies before it runs a command (run 40053635592:
+      # QtCore's forkfd recorded it killed by a signal right after fork). A
+      # library injected into qmake installs, in every child it forks, handlers
+      # that print the signal, the faulting address and each frame as an image
+      # offset; then the crash reports and the system log for those minutes.
+      - name: Probe how qmake's child dies
         if: failure()
+        timeout-minutes: 10
         run: |
           Q=/opt/mtx/prefix/bin/qmake6
           if [[ ! -x "${Q}" ]]; then
@@ -212,34 +213,86 @@ jobs:
             exit 0
           fi
           P="${RUNNER_TEMP}/qmake-probe"
-          mkdir -p "${P}/features"
-          cat > "${P}/popen.c" <<'EOF'
+          mkdir -p "${P}/features" "${P}/run"
+          cat > "${P}/reporter.c" <<'EOF'
+          #include <dlfcn.h>
+          #include <execinfo.h>
+          #include <pthread.h>
+          #include <signal.h>
           #include <stdio.h>
-          int main(void) {
-            FILE *p = popen("cd /tmp && echo ok", "r");
-            if (!p) { perror("popen"); return 1; }
-            char b[64];
-            size_t n = fread(b, 1, sizeof b - 1, p);
-            b[n] = 0;
-            for (size_t i = 0; i < n; i++) if (b[i] == '\n') b[i] = ' ';
-            printf("[%s] pclose=%d\n", b, pclose(p));
-            return 0;
+          #include <string.h>
+          #include <sys/ucontext.h>
+          #include <unistd.h>
+
+          static char altstack[1 << 16];
+
+          static void say(const char *text, int len) { write(2, text, len); }
+
+          static void report(int sig, siginfo_t *si, void *ctx)
+          {
+              alarm(5);
+              char line[600];
+              ucontext_t *uc = ctx;
+              int n = snprintf(line, sizeof line, "child %d: signal %d (%s), code %d, address %p, pc %p, lr %p\n",
+                               (int)getpid(), sig, strsignal(sig), si->si_code, si->si_addr,
+                               (void *)__darwin_arm_thread_state64_get_pc(uc->uc_mcontext->__ss),
+                               (void *)__darwin_arm_thread_state64_get_lr(uc->uc_mcontext->__ss));
+              say(line, n);
+              void *frames[48];
+              int count = backtrace(frames, 48);
+              for (int i = 0; i < count; i++) {
+                  Dl_info info;
+                  if (dladdr(frames[i], &info) && info.dli_fname)
+                      n = snprintf(line, sizeof line, "  #%d %s + 0x%lx (%s)\n", i, info.dli_fname,
+                                   (unsigned long)((char *)frames[i] - (char *)info.dli_fbase),
+                                   info.dli_sname ? info.dli_sname : "?");
+                  else
+                      n = snprintf(line, sizeof line, "  #%d %p\n", i, frames[i]);
+                  say(line, n);
+              }
+              raise(sig);
+          }
+
+          static void in_child(void)
+          {
+              stack_t ss = { .ss_sp = altstack, .ss_size = sizeof altstack, .ss_flags = 0 };
+              sigaltstack(&ss, NULL);
+              struct sigaction sa;
+              memset(&sa, 0, sizeof sa);
+              sa.sa_sigaction = report;
+              sa.sa_flags = SA_SIGINFO | SA_RESETHAND | SA_ONSTACK;
+              const int sigs[] = { SIGSEGV, SIGBUS, SIGILL, SIGTRAP, SIGABRT, SIGFPE, SIGSYS };
+              for (size_t i = 0; i < sizeof sigs / sizeof sigs[0]; i++)
+                  sigaction(sigs[i], &sa, NULL);
+          }
+
+          __attribute__((constructor)) static void install(void)
+          {
+              char line[80];
+              int n = snprintf(line, sizeof line, "signal reporter loaded in pid %d\n", (int)getpid());
+              say(line, n);
+              pthread_atfork(NULL, NULL, in_child);
           }
           EOF
-          if clang -o "${P}/popen" "${P}/popen.c"; then
-            echo "popen from a program built on the runner: $("${P}/popen" 2>&1)"
-          fi
+          clang -dynamiclib -o "${P}/reporter.dylib" "${P}/reporter.c"
           echo 'message("echo run by qmake: [$$system(echo ok)]")' > "${P}/features/default_pre.prf"
           : > "${P}/features/default_post.prf"
-          for r in untraced traced; do mkdir -p "${P}/run-${r}" && : > "${P}/run-${r}/probe.pro"; done
-          echo "--- qmake, untraced:"
-          ( cd "${P}/run-untraced" && QMAKEFEATURES="${P}/features" "${Q}" -makefile -nocache probe.pro 2>&1 ) \
+          : > "${P}/run/probe.pro"
+          echo "--- qmake with the signal reporter:"
+          ( cd "${P}/run" && DYLD_INSERT_LIBRARIES="${P}/reporter.dylib" QMAKEFEATURES="${P}/features" "${Q}" -makefile -nocache probe.pro 2>&1 ) \
             || echo "(qmake exited $?)"
-          echo "--- qmake under dtruss -f, every system call of qmake and its children:"
-          ( cd "${P}/run-traced" && sudo dtruss -f sudo -u "$(id -un)" env QMAKEFEATURES="${P}/features" "${Q}" -makefile -nocache probe.pro ) \
-            > "${P}/trace.txt" 2>&1 || echo "(dtruss exited $?)"
-          echo "$(wc -l < "${P}/trace.txt" | tr -d ' ') lines"
-          cat "${P}/trace.txt"
+          # Crash reports are written a few seconds after the crash.
+          sleep 10
+          shopt -s nullglob
+          for d in "${HOME}/Library/Logs/DiagnosticReports" /Library/Logs/DiagnosticReports; do
+            ls -ld "${d}" || echo "(no ${d})"
+            for f in "${d}"/qmake*; do
+              echo "--- ${f}:"
+              cat "${f}"
+            done
+          done
+          echo "--- system log, crash reporter and kernel lines naming qmake, last 3 minutes:"
+          log show --last 3m --style compact --predicate 'process == "ReportCrash" OR (process == "kernel" AND eventMessage CONTAINS[c] "qmake")' 2>&1 | tail -n 40
 
       - name: Stage the release DMG
         run: |
