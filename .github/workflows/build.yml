@@ -198,42 +198,48 @@ jobs:
           echo "The end of what configure tested, from ${LOG}:"
           awk '/^## Cache variables\. ##$/ { exit } !/^## -+ ##$/' "${LOG}" | tail -n 100
 
-      # Why qmake's first SDK lookup comes back empty on the runner (run
-      # 40047462301): whether qmake runs a command at all (A, with none of Qt's
-      # features loaded), and xcrun's own error inside Qt's lookup (B, Qt's
-      # sdk.prf without its "2>/dev/null"), each in this step's environment and
-      # in the one build.sh and configure give qmake.
-      - name: Probe qmake's SDK lookup
+      # Why qmake gets no output from the commands it runs on the runner (run
+      # 40051649180: its "$$system(echo ok)" came back empty while xcrun worked):
+      # popen from a program built on the runner, as a control, then qmake
+      # running "echo ok" untraced and under dtruss, which works here because
+      # System Integrity Protection is off. qmake runs as this user throughout.
+      - name: Probe qmake's command running
         if: failure()
         run: |
           Q=/opt/mtx/prefix/bin/qmake6
-          BUILD_ENV=(PATH="/opt/mtx/prefix/bin:${PATH}" DYLD_LIBRARY_PATH=/opt/mtx/prefix/lib: MACOSX_DEPLOYMENT_TARGET=13 LC_ALL=C)
-          echo "SIP: $(csrutil status 2>&1)"
-          for args in "--show-sdk-path" "--sdk macosx --show-sdk-path"; do
-            echo "xcrun ${args}, the step's environment: $(/bin/sh -c "/usr/bin/xcrun ${args}" 2>&1)"
-            echo "xcrun ${args}, the build's environment: $(env "${BUILD_ENV[@]}" /bin/sh -c "/usr/bin/xcrun ${args}" 2>&1)"
-          done
           if [[ ! -x "${Q}" ]]; then
             echo "No ${Q}: the build stopped before Qt was restored."
             exit 0
           fi
           P="${RUNNER_TEMP}/qmake-probe"
-          mkdir -p "${P}/A" "${P}/B"
-          echo 'message("A: echo run by qmake: [$$system(echo ok)]")' > "${P}/A/default_pre.prf"
-          : > "${P}/A/default_post.prf"
-          {
-            echo 'message("B: the sdk.prf that keeps the xcrun errors is in use")'
-            sed 's| 2>/dev/null"|"|' /opt/mtx/prefix/mkspecs/features/mac/sdk.prf
-          } > "${P}/B/sdk.prf"
-          for f in A B; do
-            for e in step build; do
-              echo "--- qmake with ${f}, the ${e}'s environment:"
-              mkdir -p "${P}/run-${f}-${e}" && : > "${P}/run-${f}-${e}/probe.pro"
-              if [[ "${e}" == step ]]; then set -- env; else set -- env "${BUILD_ENV[@]}"; fi
-              ( cd "${P}/run-${f}-${e}" && "$@" QMAKEFEATURES="${P}/${f}" /bin/sh -c "\"${Q}\" -makefile -nocache probe.pro" 2>&1 ) \
-                || echo "(qmake exited $?)"
-            done
-          done
+          mkdir -p "${P}/features"
+          cat > "${P}/popen.c" <<'EOF'
+          #include <stdio.h>
+          int main(void) {
+            FILE *p = popen("cd /tmp && echo ok", "r");
+            if (!p) { perror("popen"); return 1; }
+            char b[64];
+            size_t n = fread(b, 1, sizeof b - 1, p);
+            b[n] = 0;
+            for (size_t i = 0; i < n; i++) if (b[i] == '\n') b[i] = ' ';
+            printf("[%s] pclose=%d\n", b, pclose(p));
+            return 0;
+          }
+          EOF
+          if clang -o "${P}/popen" "${P}/popen.c"; then
+            echo "popen from a program built on the runner: $("${P}/popen" 2>&1)"
+          fi
+          echo 'message("echo run by qmake: [$$system(echo ok)]")' > "${P}/features/default_pre.prf"
+          : > "${P}/features/default_post.prf"
+          for r in untraced traced; do mkdir -p "${P}/run-${r}" && : > "${P}/run-${r}/probe.pro"; done
+          echo "--- qmake, untraced:"
+          ( cd "${P}/run-untraced" && QMAKEFEATURES="${P}/features" "${Q}" -makefile -nocache probe.pro 2>&1 ) \
+            || echo "(qmake exited $?)"
+          echo "--- qmake under dtruss -f, every system call of qmake and its children:"
+          ( cd "${P}/run-traced" && sudo dtruss -f sudo -u "$(id -un)" env QMAKEFEATURES="${P}/features" "${Q}" -makefile -nocache probe.pro ) \
+            > "${P}/trace.txt" 2>&1 || echo "(dtruss exited $?)"
+          echo "$(wc -l < "${P}/trace.txt" | tr -d ' ') lines"
+          cat "${P}/trace.txt"
 
       - name: Stage the release DMG
         run: |
