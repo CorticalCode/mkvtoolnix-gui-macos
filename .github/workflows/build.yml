@@ -169,6 +169,35 @@ jobs:
         run: ./build-local.sh "${TAG}"
         timeout-minutes: 180
 
+      # A failed build's files go with the runner. Print the runner's toolchain,
+      # saved for the failure issue too, and the end of mkvtoolnix's config.log,
+      # the only record of why one of configure's checks failed.
+      - name: Show the runner's toolchain and the end of config.log
+        if: failure()
+        run: |
+          {
+            echo "macOS $(sw_vers -productVersion) ($(sw_vers -buildVersion)), $(uname -m)"
+            echo "Xcode: $(xcodebuild -version | paste -sd ' ' -), at $(xcode-select -p)"
+            echo "SDK: $(xcrun --show-sdk-version), at $(xcrun --show-sdk-path)"
+            echo "clang: $(clang --version | head -n 1)"
+            echo "CPUs: $(sysctl -n hw.ncpu), memory: $(sysctl -n hw.memsize | awk '{ printf "%.0f GB", $1 / 1073741824 }')"
+            echo "Disk: $(df -h /opt/mtx | awk 'NR == 2 { print $4 " free of " $2 }') under /opt/mtx"
+          } | tee "${RUNNER_TEMP}/toolchain.txt"
+          echo
+          LOG="/opt/mtx/build/mkvtoolnix-${VERSION}/config.log"
+          if [[ ! -f "${LOG}" ]]; then
+            echo "No ${LOG}: the build stopped before mkvtoolnix's configure ran."
+            exit 0
+          fi
+          if [[ "$(tail -n 1 "${LOG}")" == "configure: exit 0" ]]; then
+            echo "mkvtoolnix's configure succeeded, so ${LOG} has nothing on this failure."
+            exit 0
+          fi
+          # The test log ends where autoconf's dump of its cache variables
+          # begins; the "## --- ##" rules that frame its headings are dropped.
+          echo "The end of what configure tested, from ${LOG}:"
+          awk '/^## Cache variables\. ##$/ { exit } !/^## -+ ##$/' "${LOG}" | tail -n 100
+
       - name: Stage the release DMG
         run: |
           # build-local.sh writes release/MKVToolNix-<ver>-macos-<arch>.dmg only
@@ -297,6 +326,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NOTE: ${{ inputs.note }}
         run: |
+          # The run's logs expire, so the issue carries the runner's toolchain and
+          # the end of the build's own log, where a failed build records its error.
+          if [[ -s "${RUNNER_TEMP}/toolchain.txt" ]]; then
+            TOOLCHAIN=$(cat "${RUNNER_TEMP}/toolchain.txt")
+          else
+            TOOLCHAIN="Not recorded: the step that records it did not run."
+          fi
+          shopt -s nullglob
+          logs=(logs/*.log)
+          if (( ${#logs[@]} )); then
+            BUILD_LOG=$(ls -t "${logs[@]}" | head -n 1)
+            LOG_END=$(tail -n 25 "${BUILD_LOG}")
+          else
+            BUILD_LOG="none"
+            LOG_END="No build log: the run stopped before the build started."
+          fi
           gh issue create \
             --repo "${{ github.repository }}" \
             --title "Build failed: MKVToolNix ${VERSION} (${TAG})" \
@@ -308,7 +353,14 @@ jobs:
 
           **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-          This likely means upstream changes broke one of our patches.
-          Check the workflow logs for the specific error and update patches accordingly.
+          **Runner:**
+          ~~~
+          ${TOOLCHAIN}
+          ~~~
+
+          **The end of the build log** (\`${BUILD_LOG}\`):
+          ~~~
+          ${LOG_END}
+          ~~~
           BODY
           )"
