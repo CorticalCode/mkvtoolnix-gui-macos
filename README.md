@@ -10,6 +10,8 @@ This repo is a proof-of-concept that builds the full GUI from upstream source an
 
 These are this repo's **unofficial** builds. For official **notarized** DMGs (recommended for most users), see the [official downloads page](https://mkvtoolnix.download/downloads.html#macosx).
 
+> ⚠️ The Apple Silicon DMGs of v103.0-b2026.10.1 and v102.0-b2026.09.2 need macOS 27. On macOS 26 or earlier, use the [official build](https://mkvtoolnix.download/downloads.html#macosx) ([#15](../../issues/15)).
+
 | Date | Release | MKVToolNix | Apple Silicon | Intel |
 |------|---------|:----------:|:-------------:|:-----:|
 | 2026-10-18 | [v103.0-b2026.10.1](../../releases/tag/v103.0-b2026.10.1) | 103.0 | [DMG (25 MB)](../../releases/download/v103.0-b2026.10.1/MKVToolNix-103.0-macos-apple-silicon.dmg) | [DMG (28 MB)](../../releases/download/v103.0-b2026.10.1/MKVToolNix-103.0-macos-intel.dmg) |
