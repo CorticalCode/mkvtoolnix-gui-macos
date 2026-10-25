@@ -1,5 +1,19 @@
 # Changelog
 
+## Apple Silicon DMGs that need macOS 27 (2026-10-25)
+
+- **Three Apple Silicon DMGs need macOS 27.** v103.0-b2026.10.1, v102.0-b2026.09.2 and the test
+  build v102.0-b2026.09.2-test.1 were built on macOS 27 against the macOS 27 SDK, so their Qt 6.11.1
+  calls `dup3()`, which macOS has only from 27. On macOS 26 and earlier, MKVToolNix GUI can't run
+  mkvmerge. Their release pages and the README say so
+  ([#15](https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues/15)).
+- **They stay as they are.** A working official release covers macOS before 27, so they are not rebuilt;
+  on those versions, use the [official build](https://mkvtoolnix.download/downloads.html#macosx).
+  Qt 6.11.2 fixes it: experimental builds of 103.0 with Qt 6.11.2, or with 6.11.1 plus 6.11.2's
+  configure-test changes, run on macOS 15.6.1 and 26.2.
+- **Not affected:** the Intel DMGs, and the Apple Silicon DMGs up to v102.0-b2026.09.1, which were
+  built against the macOS 26.4 or 26.5 SDK.
+
 ## CI inputs and forced runs (2026-10-23)
 
 - **A manual run can carry a note.** The optional `note` input becomes the run's title and
@@ -71,6 +85,9 @@ MKVToolNix 103.0 "The Darkness" — Apple Silicon (arm64) and Intel (x86_64).
 - Apple Silicon (arm64): `MKVToolNix-103.0-macos-apple-silicon.dmg` — ~24.8 MB DMG (~75 MB app)
 - Intel (x86_64): `MKVToolNix-103.0-macos-intel.dmg` — ~27.6 MB DMG (~78 MB app)
 
+**Known issue:** the Apple Silicon DMG needs macOS 27
+([#15](https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues/15)).
+
 **Highlights:**
 - Built from the signed MKVToolNix 103.0 release tarball. No dependency changes: upstream's
   `packaging/macos/specs.sh` is byte-identical between `release-102.0` and `release-103.0`, so Qt stays 6.11.1.
@@ -118,6 +135,9 @@ MKVToolNix 102.0 "Little Houses" — Apple Silicon (arm64) and Intel (x86_64).
 **Downloads:**
 - Apple Silicon (arm64): `MKVToolNix-102.0-macos-apple-silicon.dmg` — ~25.5 MB DMG (~75 MB app)
 - Intel (x86_64): `MKVToolNix-102.0-macos-intel.dmg` — ~27.5 MB DMG (~78 MB app)
+
+**Known issue:** the Apple Silicon DMG needs macOS 27
+([#15](https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues/15)).
 
 **Highlights:**
 - Fixes invisible check boxes on macOS 27 in lists such as the multiplexer's track list. Qt is built with

@@ -305,7 +305,9 @@ This patch combines two changes to the same file to avoid context conflicts when
 
 **Dependency build failures on ARM:** No ARM-specific issues. All dependencies build cleanly on Apple Silicon.
 
-**macOS 13 deployment target:** No issues. Binaries built on macOS 26 with `MACOSX_DEPLOYMENT_TARGET=13` work correctly.
+**macOS 13 deployment target:** No issues for binaries built on macOS 26 with `MACOSX_DEPLOYMENT_TARGET=13`. Built against the macOS 27 SDK, Qt 6.11.1 does not work before macOS 27: see the next entry.
+
+**Qt 6.11.1 against the macOS 27 SDK (`dup3`):** Qt 6.11.1's configure turns on its `dup3` feature when a test call to `dup3()` compiles and links, and the macOS 27 SDK declares `dup3()` as available from macOS 27.0. With `MACOSX_DEPLOYMENT_TARGET=13` the import is weak, and `QProcess` calls `dup3()` in every child, so on macOS 26 and earlier MKVToolNix GUI can't run mkvmerge. The Apple Silicon DMGs of v103.0-b2026.10.1, v102.0-b2026.09.2 and v102.0-b2026.09.2-test.1 have it ([#15](https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues/15)). Qt 6.11.2 fixes the configure test (qtbase [76708224a0](https://github.com/qt/qtbase/commit/76708224a00d) and related `cmake/QtFeature.cmake` changes). No patch here: a working official release covers macOS before 27, so these DMGs were not rebuilt.
 
 **Stale dependency URLs:** Checked all 17 URLs. Only zlib was dead (patched above). All others return 200.
 
