@@ -27,6 +27,14 @@ typeset -ga EXP_UNCACHED=(gpg shared_mime_info mkvtoolnix)
 typeset -ga EXP_ENV_UNHASHED=(DRAKETHREADS MAKEFLAGS PWD OLDPWD SHLVL _ LOGNAME
                               HOME PATH TMPDIR ZDOTDIR)
 
+# Exported variables only one library's build reads, each with that library:
+# hashed into that library's key alone, so a change moves its key and the
+# later ones instead of every key. exp_recipe_hash refuses one that another
+# library's build reads; one whose library is not built is hashed into every
+# key with the rest.
+#   QTVER QT_CXXFLAGS   read in build_qt alone
+typeset -gA EXP_ENV_LIBRARY=(QTVER qt QT_CXXFLAGS qt)
+
 # ZDOTDIR for library builds and for reading their settings. build.sh and
 # myinstall.sh run under zsh, which reads ${ZDOTDIR:-${HOME}}/.zshenv first.
 # /var/empty is a root-owned folder macOS ships empty, so zsh finds no startup
@@ -182,10 +190,11 @@ exp_recipe_functions() {
 # exp_recipe_hash <packaging-dir> <library>
 # Hashes how upstream's scripts build one library: the functions
 # exp_recipe_functions names, build.sh's top level, myinstall.sh, and the
-# patches in <library>-patches/.
+# patches in <library>-patches/. Refuses a recipe that names a variable
+# EXP_ENV_LIBRARY keys to another library.
 exp_recipe_hash() {
   setopt local_options pipe_fail
-  local dir="$1" lib="$2" listing fn f part text="" hash
+  local dir="$1" lib="$2" listing fn f part text="" hash var owner
   listing=$(exp_recipe_functions "${dir}" "${lib}") || return 1
   for fn in ${(f)listing}; do
     part=$(exp_function_text "${dir}/build.sh" "${fn}") || return 1
@@ -198,6 +207,12 @@ exp_recipe_hash() {
   for f in "${dir}/${lib}-patches"/*.patch(N); do
     part=$(command cat "${f}") || return 1
     text+="== patch ${f:t}"$'\n'"${part}"$'\n'
+  done
+  for var owner in "${(@kv)EXP_ENV_LIBRARY}"; do
+    if [[ "${owner}" != "${lib}" && "${text}" =~ "(^|[^A-Za-z0-9_])${var}([^A-Za-z0-9_]|\$)" ]]; then
+      print -u2 "ERROR: ${lib}'s build reads ${var}, which EXP_ENV_LIBRARY hashes into the ${owner} key alone"
+      return 1
+    fi
   done
   hash=$(print -rn -- "${text}" | command shasum -a 256 | command cut -d' ' -f1) || hash=""
   if [[ -z "${hash}" ]]; then
@@ -252,14 +267,13 @@ exp_env_text() {
   print -r -- "${text}"
 }
 
-# exp_env_hash <packaging-dir> — the SHA-256 of exp_env_text
+# exp_env_hash <lines> — the SHA-256 of some of exp_env_text's lines
 exp_env_hash() {
   setopt local_options pipe_fail
-  local dir="$1" text hash
-  text=$(exp_env_text "${dir}") || return 1
-  hash=$(print -rn -- "${text}" | command shasum -a 256 | command cut -d' ' -f1) || hash=""
+  local hash
+  hash=$(print -rn -- "$1" | command shasum -a 256 | command cut -d' ' -f1) || hash=""
   if [[ -z "${hash}" ]]; then
-    print -u2 "ERROR: cannot compute the build settings hash for ${dir}"
+    print -u2 "ERROR: cannot compute the build settings hash"
     return 1
   fi
   print -r -- "${hash}"
@@ -306,20 +320,35 @@ exp_spec_source() {
 # build manifests record and no key includes.
 exp_compute_keys() {
   setopt local_options pipe_fail
-  local dir="$1" arch="$2" out lib src recipe env tool prev="" block hash
+  local dir="$1" arch="$2" out lib src recipe env own tool prev="" block hash text line owner
+  local -a shared=()
+  local -A owned=()
   EXP_ORDER=(); EXP_KEY=(); EXP_INPUT=(); EXP_TARBALL=()
   out=$(exp_build_order "${dir}") || return 1
   local -a order=( ${(f)out} )
-  env=$(exp_env_hash "${dir}") || return 1
+  text=$(exp_env_text "${dir}") || return 1
+  for line in "${(@f)text}"; do
+    [[ -n "${line}" ]] || continue
+    owner="${EXP_ENV_LIBRARY[${line%%=*}]:-}"
+    if [[ -n "${owner}" ]] && (( ${order[(Ie)${owner}]} )); then
+      owned[${owner}]+="${owned[${owner}]:+$'\n'}${line}"
+    else
+      shared+=("${line}")
+    fi
+  done
+  env=$(exp_env_hash "${(F)shared}") || return 1
   tool=$(exp_toolchain_id) || return 1
   EXP_TOOLCHAIN_ID="${tool}"
   for lib in "${order[@]}"; do
     src=$(exp_spec_source "${dir}" "${lib}") || return 1
     recipe=$(exp_recipe_hash "${dir}" "${lib}") || return 1
+    own=""
+    if (( ${+owned[${lib}]} )); then own=$(exp_env_hash "${owned[${lib}]}") || return 1; fi
     block="library=${lib}
 source=${src}
 recipe=${recipe}
 env=${env}
+own=${own}
 arch=${arch}
 previous=${prev}"
     EXP_INPUT[${lib}]="${block}"

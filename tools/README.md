@@ -23,7 +23,9 @@ neither root.
   key covers the library's source, its recipe (its `build.sh` function and
   hooks, the helpers they call, its patches, `build.sh`'s top level,
   `myinstall.sh`), every exported setting, the architecture and the previous
-  library's key. The toolchain is recorded, not keyed. A cache miss stops the
+  library's key. `QTVER` and `QT_CXXFLAGS`, which only Qt's build reads, are
+  in Qt's key alone, so another Qt version rebuilds Qt only. The toolchain is
+  recorded, not keyed. A cache miss stops the
   build and prints the same command with `--build-missing`; `--clear-cache`
   empties this architecture's cache, `--cache-drop <library>/<key-prefix>` one
   entry. The root is `MTX_EXP_ROOT` (default `/opt/mtx-exp`), refused inside the
