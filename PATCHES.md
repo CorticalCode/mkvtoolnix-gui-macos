@@ -4,7 +4,7 @@ Living document tracking every modification made to build MKVToolNix on macOS (A
 
 ## Build status
 
-**v104.0-b2026.11.1** (rel010, Apple Silicon, 2026-11-23): one dependency change from v103 — Qt 6.11.1 → 6.11.2 (upstream #6326); upstream's `packaging/macos/specs.sh` changes only that between `release-103.0` and `release-104.0`. Qt 6.11.2 carries Qt's fix for the configure test behind [#15](https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues/15), so this Apple Silicon DMG runs on macOS before 27 again (tested on 15.6.1 and 27.2.1). Every Apple Silicon dependency was rebuilt from source against the macOS 27.2 SDK and the proven cache promoted. MKVToolNix 104.0 still ships the QTBUG-150017 Qt patch itself. Intel still to come.
+**v104.0-b2026.11.1** (Apple Silicon rel010, Intel rel011, 2026-11-23): one dependency change from v103 — Qt 6.11.1 → 6.11.2 (upstream #6326); upstream's `packaging/macos/specs.sh` changes only that between `release-103.0` and `release-104.0`. Qt 6.11.2 carries Qt's fix for the configure test behind [#15](https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues/15), so this Apple Silicon DMG runs on macOS before 27 again (tested on 15.6.1 and 27.2.1). Every dependency was rebuilt from source and both proven caches promoted: Apple Silicon against the macOS 27.2 SDK, Intel against the macOS 26.2 SDK. MKVToolNix 104.0 still ships the QTBUG-150017 Qt patch itself.
 
 **v103.0-b2026.10.1** (rel009, Apple Silicon, 2026-10-18): no dependency changes from v102 — upstream's `packaging/macos/specs.sh` is byte-identical between `release-102.0` and `release-103.0`, so Qt stays 6.11.1. MKVToolNix 103.0 ships the QTBUG-150017 Qt patch itself (`packaging/macos/qt-patches/`), byte-identical to `qt-patches/qtbug-150017-item-view-check-indicator.patch` here. Apple Silicon (rel009) and Intel (rel010) were both restored from their proven caches; no promotion needed.
 
@@ -46,6 +46,7 @@ Previous release: **v98.0-b2026.04.3** (Apple Silicon + Intel). The build proces
 | **v103 rel009 (source bump)** | 24.8 MB | 75.1 MB | 6.11.1 | ARM, verified, restored from proven cache; deps unchanged from v102 |
 | **v103 rel010 (source bump, Intel)** | 27.6 MB | 78.4 MB | 6.11.1 | Intel, verified, restored from proven cache; deps unchanged from v102 |
 | **v104 rel010 (Qt 6.11.2)** | 25.7 MB | 75.2 MB | **6.11.2** | ARM, verified, full rebuild from source against the macOS 27.2 SDK; Qt bumped to 6.11.2 |
+| **v104 rel011 (Qt 6.11.2, Intel)** | 27.6 MB | 78.5 MB | **6.11.2** | Intel, verified, full rebuild from source against the macOS 26.2 SDK; Qt bumped to 6.11.2 |
 
 ---
 

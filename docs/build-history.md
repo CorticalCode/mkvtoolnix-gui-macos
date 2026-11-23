@@ -72,8 +72,9 @@ At v99 the build counter moved from `bNNN` to `relNNN` (release-track) plus `exp
 | rel009 | intel | main | 2026-09-28 | 0:47:46 | main | `MKVToolNix-102.0-intel-rel009-main.dmg` | `b1b0374bdb` | `logs/MKVToolNix-102.0-intel-rel009-main.log` | v102.0-b2026.09.2 → intel.dmg | Full from-source rebuild of every dependency, cache repromoted; includes the QTBUG-150017 patch. 27.5 MB DMG; superseded by v103 |
 | rel008 | arm | main | 2026-10-01 | 0:17:58 | main | `MKVToolNix-102.0-arm-rel008-main.dmg` | `3c3dd70677` | `logs/MKVToolNix-102.0-arm-rel008-main.log` | v102.0-b2026.09.2 → apple-silicon.dmg | Full from-source rebuild; replaced rel007 as the release asset on 2026-10-01; superseded by v103 |
 | rel009 | arm | main | 2026-10-18 19:46 | 0:02:54 | main | `MKVToolNix-103.0-arm-rel009-main.dmg` | `2d538f8e6b` | `logs/MKVToolNix-103.0-arm-rel009-main.log` | v103.0-b2026.10.1 → apple-silicon.dmg | Restored from proven cache; deps unchanged from v102 |
-| **rel010** | intel | main | 2026-10-18 20:44 | 0:05:45 | main | `MKVToolNix-103.0-intel-rel010-main.dmg` | **`ee35e1c4d1`** | `logs/MKVToolNix-103.0-intel-rel010-main.log` | **v103.0-b2026.10.1 → intel.dmg** | Restored from proven cache; deps unchanged from v102 |
+| rel010 | intel | main | 2026-10-18 20:44 | 0:05:45 | main | `MKVToolNix-103.0-intel-rel010-main.dmg` | `ee35e1c4d1` | `logs/MKVToolNix-103.0-intel-rel010-main.log` | v103.0-b2026.10.1 → intel.dmg | Restored from proven cache; deps unchanged from v102 |
 | **rel010** | arm | main | 2026-11-22 22:41 | 0:18:12 | main | `MKVToolNix-104.0-arm-rel010-main.dmg` | **`9454854e69`** | `logs/MKVToolNix-104.0-arm-rel010-main.log` | **v104.0-b2026.11.1 → apple-silicon.dmg** | Full from-source rebuild of every dependency against the macOS 27.2 SDK, cache repromoted; Qt 6.11.2 |
+| **rel011** | intel | main | 2026-11-23 15:40 | 0:44:48 | main | `MKVToolNix-104.0-intel-rel011-main.dmg` | **`fd17346cd4`** | `logs/MKVToolNix-104.0-intel-rel011-main.log` | **v104.0-b2026.11.1 → intel.dmg** | Full from-source rebuild of every dependency against the macOS 26.2 SDK, cache repromoted; Qt 6.11.2 |
 
 rel005 (arm, 2026-08-26) was a from-source rebuild of v101.0 that produced the arm proven cache rel006 restored from; it was not shipped. rel005 (intel, 2026-08-25) was a local test build of v101.0, also not shipped — which is why the Intel counter goes from rel004 to rel006.
 
@@ -82,10 +83,9 @@ The Intel counter then skips rel008 for the same reason. rel007 (intel, 2026-09-
 ## Summary
 
 - **v98 builds preserved:** 23 (18 arm + 5 intel) — the `bNNN` tables above
-- **Release builds (v99+):** 14 shipped — `rel002` arm+intel (v99), `rel003` arm+intel (v100), `rel004` arm+intel (v101), `rel006` arm+intel (v102.0-b2026.09.1), `rel007` then `rel008` arm + `rel009` intel (v102.0-b2026.09.2), `rel009` arm + `rel010` intel (v103.0-b2026.10.1), `rel010` arm (v104.0-b2026.11.1; Intel to follow)
+- **Release builds (v99+):** 15 shipped — `rel002` arm+intel (v99), `rel003` arm+intel (v100), `rel004` arm+intel (v101), `rel006` arm+intel (v102.0-b2026.09.1), `rel007` then `rel008` arm + `rel009` intel (v102.0-b2026.09.2), `rel009` arm + `rel010` intel (v103.0-b2026.10.1), `rel010` arm + `rel011` intel (v104.0-b2026.11.1)
 - **Missing from preservation:** 3 (arm b015, b016, b019)
-- **Currently shipped:** **arm rel010** (v104.0-b2026.11.1), Intel to follow; until then the newest Intel
-  DMG is **intel rel010** (v103.0-b2026.10.1)
+- **Currently shipped:** v104.0-b2026.11.1 (**arm rel010** / **intel rel011**)
 - **Prior shipped (superseded):** v103.0-b2026.10.1 (arm rel009 / intel rel010); v102.0-b2026.09.2 (arm rel008 / intel rel009); v102.0-b2026.09.1 (arm/intel rel006); v101.0-b2026.08.1 (arm/intel rel004); v100.0-b2026.07.1 (arm/intel rel003); v99.0-b2026.05.1 (arm/intel rel002); v98.0-b2026.04.3 (arm b013 / intel b005)
 - **Retracted:** v98.0-b2026.04.1 (arm b010 + intel b001 probable — Homebrew leak crash; assets removed from GitHub)
 

@@ -2,11 +2,11 @@
 
 ## v104.0-b2026.11.1 (2026-11-23) — Current Release
 
-MKVToolNix 104.0 "Chimera" — Apple Silicon (arm64); the Intel (x86_64) build follows.
+MKVToolNix 104.0 "Chimera" — Apple Silicon (arm64) and Intel (x86_64).
 
 **Downloads:**
 - Apple Silicon (arm64): `MKVToolNix-104.0-macos-apple-silicon.dmg` — ~25.7 MB DMG (~75 MB app)
-- Intel (x86_64): 🚧 building
+- Intel (x86_64): `MKVToolNix-104.0-macos-intel.dmg` — ~27.6 MB DMG (~78 MB app)
 
 **Highlights:**
 - Built from the signed MKVToolNix 104.0 release tarball. One dependency change: Qt 6.11.1 → 6.11.2.
@@ -15,8 +15,8 @@ MKVToolNix 104.0 "Chimera" — Apple Silicon (arm64); the Intel (x86_64) build f
 - The Apple Silicon DMG runs on macOS before 27 again: Qt 6.11.2 fixes the configure test that turned
   on `dup3()` ([#15](https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues/15)). Tested on
   macOS 15.6.1 and 27.2.1.
-- Every Apple Silicon dependency was rebuilt from source and the proven cache promoted. All 24
-  binaries arm64, no external library references.
+- Every dependency was rebuilt from source on both architectures and both proven caches promoted.
+  All 24 binaries arm64 (Apple Silicon) or x86_64 (Intel), no external library references.
 
 ## Apple Silicon DMGs that need macOS 27 (2026-10-25)
 

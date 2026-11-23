@@ -106,4 +106,4 @@ If you believe any attribution here is missing, incorrect, or stale, please
 open an issue at
 https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues and we will fix it.
 
-Last updated: 2026-11-23 — build target to 104.0; Qt 6.11.1 → 6.11.2 (the Intel cache follows with its 104.0 build); other dependency versions unchanged from 103.0.
+Last updated: 2026-11-23 — build target to 104.0; Qt 6.11.1 → 6.11.2 in both caches; other dependency versions unchanged from 103.0.
