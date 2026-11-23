@@ -113,6 +113,6 @@ The proven cache is not modified by `--full` — it remains as a safety net.
 If you modify a patch that affects a specific dependency without bumping its version, delete that package from the cache to force a rebuild:
 
 ```sh
-rm /opt/mtx/prefix/proven/arm/qt-everywhere-src-6.11.1.tar.gz
+rm /opt/mtx/prefix/proven/arm/qt-everywhere-src-6.11.2.tar.gz
 ./build-local.sh release-XX.0  # will detect missing Qt and do a full build
 ```

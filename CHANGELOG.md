@@ -1,5 +1,23 @@
 # Changelog
 
+## v104.0-b2026.11.1 (2026-11-23) — Current Release
+
+MKVToolNix 104.0 "Chimera" — Apple Silicon (arm64); the Intel (x86_64) build follows.
+
+**Downloads:**
+- Apple Silicon (arm64): `MKVToolNix-104.0-macos-apple-silicon.dmg` — ~25.7 MB DMG (~75 MB app)
+- Intel (x86_64): 🚧 building
+
+**Highlights:**
+- Built from the signed MKVToolNix 104.0 release tarball. One dependency change: Qt 6.11.1 → 6.11.2.
+  Upstream's `packaging/macos/specs.sh` and `config.sh` change only that between `release-103.0` and
+  `release-104.0`.
+- The Apple Silicon DMG runs on macOS before 27 again: Qt 6.11.2 fixes the configure test that turned
+  on `dup3()` ([#15](https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues/15)). Tested on
+  macOS 15.6.1 and 27.2.1.
+- Every Apple Silicon dependency was rebuilt from source and the proven cache promoted. All 24
+  binaries arm64, no external library references.
+
 ## Apple Silicon DMGs that need macOS 27 (2026-10-25)
 
 - **Three Apple Silicon DMGs need macOS 27.** v103.0-b2026.10.1, v102.0-b2026.09.2 and the test
@@ -77,7 +95,7 @@
   `gh release list` fails, instead of reading the failure as "no release yet" and building,
   numbering or publishing anyway.
 
-## v103.0-b2026.10.1 (2026-10-18) — Current Release
+## v103.0-b2026.10.1 (2026-10-18)
 
 MKVToolNix 103.0 "The Darkness" — Apple Silicon (arm64) and Intel (x86_64).
 

@@ -10,10 +10,9 @@ This repo is a proof-of-concept that builds the full GUI from upstream source an
 
 These are this repo's **unofficial** builds. For official **notarized** DMGs (recommended for most users), see the [official downloads page](https://mkvtoolnix.download/downloads.html#macosx).
 
-> ⚠️ The Apple Silicon DMGs of v103.0-b2026.10.1 and v102.0-b2026.09.2 need macOS 27. On macOS 26 or earlier, use the [official build](https://mkvtoolnix.download/downloads.html#macosx) ([#15](../../issues/15)).
-
 | Date | Release | MKVToolNix | Apple Silicon | Intel |
 |------|---------|:----------:|:-------------:|:-----:|
+| 2026-11-23 | [v104.0-b2026.11.1](../../releases/tag/v104.0-b2026.11.1) | 104.0 | [DMG (26 MB)](../../releases/download/v104.0-b2026.11.1/MKVToolNix-104.0-macos-apple-silicon.dmg) | 🚧 Building… |
 | 2026-10-18 | [v103.0-b2026.10.1](../../releases/tag/v103.0-b2026.10.1) | 103.0 | [DMG (25 MB)](../../releases/download/v103.0-b2026.10.1/MKVToolNix-103.0-macos-apple-silicon.dmg) | [DMG (28 MB)](../../releases/download/v103.0-b2026.10.1/MKVToolNix-103.0-macos-intel.dmg) |
 | 2026-09-18 | [v102.0-b2026.09.2](../../releases/tag/v102.0-b2026.09.2) | 102.0 | [DMG (26 MB)](../../releases/download/v102.0-b2026.09.2/MKVToolNix-102.0-macos-apple-silicon.dmg) | [DMG (28 MB)](../../releases/download/v102.0-b2026.09.2/MKVToolNix-102.0-macos-intel.dmg) |
 | 2026-09-14 | [v102.0-b2026.09.1](../../releases/tag/v102.0-b2026.09.1) | 102.0 | [DMG (25 MB)](../../releases/download/v102.0-b2026.09.1/MKVToolNix-102.0-macos-apple-silicon.dmg) | [DMG (28 MB)](../../releases/download/v102.0-b2026.09.1/MKVToolNix-102.0-macos-intel.dmg) |
@@ -29,7 +28,7 @@ Not sure which? Apple menu → About This Mac. "Apple M_" = Apple Silicon, "Inte
 Each DMG ships with a matching `.sha256` file:
 
 ```
-shasum -a 256 -c MKVToolNix-103.0-macos-apple-silicon.dmg.sha256
+shasum -a 256 -c MKVToolNix-104.0-macos-apple-silicon.dmg.sha256
 ```
 
 DMGs produced by the CI workflow also carry a GitHub build-provenance attestation; the current release was built and uploaded manually, so it isn't attested. For a verified, notarized binary, use the [official builds](https://mkvtoolnix.download/downloads.html#macosx).

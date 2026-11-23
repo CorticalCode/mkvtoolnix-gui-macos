@@ -26,7 +26,7 @@ MKVToolNix source code.
 | | |
 |---|---|
 | **Project** | MKVToolNix |
-| **Version** | 103.0 (build target; `proven/` does not bundle MKVToolNix binaries) |
+| **Version** | 104.0 (build target; `proven/` does not bundle MKVToolNix binaries) |
 | **Author** | Moritz Bunkus & contributors |
 | **License** | GPL-2.0-or-later |
 | **Upstream** | https://mkvtoolnix.download |
@@ -41,7 +41,7 @@ shipped `.app` bundle. Both architecture caches contain equivalent builds.
 
 | Library | Version | License (SPDX) | Copyright | Source |
 |---------|---------|---------------|-----------|--------|
-| **Qt** (Core, Gui, Widgets, Network, Concurrent, Multimedia, MultimediaWidgets, Svg, SvgWidgets) | 6.11.1 | `LGPL-3.0-only` with Qt GPL Exception v1.0 | The Qt Company Ltd. and other contributors | https://download.qt.io/archive/qt/6.11/6.11.1/ |
+| **Qt** (Core, Gui, Widgets, Network, Concurrent, Multimedia, MultimediaWidgets, Svg, SvgWidgets) | 6.11.2 | `LGPL-3.0-only` with Qt GPL Exception v1.0 | The Qt Company Ltd. and other contributors | https://download.qt.io/archive/qt/6.11/6.11.2/ |
 | **Boost** (system; headers-only components are not separately bundled) | 1.88.0 | `BSL-1.0` (Boost Software License 1.0) | Boost contributors | https://boost.org |
 | **zlib** | 1.3.2 | `Zlib` | Jean-loup Gailly & Mark Adler | https://zlib.net |
 | **FLAC** (`libFLAC`) | 1.5.0 | `BSD-3-Clause` (Xiph variant) | Josh Coalson, Xiph.Org Foundation | https://xiph.org/flac/ |
@@ -106,4 +106,4 @@ If you believe any attribution here is missing, incorrect, or stale, please
 open an issue at
 https://github.com/CorticalCode/mkvtoolnix-gui-macos/issues and we will fix it.
 
-Last updated: 2026-10-18 — build target to 103.0; dependency versions unchanged from 102.0.
+Last updated: 2026-11-23 — build target to 104.0; Qt 6.11.1 → 6.11.2 (the Intel cache follows with its 104.0 build); other dependency versions unchanged from 103.0.
