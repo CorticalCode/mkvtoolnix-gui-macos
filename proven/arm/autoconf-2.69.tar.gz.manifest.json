@@ -8,12 +8,12 @@
   "configure_args_hash": "",
   "patch_state_hash": "none",
   "prefix": "/opt/mtx/prefix",
-  "built_at": "2026-10-01T08:25:40Z",
+  "built_at": "2026-11-23T15:55:39Z",
   "built_by": {
     "tool": "build-local.sh",
-    "upstream_tag": "release-102.0",
+    "upstream_tag": "release-104.0",
     "wrapper_branch": "main",
-    "wrapper_sha": "8dd78f4"
+    "wrapper_sha": "bdf8aee"
   },
-  "host": {"cpu_brand":"Apple M4 Pro","arch":"arm64","cores_total":14,"ram_gb":64,"macos_version":"27.0.1","clang_version":"21.0.0","sdk_version":"27.0"}
+  "host": {"cpu_brand":"Apple M4 Pro","arch":"arm64","cores_total":14,"ram_gb":64,"macos_version":"27.2.1","clang_version":"21.0.0","sdk_version":"27.2"}
 }
